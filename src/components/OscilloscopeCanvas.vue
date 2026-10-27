@@ -77,17 +77,16 @@ function addSample(normValue, isPeak = false) {
   buffer.push(normValue)
   if (buffer.length > MAX_SAMPLES) {
     buffer.shift()
+    for (let i = peakMarkers.length - 1; i >= 0; i--) {
+      peakMarkers[i]--
+      if (peakMarkers[i] < 0) {
+        peakMarkers.splice(i, 1)
+      }
+    }
   }
 
   if (isPeak) {
     peakMarkers.push(buffer.length - 1)
-  }
-
-  for (let i = peakMarkers.length - 1; i >= 0; i--) {
-    peakMarkers[i]--
-    if (peakMarkers[i] < 0) {
-      peakMarkers.splice(i, 1)
-    }
   }
 }
 
