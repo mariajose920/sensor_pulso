@@ -43,7 +43,7 @@
     <!-- Barra de control: Capas visibles -->
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-size: 0.8rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
       <span style="color: var(--color-muted); font-size: 0.8rem;">
-        Grafica ampliada (380px) con escala sincronizada
+        Grafica ampliada con escala sincronizada
       </span>
 
       <!-- Toggles manuales de visibilidad de capas -->
@@ -65,7 +65,8 @@
 
     <!-- 1. Grafico Didactico SVG con Medicion + Plantilla + ECG (Fijo en 380px ampliado) -->
     <div
-      style="position: relative; width: 100%; height: 380px; background: #070a13; border: 1px solid var(--color-border); border-radius: 0.5rem; overflow: hidden; padding: 0.75rem 0.5rem 0.25rem 0.5rem;"
+      class="chart-box"
+      style="background: #070a13; border: 1px solid var(--color-border); border-radius: 0.5rem; overflow: hidden; padding: 0.75rem 0.5rem 0.25rem 0.5rem;"
     >
       <svg style="width: 100%; height: 100%;" viewBox="0 0 600 240" preserveAspectRatio="none">
         <!-- Rejilla vertical para division de tiempo (cada 0.5s en ventana de 2.5s) -->
@@ -174,7 +175,7 @@
       <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.5rem;">
         Analisis Comparativo: Medicion Tomada con Sensor vs ECG Educativo
       </h4>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; font-size: 0.85rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 1rem; font-size: 0.85rem;">
         <div>
           <span style="color: var(--color-muted);">Frecuencia y Ritmo:</span>
           <div style="font-weight: 600; margin-top: 0.15rem; color: var(--color-text);">
@@ -208,8 +209,9 @@
     </div>
 
     <!-- 3. Tabla Comparativa Exhaustiva de Parametros (RF24) -->
-    <div style="overflow-x: auto; margin-bottom: 1.25rem;">
-      <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+    <!-- Escritorio y tablet: tabla completa (con desplazamiento lateral solo dentro de la tabla si hace falta) -->
+    <div class="tabla-escritorio" style="margin-bottom: 1.25rem;">
+      <table style="width: 100%; min-width: 560px; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
         <thead>
           <tr style="background: var(--color-bg); border-bottom: 2px solid var(--color-border); color: var(--color-muted); font-size: 0.75rem; text-transform: uppercase;">
             <th style="padding: 0.6rem;">Criterio</th>
@@ -219,72 +221,47 @@
           </tr>
         </thead>
         <tbody style="border-bottom: 1px solid var(--color-border);">
-          <tr style="border-bottom: 1px solid var(--color-border);">
-            <td style="padding: 0.6rem; font-weight: 600;">Frecuencia Cardiaca</td>
-            <td style="padding: 0.6rem; font-family: monospace; font-weight: 600; color: var(--color-success);">
-              {{ currentBpm }} BPM
-            </td>
-            <td style="padding: 0.6rem; font-family: monospace; color: #6366f1;">
-              72 BPM (Referencia)
-            </td>
-            <td style="padding: 0.6rem; font-family: monospace; color: #0284c7; font-weight: 600;">
-              72 BPM (Fisiologico)
-            </td>
-          </tr>
-          <tr style="border-bottom: 1px solid var(--color-border);">
-            <td style="padding: 0.6rem; font-weight: 600;">Periodo / Ciclo</td>
-            <td style="padding: 0.6rem; font-family: monospace; font-weight: 600; color: var(--color-success);">
-              {{ lastIntervalMs }} ms
-            </td>
-            <td style="padding: 0.6rem; font-family: monospace; color: #6366f1;">
-              833 ms (Intervalo R-R)
-            </td>
-            <td style="padding: 0.6rem; font-family: monospace; color: #0284c7;">
-              833 ms (Intervalo P-P)
-            </td>
-          </tr>
-          <tr style="border-bottom: 1px solid var(--color-border);">
-            <td style="padding: 0.6rem; font-weight: 600;">Naturaleza del Fenomeno</td>
-            <td style="padding: 0.6rem; color: var(--color-text);">
-              Hemodinamico: Variacion del volumen de sangre en tejido periferico
-            </td>
-            <td style="padding: 0.6rem; color: var(--color-text);">
-              Bioelectrico: Despolarizacion y repolarizacion del miocardio
-            </td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Modelo teorico hemodinamico
-            </td>
-          </tr>
-          <tr style="border-bottom: 1px solid var(--color-border);">
-            <td style="padding: 0.6rem; font-weight: 600;">Principio de Medicion</td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Luz infrarroja y roja reflejada (MAX30102)
-            </td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Diferencia de potencial superficial en milivoltios (mV)
-            </td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Curva gaussiana parametrizada
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 0.6rem; font-weight: 600;">Morfologia Principal</td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Pico sistolico, muesca dicrota e inflexion diastolica
-            </td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Onda P (auriculas), complejo QRS (ventriculos), onda T
-            </td>
-            <td style="padding: 0.6rem; color: var(--color-muted);">
-              Estandar normocardico limpio
-            </td>
+          <tr v-for="f in filasTabla" :key="f.criterio" style="border-bottom: 1px solid var(--color-border);">
+            <td style="padding: 0.6rem; font-weight: 600;">{{ f.criterio }}</td>
+            <td :style="'padding: 0.6rem;' + (f.mono ? 'font-family: monospace; font-weight: 600;' : '') + 'color:' + (f.mono ? 'var(--color-success)' : 'var(--color-text)')">{{ f.medicion }}</td>
+            <td :style="'padding: 0.6rem;' + (f.mono ? 'font-family: monospace;' : '') + 'color:' + (f.mono ? '#6366f1' : 'var(--color-muted)')">{{ f.ecg }}</td>
+            <td :style="'padding: 0.6rem;' + (f.mono ? 'font-family: monospace; font-weight: 600;' : '') + 'color:' + (f.mono ? '#0284c7' : 'var(--color-muted)')">{{ f.plantilla }}</td>
           </tr>
         </tbody>
       </table>
     </div>
 
+    <!-- Móvil (RNF01): solo criterio y medición; "Ver más" despliega hacia abajo el ECG y la plantilla -->
+    <ul class="tabla-movil" style="list-style: none; margin-bottom: 1.25rem; border: 1px solid var(--color-border); border-radius: 0.5rem;">
+      <li v-for="(f, i) in filasTabla" :key="f.criterio" class="fila-movil" :class="{ 'fila-movil-ultima': i === filasTabla.length - 1 }">
+        <div class="fila-movil-cabecera">
+          <span class="fila-movil-criterio">{{ f.criterio }}</span>
+          <span class="fila-movil-valor" :style="f.mono ? 'font-family: monospace; font-weight: 600; color: var(--color-success);' : 'color: var(--color-text);'">{{ f.medicion }}</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn-secondary fila-movil-boton"
+          :aria-expanded="abiertas[f.criterio] ? 'true' : 'false'"
+          :aria-controls="'detalle-' + i"
+          @click="abiertas[f.criterio] = !abiertas[f.criterio]"
+        >
+          {{ abiertas[f.criterio] ? 'Ver menos' : 'Ver más' }}
+        </button>
+        <dl v-show="abiertas[f.criterio]" :id="'detalle-' + i" class="fila-movil-detalle">
+          <div>
+            <dt style="color: #6366f1;">ECG Educativo (Electrico)</dt>
+            <dd>{{ f.ecg }}</dd>
+          </div>
+          <div>
+            <dt style="color: #0284c7;">Plantilla Reposo PPG (RF24)</dt>
+            <dd>{{ f.plantilla }}</dd>
+          </div>
+        </dl>
+      </li>
+    </ul>
+
     <!-- 4. Bloques Explicativos Didacticos (RF24) -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.75rem; font-size: 0.8rem; color: var(--color-muted);">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 0.75rem; font-size: 0.8rem; color: var(--color-muted);">
       <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
         <b style="color: var(--color-text);">1. Por que se compara con el ECG?</b>
         <p style="margin-top: 0.25rem;">
@@ -340,6 +317,29 @@ function setMode(mode) {
     showEcg.value = true
   }
 }
+
+// Filas de la tabla comparativa (se usan en la tabla de escritorio y en la lista móvil)
+const filasTabla = computed(() => [
+  { criterio: 'Frecuencia Cardiaca', mono: true,
+    medicion: `${props.currentBpm} BPM`, ecg: '72 BPM (Referencia)', plantilla: '72 BPM (Fisiologico)' },
+  { criterio: 'Periodo / Ciclo', mono: true,
+    medicion: `${props.lastIntervalMs} ms`, ecg: '833 ms (Intervalo R-R)', plantilla: '833 ms (Intervalo P-P)' },
+  { criterio: 'Naturaleza del Fenomeno', mono: false,
+    medicion: 'Hemodinamico: Variacion del volumen de sangre en tejido periferico',
+    ecg: 'Bioelectrico: Despolarizacion y repolarizacion del miocardio',
+    plantilla: 'Modelo teorico hemodinamico' },
+  { criterio: 'Principio de Medicion', mono: false,
+    medicion: 'Luz infrarroja y roja reflejada (MAX30102)',
+    ecg: 'Diferencia de potencial superficial en milivoltios (mV)',
+    plantilla: 'Curva gaussiana parametrizada' },
+  { criterio: 'Morfologia Principal', mono: false,
+    medicion: 'Pico sistolico, muesca dicrota e inflexion diastolica',
+    ecg: 'Onda P (auriculas), complejo QRS (ventriculos), onda T',
+    plantilla: 'Estandar normocardico limpio' }
+])
+
+// Filas abiertas con "Ver más" en la lista móvil
+const abiertas = ref({})
 
 const diffBpm = computed(() => props.currentBpm - 72)
 const diffBpmText = computed(() => {
@@ -422,3 +422,15 @@ const ecgPath = computed(() => {
   return `M ${points.join(' L ')}`
 })
 </script>
+
+<style scoped>
+.fila-movil { padding: 0.75rem; border-bottom: 1px solid var(--color-border); }
+.fila-movil-ultima { border-bottom: none; }
+.fila-movil-cabecera { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.5rem; }
+.fila-movil-criterio { font-weight: 600; font-size: 0.95rem; }
+.fila-movil-valor { font-size: 0.95rem; }
+.fila-movil-boton { width: 100%; font-size: 0.9rem; }
+.fila-movil-detalle { margin: 0.75rem 0 0; display: grid; gap: 0.75rem; }
+.fila-movil-detalle dt { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+.fila-movil-detalle dd { margin: 0.15rem 0 0; font-size: 0.95rem; color: var(--color-text); }
+</style>

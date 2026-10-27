@@ -51,7 +51,7 @@
       <h3 style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--color-text);">
         Ingresar Datos de la Medicion Tomada
       </h3>
-      <form @submit.prevent="handleAddMeasurement" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
+      <form @submit.prevent="handleAddMeasurement" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 1rem; align-items: end;">
         <div>
           <label class="form-label" style="font-size: 0.8rem;">
             Frecuencia Cardiaca Medida (BPM): <span style="color: var(--color-danger);">*</span>
@@ -112,7 +112,7 @@
       <div v-if="savedMeasurements.length === 0" style="padding: 1rem; text-align: center; color: var(--color-muted); font-size: 0.85rem; background: var(--color-bg); border-radius: 0.5rem;">
         No hay mediciones guardadas aun. Agrega una medicion tomada en la pestana anterior.
       </div>
-      <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem;">
+      <div v-else style="display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 0.75rem;">
         <div
           v-for="item in savedMeasurements"
           :key="item.id"
@@ -169,7 +169,7 @@
     </div>
 
     <!-- Ajuste fino y controles interactivos -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; align-items: center; font-size: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border);">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 1rem; align-items: center; font-size: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border);">
       <div>
         <label class="form-label" style="margin-bottom: 0.2rem;">
           Ajuste Fino de Frecuencia Cardiaca (BPM):
