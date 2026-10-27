@@ -4,16 +4,13 @@ Reglas del repositorio para llevar un historial ordenado: una rama por requerimi
 
 ## 1. Ramas
 
-Una rama por cada requerimiento, creada desde `develop`. Todo en **minúscula**, con palabras separadas por guion (sin mayúsculas, espacios ni guiones bajos):
+Una rama por cada requerimiento funcional, creada desde `develop`. El **único** formato permitido es `rfNN-descripcion`: `rf` y el número del requerimiento (2 o 3 dígitos), un guion y la descripción, todo en **minúscula**, con palabras separadas por guion (sin mayúsculas, espacios ni guiones bajos):
 
 | Formato | Ejemplo |
 |---|---|
-| `rfNN-descripcion` | `rf05-recepcion-wifi`, `rf12-esquema-supabase` |
-| `rnfNN-descripcion` | `rnf04-latencia-tiempo-real` |
-| `docs/tema` | `docs/requerimientos` |
-| `hotfix/tema` | `hotfix/token-expirado` |
+| `rfNN-descripcion` | `rf05-recepcion-wifi`, `rf12-esquema-supabase`, `rf114-spo2-max30102` |
 
-`main` y `develop` son ramas fijas. El trabajo entra a `develop` por pull request; `main` se actualiza en las reuniones de entrega.
+No se aceptan otros prefijos (`rnf`, `docs/`, `hotfix/`, `feature/`, etc.). `main` y `develop` son ramas fijas. El trabajo entra a `develop` por pull request; `main` se actualiza en las reuniones de entrega.
 
 ## 2. Estructura del mensaje de commit
 
