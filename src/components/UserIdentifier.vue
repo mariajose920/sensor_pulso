@@ -21,7 +21,7 @@
     </div>
 
     <div v-if="!isAuthenticated" class="alert alert-info mt-2">
-      <strong>RF01:</strong> Para que las mediciones queden registradas a tu nombre, debes iniciar sesión.
+      <strong>Atención:</strong> Para que las mediciones queden registradas a tu nombre, debes iniciar sesión.
       <router-link to="/login" class="link-login">Ir a Iniciar Sesión</router-link>
     </div>
   </div>

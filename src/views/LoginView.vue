@@ -1,7 +1,7 @@
 <template>
   <div class="auth-container">
     <div class="card auth-card">
-      <!-- Pestañas para cambiar entre Iniciar Sesión y Registrarse -->
+      <!-- Pestañas para alternar entre Iniciar Sesión y Registro -->
       <div class="auth-tabs">
         <button 
           type="button"
@@ -27,17 +27,26 @@
         </h2>
         <p class="auth-subtitle">
           {{ mode === 'login' 
-            ? 'Ingresa tus credenciales para acceder a tus mediciones.' 
-            : 'Registro para estudiantes y profesores de la plataforma.' }}
+            ? 'Ingresa tus credenciales institucionales para acceder a la plataforma.' 
+            : 'Registro oficial para estudiantes y docentes.' }}
         </p>
       </div>
 
-      <!-- Alertas de error o éxito -->
+      <!-- Alertas -->
       <div v-if="errorMessage" class="alert alert-error">
         {{ errorMessage }}
       </div>
       <div v-if="successMessage" class="alert alert-success">
         {{ successMessage }}
+      </div>
+      <div v-if="needsEmailConfirmation" class="alert alert-info">
+        <p><strong>Confirmación pendiente:</strong> Hemos enviado un enlace de activación a tu correo institucional.</p>
+        <p style="margin-top: 0.5rem; font-size: 0.85rem;">
+          ¿No lo recibiste? 
+          <button type="button" @click="handleResendEmail" class="btn-link" :disabled="resending">
+            {{ resending ? 'Reenviando...' : 'Reenviar correo de confirmación' }}
+          </button>
+        </p>
       </div>
 
       <!-- Formulario -->
@@ -49,7 +58,7 @@
             v-model="nombre" 
             type="text" 
             class="form-input" 
-            placeholder="Ej: Cristóbal Valdés"
+            placeholder="Ej: Constanza Morales"
             required
           />
         </div>
@@ -61,19 +70,17 @@
             v-model="email" 
             type="email" 
             class="form-input" 
-            placeholder="usuario@alu.unach.cl o @unach.cl"
+            placeholder="ejemplo@alu.unach.cl o @unach.cl"
             required
           />
-        </div>
-
-        <!-- RF96: Feedback visual del dominio institucional detectado -->
-        <div v-if="infoDominio" class="domain-badge mt-1">
-          <span v-if="infoDominio.valido" class="badge" :class="infoDominio.rol === 'profesor' ? 'badge-profesor' : 'badge-usuario'">
-            ✓ {{ infoDominio.tipo }} detectado
-          </span>
-          <span v-else class="text-danger">
-            ⚠️ Correo no institucional (solo @alu.unach.cl o @unach.cl)
-          </span>
+          <div v-if="infoDominio" class="domain-badge">
+            <span v-if="infoDominio.valido" class="badge" :class="infoDominio.rol === 'profesor' ? 'badge-profesor' : 'badge-usuario'">
+              ✓ {{ infoDominio.tipo }} detectado
+            </span>
+            <span v-else class="text-danger">
+              ⚠️ Solo correos institucionales de la UNACH (@alu.unach.cl o @unach.cl)
+            </span>
+          </div>
         </div>
 
         <div class="form-group">
@@ -86,12 +93,40 @@
             placeholder="••••••••"
             required
           />
+
+          <!-- Medidor de seguridad de contraseña (solo en registro) -->
+          <div v-if="mode === 'register' && password" class="password-meter">
+            <div class="meter-bar-bg">
+              <div 
+                class="meter-bar-fill" 
+                :style="{ width: `${fuerzaPassword.score}%`, backgroundColor: fuerzaPassword.color }"
+              ></div>
+            </div>
+            <div class="meter-label">
+              <span>Seguridad: <strong :style="{ color: fuerzaPassword.color }">{{ fuerzaPassword.nivel }}</strong></span>
+            </div>
+
+            <ul class="criteria-list">
+              <li :class="{ met: fuerzaPassword.criterios.longitud }">
+                {{ fuerzaPassword.criterios.longitud ? '✓' : '○' }} Mínimo 8 caracteres
+              </li>
+              <li :class="{ met: fuerzaPassword.criterios.mayuscula && fuerzaPassword.criterios.minuscula }">
+                {{ (fuerzaPassword.criterios.mayuscula && fuerzaPassword.criterios.minuscula) ? '✓' : '○' }} Mayúsculas y minúsculas
+              </li>
+              <li :class="{ met: fuerzaPassword.criterios.numero && fuerzaPassword.criterios.simbolo }">
+                {{ (fuerzaPassword.criterios.numero && fuerzaPassword.criterios.simbolo) ? '✓' : '○' }} Al menos un número y un símbolo
+              </li>
+              <li :class="{ met: fuerzaPassword.criterios.noComun }">
+                {{ fuerzaPassword.criterios.noComun ? '✓' : '○' }} Contraseña no común
+              </li>
+            </ul>
+          </div>
         </div>
 
         <button 
           type="submit" 
           class="btn btn-primary w-full"
-          :disabled="loading"
+          :disabled="loading || (mode === 'register' && !fuerzaPassword.valida)"
         >
           {{ loading ? 'Procesando...' : (mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta') }}
         </button>
@@ -105,47 +140,78 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { validarCorreoInstitucional } from '../utils/validators'
+import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
 
 const router = useRouter()
-const { login, register, loading } = useAuth()
+const { login, register, resendConfirmationEmail, loading } = useAuth()
 
 const mode = ref('login')
 const nombre = ref('')
 const email = ref('')
 const password = ref('')
+const errorMessage = ref('')
+const successMessage = ref('')
+const needsEmailConfirmation = ref(false)
+const resending = ref(false)
+
 const infoDominio = computed(() => {
   if (!email.value || !email.value.includes('@')) return null
   return validarCorreoInstitucional(email.value)
 })
 
-const errorMessage = ref('')
-const successMessage = ref('')
+const fuerzaPassword = computed(() => {
+  return evaluarFuerzaContrasena(password.value)
+})
 
 const handleSubmit = async () => {
   errorMessage.value = ''
   successMessage.value = ''
-  // RF96: Validación del correo institucional
+  needsEmailConfirmation.value = false
+
   const validacion = validarCorreoInstitucional(email.value)
   if (!validacion.valido) {
     errorMessage.value = validacion.error
     return
   }
+
   if (mode.value === 'login') {
     const res = await login(email.value, password.value)
     if (res.success) {
       router.push('/medicion')
     } else {
       errorMessage.value = res.error
+      if (res.error.includes('confirmar tu correo')) {
+        needsEmailConfirmation.value = true
+      }
     }
   } else {
+    // Validar contraseña robusta antes de registrar
+    if (!fuerzaPassword.value.valida) {
+      errorMessage.value = 'Por favor cumple con todos los requisitos de seguridad de la contraseña.'
+      return
+    }
+
     const res = await register(email.value, password.value, nombre.value)
     if (res.success) {
-      successMessage.value = `Registro exitoso como ${validacion.tipo}. Revisa tu correo institucional para confirmar tu cuenta.`
+      successMessage.value = 'Cuenta creada correctamente. Te hemos enviado un enlace a tu correo institucional para activar tu cuenta.'
+      needsEmailConfirmation.value = true
       mode.value = 'login'
       password.value = ''
     } else {
       errorMessage.value = res.error
     }
+  }
+}
+
+const handleResendEmail = async () => {
+  if (!email.value) return
+  resending.value = true
+  const res = await resendConfirmationEmail(email.value)
+  resending.value = false
+  if (res.success) {
+    successMessage.value = 'Correo de confirmación reenviado. Revisa tu bandeja de entrada.'
+  } else {
+    errorMessage.value = res.error
   }
 }
 </script>
@@ -160,7 +226,7 @@ const handleSubmit = async () => {
 
 .auth-card {
   width: 100%;
-  max-width: 440px;
+  max-width: 460px;
 }
 
 .auth-tabs {
@@ -198,19 +264,71 @@ const handleSubmit = async () => {
   margin-top: 0.25rem;
 }
 
-.w-full {
-  width: 100%;
-  margin-top: 0.5rem;
-}
-
 .domain-badge {
   margin-top: 0.35rem;
-  font-size: 0.8rem;
 }
 
 .text-danger {
   color: var(--color-danger);
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.password-meter {
+  margin-top: 0.65rem;
+  background: #f8fafc;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
+.meter-bar-bg {
+  height: 6px;
+  background-color: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.meter-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.meter-label {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.criteria-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0 0;
+  font-size: 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  color: var(--color-muted);
+}
+
+.criteria-list li.met {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.w-full {
+  width: 100%;
+  margin-top: 0.5rem;
 }
 </style>

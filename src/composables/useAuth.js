@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../services/supabase'
 import { validarCorreoInstitucional } from '../utils/validators'
+import { ROLES, tienePermiso, obtenerEtiquetaRol } from '../utils/roles'
 
 // Estado reactivo global del usuario en sesión
 const user = ref(null)
@@ -63,7 +64,7 @@ export function useAuth() {
     }
   }
 
-// RF02 y RF96: Registro con asignación de rol según dominio UNACH
+ // RF02 y RF96: Registro con asignación de rol según dominio UNACH
   const register = async (email, password, nombreCompleto) => {
     authError.value = null
     // RF96: Validación previa estricta del dominio institucional
@@ -99,6 +100,17 @@ export function useAuth() {
     }
   }
 
+    // RF52: Helpers de roles y principio de mínimo privilegio
+  const isAdmin = computed(() => currentUserRole.value === ROLES.ADMIN)
+  const isProfesor = computed(() => currentUserRole.value === ROLES.PROFESOR || isAdmin.value)
+  const isEstudiante = computed(() => currentUserRole.value === ROLES.USUARIO)
+
+  const roleLabel = computed(() => obtenerEtiquetaRol(currentUserRole.value))
+
+  const can = (permiso) => {
+    return tienePermiso(currentUserRole.value, permiso)
+  }
+
   // RF02: Cerrar sesión
   const logout = async () => {
     loading.value = true
@@ -113,7 +125,7 @@ export function useAuth() {
     }
   }
 
-  return {
+    return {
     user,
     session,
     loading,
@@ -123,8 +135,14 @@ export function useAuth() {
     currentUserEmail,
     currentUserName,
     currentUserRole,
+    isAdmin,      // <-- Agregado
+    isProfesor,   // <-- Agregado
+    isEstudiante, // <-- Agregado
+    roleLabel,    // <-- Agregado
+    can,          // <-- Agregado
     login,
     register,
-    logout
+    logout,
+    resendConfirmationEmail
   }
 }
