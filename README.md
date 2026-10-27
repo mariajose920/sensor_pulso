@@ -74,7 +74,13 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    npm run probar:pwa
    ```
 
-7. Compilar para producción:
+7. Verificar el despliegue en Vercel y Supabase (RNF11, ver [docs/RNF11-despliegue.md](docs/RNF11-despliegue.md)):
+   ```bash
+   npm run verificar:despliegue -- --local
+   npm run verificar:despliegue -- https://sensorpulso.vercel.app
+   ```
+
+8. Compilar para producción:
    ```bash
    npm run build
    ```
