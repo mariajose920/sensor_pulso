@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../services/supabase'
+import { validarCorreoInstitucional } from '../utils/validators'
 
 // Estado reactivo global del usuario en sesión
 const user = ref(null)
@@ -62,9 +63,15 @@ export function useAuth() {
     }
   }
 
-  // RF02: Registro de nuevo usuario (Supabase Auth)
+// RF02 y RF96: Registro con asignación de rol según dominio UNACH
   const register = async (email, password, nombreCompleto) => {
     authError.value = null
+    // RF96: Validación previa estricta del dominio institucional
+    const validacion = validarCorreoInstitucional(email)
+    if (!validacion.valido) {
+      authError.value = validacion.error
+      return { success: false, error: validacion.error }
+    }
     loading.value = true
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -73,12 +80,13 @@ export function useAuth() {
         options: {
           data: {
             nombre_completo: nombreCompleto,
-            rol: email.endsWith('@unach.cl') ? 'profesor' : 'usuario'
+            rol: validacion.rol, // RF96: 'usuario' o 'profesor' según el dominio
+            tipo_cuenta: validacion.tipo
           }
         }
       })
       if (error) throw error
-      return { success: true, data }
+      return { success: true, data, validacion }
     } catch (err) {
       let mensaje = err.message
       if (mensaje.includes('User already registered')) {

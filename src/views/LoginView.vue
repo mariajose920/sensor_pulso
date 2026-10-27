@@ -66,6 +66,16 @@
           />
         </div>
 
+        <!-- RF96: Feedback visual del dominio institucional detectado -->
+        <div v-if="infoDominio" class="domain-badge mt-1">
+          <span v-if="infoDominio.valido" class="badge" :class="infoDominio.rol === 'profesor' ? 'badge-profesor' : 'badge-usuario'">
+            ✓ {{ infoDominio.tipo }} detectado
+          </span>
+          <span v-else class="text-danger">
+            ⚠️ Correo no institucional (solo @alu.unach.cl o @unach.cl)
+          </span>
+        </div>
+
         <div class="form-group">
           <label class="form-label" for="password">Contraseña</label>
           <input 
@@ -91,9 +101,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { validarCorreoInstitucional } from '../utils/validators'
 
 const router = useRouter()
 const { login, register, loading } = useAuth()
@@ -102,13 +113,23 @@ const mode = ref('login')
 const nombre = ref('')
 const email = ref('')
 const password = ref('')
+const infoDominio = computed(() => {
+  if (!email.value || !email.value.includes('@')) return null
+  return validarCorreoInstitucional(email.value)
+})
+
 const errorMessage = ref('')
 const successMessage = ref('')
 
 const handleSubmit = async () => {
   errorMessage.value = ''
   successMessage.value = ''
-
+  // RF96: Validación del correo institucional
+  const validacion = validarCorreoInstitucional(email.value)
+  if (!validacion.valido) {
+    errorMessage.value = validacion.error
+    return
+  }
   if (mode.value === 'login') {
     const res = await login(email.value, password.value)
     if (res.success) {
@@ -119,7 +140,7 @@ const handleSubmit = async () => {
   } else {
     const res = await register(email.value, password.value, nombre.value)
     if (res.success) {
-      successMessage.value = 'Registro exitoso. Revisa tu correo institucional para confirmar tu cuenta.'
+      successMessage.value = `Registro exitoso como ${validacion.tipo}. Revisa tu correo institucional para confirmar tu cuenta.`
       mode.value = 'login'
       password.value = ''
     } else {
@@ -180,5 +201,16 @@ const handleSubmit = async () => {
 .w-full {
   width: 100%;
   margin-top: 0.5rem;
+}
+
+.domain-badge {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.text-danger {
+  color: var(--color-danger);
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 </style>
