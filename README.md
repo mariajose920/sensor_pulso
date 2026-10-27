@@ -64,7 +64,12 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    npm run dev
    ```
 
-5. Compilar para producción:
+5. Probar el diseño responsivo (RNF01, ver [docs/RNF01-diseno-responsivo.md](docs/RNF01-diseno-responsivo.md)):
+   ```bash
+   npm run probar:responsivo
+   ```
+
+6. Compilar para producción:
    ```bash
    npm run build
    ```

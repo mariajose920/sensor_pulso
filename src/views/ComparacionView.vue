@@ -29,6 +29,9 @@
       :measurementName="selectedMeasurementName"
     />
 
+    <!-- RNF01: en el celular en vertical los gráficos se ven pequeños; se sugiere girarlo -->
+    <AvisoGirar />
+
     <!-- 3. Visualizador Osciloscopio con Superposicion Directa (Medicion + Reposo + ECG) -->
     <OscilloscopeCanvas
       :bpm="selectedBpm"
@@ -48,6 +51,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 
+import AvisoGirar from '../components/AvisoGirar.vue'
 import MeasurementSelector from '../components/MeasurementSelector.vue'
 import MetricsCards from '../components/MetricsCards.vue'
 import OscilloscopeCanvas from '../components/OscilloscopeCanvas.vue'
