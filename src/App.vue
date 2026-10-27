@@ -13,6 +13,8 @@
         <router-link to="/login" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.85rem;">Acceso</router-link>
       </nav>
     </header>
+    <!-- RNF03: aviso sin conexión y opción de instalar la app -->
+    <EstadoPwa />
     <main class="container">
       <router-view />
     </main>
@@ -23,6 +25,7 @@
 </template>
 
 <script setup>
+import EstadoPwa from './components/EstadoPwa.vue'
 </script>
 
 <style scoped>

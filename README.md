@@ -64,7 +64,12 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    npm run dev
    ```
 
-5. Compilar para producción:
+5. Probar la app instalable (RNF03, ver [docs/RNF03-pwa.md](docs/RNF03-pwa.md)):
+   ```bash
+   npm run probar:pwa
+   ```
+
+6. Compilar para producción:
    ```bash
    npm run build
    ```
