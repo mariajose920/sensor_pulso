@@ -5,6 +5,7 @@ import { supabase } from '../services/supabase'
 const user = ref(null)
 const session = ref(null)
 const loading = ref(true)
+const authError = ref(null)
 
 // Inicializar y escuchar cambios de sesión en Supabase Auth
 supabase.auth.getSession().then(({ data }) => {
@@ -20,32 +21,102 @@ supabase.auth.onAuthStateChange((_event, newSession) => {
 })
 
 export function useAuth() {
-  // RF01: Datos para identificar al usuario que realiza la medición
+  // RF01: Identificación del usuario activo
   const isAuthenticated = computed(() => !!user.value)
   const currentUserId = computed(() => user.value?.id || null)
   const currentUserEmail = computed(() => user.value?.email || '')
   
-  // Extraer nombre o fallback desde el correo institucional
   const currentUserName = computed(() => {
     if (!user.value) return 'Invitado / No identificado'
     return user.value.user_metadata?.nombre_completo || 
            user.value.email?.split('@')[0] || 
-           'Usuario sin nombre'
+           'Usuario'
   })
 
-  // Rol del usuario (por defecto 'usuario' para estudiantes)
   const currentUserRole = computed(() => {
     return user.value?.user_metadata?.rol || 'usuario'
   })
+
+  // RF02: Inicio de sesión con correo y contraseña (Supabase Auth)
+  const login = async (email, password) => {
+    authError.value = null
+    loading.value = true
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      if (error) throw error
+      return { success: true, data }
+    } catch (err) {
+      let mensaje = err.message
+      if (mensaje.includes('Invalid login credentials')) {
+        mensaje = 'Correo o contraseña incorrectos.'
+      } else if (mensaje.includes('Email not confirmed')) {
+        mensaje = 'Debes confirmar tu correo antes de iniciar sesión.'
+      }
+      authError.value = mensaje
+      return { success: false, error: mensaje }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // RF02: Registro de nuevo usuario (Supabase Auth)
+  const register = async (email, password, nombreCompleto) => {
+    authError.value = null
+    loading.value = true
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            nombre_completo: nombreCompleto,
+            rol: email.endsWith('@unach.cl') ? 'profesor' : 'usuario'
+          }
+        }
+      })
+      if (error) throw error
+      return { success: true, data }
+    } catch (err) {
+      let mensaje = err.message
+      if (mensaje.includes('User already registered')) {
+        mensaje = 'Ya existe una cuenta registrada con este correo.'
+      }
+      authError.value = mensaje
+      return { success: false, error: mensaje }
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // RF02: Cerrar sesión
+  const logout = async () => {
+    loading.value = true
+    try {
+      await supabase.auth.signOut()
+      user.value = null
+      session.value = null
+    } catch (err) {
+      authError.value = err.message
+    } finally {
+      loading.value = false
+    }
+  }
 
   return {
     user,
     session,
     loading,
+    authError,
     isAuthenticated,
     currentUserId,
     currentUserEmail,
     currentUserName,
-    currentUserRole
+    currentUserRole,
+    login,
+    register,
+    logout
   }
 }

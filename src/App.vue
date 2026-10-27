@@ -10,7 +10,21 @@
         <router-link to="/comparacion" class="nav-link">Comparación</router-link>
         <router-link to="/aulas" class="nav-link">Aulas</router-link>
         <router-link to="/aprendizaje" class="nav-link">Aprendizaje</router-link>
-        <router-link to="/login" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.85rem;">Acceso</router-link>
+        
+        <!-- Estado de sesión -->
+        <template v-if="isAuthenticated">
+          <span class="user-chip">
+            👤 {{ currentUserName }}
+          </span>
+          <button @click="logout" class="btn btn-secondary btn-sm">
+            Salir
+          </button>
+        </template>
+        <template v-else>
+          <router-link to="/login" class="btn btn-primary btn-sm">
+            Acceso
+          </router-link>
+        </template>
       </nav>
     </header>
     <main class="container">
@@ -23,6 +37,9 @@
 </template>
 
 <script setup>
+import { useAuth } from './composables/useAuth'
+
+const { isAuthenticated, currentUserName, logout } = useAuth()
 </script>
 
 <style scoped>
@@ -34,6 +51,21 @@
 
 main.container {
   flex: 1;
+}
+
+.user-chip {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: #f1f5f9;
+  padding: 0.35rem 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+}
+
+.btn-sm {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.85rem;
 }
 
 .footer {
