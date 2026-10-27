@@ -8,7 +8,6 @@
     "build": "vite build",
     "preview": "vite preview",
     "prepare": "git config core.hooksPath .githooks || exit 0",
-    "validar:commit": "node scripts/validar-commit.mjs",
     "validar:rama": "node scripts/validar-rama.mjs"
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 name: Validar cambios
 
 # Mismas reglas que los hooks locales, pero en el servidor: no se pueden saltar con --no-verify.
+# Los commits dentro de una rama RFNN / RNFNN no tienen ninguna exigencia.
 on:
   pull_request:
     branches: [develop, main]
@@ -11,23 +12,18 @@ permissions:
   contents: read
 
 jobs:
-  commits-y-rama:
-    name: Commits y nombre de rama
+  nombre-de-rama:
+    name: Nombre de rama
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Nombre de la rama
+      - name: La rama debe comenzar con RFNN o RNFNN
         run: node scripts/validar-rama.mjs "$RAMA"
         env:
           RAMA: ${{ github.head_ref || github.ref_name }}
-      - name: Mensajes de commit del pull request
-        if: github.event_name == 'pull_request'
-        run: node scripts/validar-commit.mjs --rango "origin/${{ github.base_ref }}..HEAD"
 
   compilacion:
     name: Compilación

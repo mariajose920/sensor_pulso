@@ -1,37 +1,31 @@
 #!/usr/bin/env node
-// Hook pre-push (RF74): no deja subir una rama si
-//   1. su nombre no comienza con RFNN o RNFNN,
-//   2. alguno de los commits nuevos no menciona el requerimiento (RFNN o RNFNN), o
-//   3. la web no instala o no compila.
+// Hook pre-push (RF74). No deja subir:
+//   1. nada a main ni a develop (solo se llega ahí por pull request),
+//   2. una rama cuyo nombre no contenga RFNN o RNFNN,
+//   3. si la web no instala o no compila.
+// Los commits dentro de una rama RFNN / RNFNN no tienen ninguna exigencia.
 // Git entrega por stdin una línea por referencia:  <ref local> <sha local> <ref remota> <sha remota>
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { validarRama } from './validar-rama.mjs'
-import { validarMensaje } from './validar-commit.mjs'
 
 const CERO = /^0+$/
-const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+const PROTEGIDAS = ['main', 'develop']
 const errores = []
-let hayRamasNuevas = false
+let hayRamas = false
 
-const lineas = readFileSync(0, 'utf8').split('\n').filter(Boolean)
-
-for (const linea of lineas) {
-  const [refLocal, shaLocal, refRemota, shaRemota] = linea.split(' ')
-  if (CERO.test(shaLocal)) continue                       // borrar una rama siempre se permite
+for (const linea of readFileSync(0, 'utf8').split('\n').filter(Boolean)) {
+  const [, shaLocal, refRemota] = linea.split(' ')
   if (!refRemota.startsWith('refs/heads/')) continue      // etiquetas y otras referencias: no aplica
-
   const rama = refRemota.slice('refs/heads/'.length)
-  for (const e of validarRama(rama)) errores.push(e)
-  hayRamasNuevas = true
 
-  // Commits que se están subiendo: los nuevos respecto del remoto.
-  const rango = CERO.test(shaRemota) ? [shaLocal, '--not', '--remotes'] : [`${shaRemota}..${shaLocal}`]
-  const shas = git('log', '--no-merges', '--format=%H', ...rango).split('\n').filter(Boolean)
-  for (const sha of shas) {
-    const fallos = validarMensaje(git('log', '-1', '--format=%B', sha))
-    if (fallos.length) errores.push(`Commit ${sha.slice(0, 7)} (${git('log', '-1', '--format=%s', sha).trim()}): ${fallos.join(' ')}`)
+  if (PROTEGIDAS.includes(rama)) {
+    errores.push(`No se puede subir directamente a "${rama}". Sube tu rama RFNN / RNFNN y abre un pull request hacia ${rama}.`)
+    continue
   }
+  if (CERO.test(shaLocal)) continue                       // borrar una rama que no es main/develop se permite
+  for (const e of validarRama(rama)) errores.push(e)
+  hayRamas = true
 }
 
 if (errores.length) {
@@ -42,7 +36,7 @@ if (errores.length) {
 }
 
 // La web debe compilar sin errores. Si faltan dependencias, se instalan.
-if (hayRamasNuevas) {
+if (hayRamas) {
   // Comando como texto con shell: funciona igual en Windows (npm.cmd) y en Linux/Mac.
   const correr = (...args) => spawnSync(`npm ${args.join(' ')}`, { stdio: 'inherit', shell: true })
   if (!existsSync('node_modules')) {

@@ -1,4 +1,5 @@
 #!/bin/sh
-# Antes de cada commit: nombre de la rama y búsqueda de secretos en lo preparado.
-node scripts/validar-rama.mjs || exit 1
+# Antes de cada commit: nada directo a main/develop y búsqueda de secretos en lo preparado.
+# El mensaje y el nombre de la rama no se exigen al hacer commit (el nombre se valida al subir).
+node scripts/bloquear-directo.mjs commit || exit 1
 node scripts/revisar-secretos.mjs || exit 1

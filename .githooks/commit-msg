@@ -1,3 +1,0 @@
-#!/bin/sh
-# Rechaza el commit si el mensaje no sigue la convención (docs/COMMITS.md).
-exec node scripts/validar-commit.mjs "$1"

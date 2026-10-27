@@ -1,3 +1,3 @@
 #!/bin/sh
-# Al unir hacia develop o main: formato de la rama y compilación (docs/COMMITS.md).
-exec node scripts/validar-merge.mjs
+# Las uniones hacia main/develop se hacen por pull request, no en el computador.
+exec node scripts/bloquear-directo.mjs union

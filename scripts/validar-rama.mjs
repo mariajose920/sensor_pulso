@@ -1,19 +1,20 @@
 #!/usr/bin/env node
-// Valida el nombre de la rama (RF74): debe comenzar con RFNN o RNFNN, donde NN es el número
-// del requerimiento. Lo que sigue es libre; mayúsculas, minúsculas y puntos no importan.
-//   Válidas:   RF12-esquema, rf05.recepcion.wifi, Rnf04_latencia, RF118
-//   Inválidas: mi-rama, esquema-rf12, rf-12, RF1234
+// Valida el nombre de la rama (RF74): debe contener RFNN o RNFNN, donde NN es el número del
+// requerimiento, en cualquier posición. Mayúsculas, minúsculas, puntos y guiones no importan.
+//   Válidas:   RF12-esquema, esquema-rf12, rf-12, rf05.recepcion.wifi, Rnf04_latencia, RF118
+//   Inválidas: mi-rama, RF1234 (más de 3 dígitos), perf12 (el "rf" es parte de otra palabra)
 //   node scripts/validar-rama.mjs [nombre]   (sin argumento usa la rama actual)
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const FIJAS = ['main', 'develop']
-const PATRON = /^(?:rf|rnf)\d{1,3}(?:\D.*)?$/i
+// "rf" o "rnf" que no sea parte de otra palabra, un separador opcional y de 1 a 3 dígitos.
+const PATRON = /(?<![a-z])(?:rf|rnf)[^a-z0-9]?\d{1,3}(?!\d)/i
 
 export function validarRama(nombre) {
   if (FIJAS.includes(nombre)) return []
   if (PATRON.test(nombre)) return []
-  return [`La rama "${nombre}" debe comenzar con RFNN o RNFNN (NN = número del requerimiento). Ejemplos: RF12-esquema-supabase, rnf04.latencia.`]
+  return [`La rama "${nombre}" debe contener RFNN o RNFNN (NN = número del requerimiento). Ejemplos: RF12-esquema-supabase, esquema-rf12, rnf04.latencia.`]
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
