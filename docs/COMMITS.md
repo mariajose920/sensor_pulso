@@ -1,109 +1,64 @@
 # Convención de ramas y commits (RF74)
 
-Reglas del repositorio para llevar un historial ordenado: una rama por requerimiento y mensajes de commit con una estructura fija. Se validan en tu computador (hooks de Git) y en GitHub (Actions).
+Una rama por requerimiento, y cada rama y commit indica **de qué requerimiento es**. Es lo único que se exige.
 
 ## 1. Ramas
 
-Una rama por cada requerimiento funcional, creada desde `develop`. El **único** formato permitido es `rfNN-descripcion`: `rf` y el número del requerimiento (2 o 3 dígitos), un guion y la descripción, todo en **minúscula**, con palabras separadas por guion (sin mayúsculas, espacios ni guiones bajos):
+El nombre **comienza con `RFNN` o `RNFNN`**, donde `NN` es el número del requerimiento. Lo que sigue es libre. No importan las mayúsculas, minúsculas ni los puntos.
 
-| Formato | Ejemplo |
+| Válidas | Inválidas |
 |---|---|
-| `rfNN-descripcion` | `rf05-recepcion-wifi`, `rf12-esquema-supabase`, `rf114-spo2-max30102` |
+| `RF12-esquema-supabase` | `mi-rama` (no menciona el requerimiento) |
+| `rf05.recepcion.wifi` | `esquema-rf12` (el requerimiento no está al inicio) |
+| `Rnf04_latencia` | `rf-12` (falta el número pegado a RF) |
+| `RF118` | `RF1234` (el número tiene más de 3 dígitos) |
 
-No se aceptan otros prefijos (`rnf`, `docs/`, `hotfix/`, `feature/`, etc.). `main` y `develop` son ramas fijas. El trabajo entra a `develop` por pull request; `main` se actualiza en las reuniones de entrega.
+`main` y `develop` son ramas fijas.
 
-## 2. Estructura del mensaje de commit
+## 2. Commits
 
-```
-tipo(alcance): descripción corta en minúscula
+La **primera línea** del mensaje debe mencionar el requerimiento (`RFNN` o `RNFNN`). El resto es libre.
 
-Cuerpo opcional: qué cambia y por qué (no cómo).
-
-Co-Authored-By: Nombre <correo>      (opcional)
-```
-
-**Encabezado** (primera línea), obligatorio:
-
-- `tipo`: uno de la tabla siguiente.
-- `alcance`: el requerimiento (`rf12`, `rnf04`) o un área: `repo`, `db`, `ci`, `docs`, `firmware`, `web`, `deps`. Varios se separan con coma: `feat(rf08,rf114)`.
-- `descripción`: al menos 10 caracteres, empieza en minúscula, no termina en punto y está en español. El encabezado completo mide como máximo 100 caracteres.
-- Si el cambio rompe compatibilidad, añade `!` antes de los dos puntos: `feat(db)!: renombra la tabla de lecturas`.
-- Si hay cuerpo, va separado del encabezado por **una línea en blanco**.
-
-| Tipo | Cuándo usarlo |
+| Válidos | Inválidos |
 |---|---|
-| `feat` | funcionalidad nueva |
-| `fix` | corrección de un error |
-| `docs` | solo documentación |
-| `style` | formato, sin cambiar el comportamiento |
-| `refactor` | reorganizar código sin cambiar el comportamiento |
-| `perf` | mejora de rendimiento |
-| `test` | pruebas |
-| `build` | dependencias o configuración de compilación |
-| `ci` | flujos de GitHub Actions o hooks |
-| `chore` | tareas varias de mantenimiento |
-| `revert` | deshacer un commit anterior |
-| `merge` | unión de ramas escrita a mano |
+| `RF12: esquema de base de datos` | `arreglos varios` |
+| `feat(rf24): comparar con plantilla ppg` | `rf: sin número` |
+| `Corrige el cálculo de bpm (RNF04).` | `esquema de base de datos` |
 
 Los mensajes que genera Git solos (`Merge pull request #3 ...`, `Revert "..."`, `fixup!`) no se validan.
 
-### Ejemplos correctos
-
-```
-feat(rf24): comparar medición con plantilla ppg de reposo
-fix(rf07): corregir el cálculo de bpm cuando falta un pico
-docs(repo): explicar la convención de commits
-feat(db): agregar tabla de alertas con rls
-chore(deps): actualizar supabase-js a 2.48
-feat(rf08,rf114)!: mostrar spo2 por canal
-```
-
-### Ejemplos que se rechazan
-
-| Mensaje | Problema |
-|---|---|
-| `arreglos` | no tiene `tipo(alcance): descripción` |
-| `Feat(rf12): Esquema de base de datos` | tipo en mayúscula y descripción con mayúscula inicial |
-| `feat: esquema de base de datos` | falta el alcance |
-| `feat(rf12): esquema.` | termina en punto |
-| `feat(rf12): bd` | descripción muy corta |
-| `feature(rf12): esquema de base de datos` | tipo inexistente |
-| `feat(tarea5): esquema de base de datos` | alcance no válido |
-
 ## 3. Qué se valida y dónde
 
-| Control | Dónde | Archivo |
+| Momento | Qué se revisa | Dónde |
 |---|---|---|
-| Formato del mensaje de commit | tu computador (`commit-msg`) y GitHub | `scripts/validar-commit.mjs` |
-| Nombre de la rama | tu computador (`pre-commit` y `pre-push`) y GitHub (en cada push y pull request) | `scripts/validar-rama.mjs` |
-| Mensajes de los commits que subes | tu computador (`pre-push`) | `scripts/validar-push.mjs` |
-| Secretos y archivos `.env` en lo que vas a commitear | tu computador (`pre-commit`) | `scripts/revisar-secretos.mjs` |
-| La web instala y compila sin errores | tu computador (`pre-push`, instala con `npm ci` si faltan dependencias) y GitHub | `npm run build` |
+| `git commit` | nombre de la rama, mensaje y secretos (`.env`, claves) | tu computador (`pre-commit`, `commit-msg`) |
+| `git push` | nombre de la rama, mensajes de los commits nuevos y que la web instale y compile | tu computador (`pre-push`) |
+| `git merge` hacia `develop` o `main` | nombre de la rama que entra, sus commits y que el resultado compile | tu computador (`pre-merge-commit`) |
+| Pull request o push en GitHub | los mismos controles | GitHub Actions (`.github/workflows/validar.yml`) |
 
-**`git push` se detiene** si la rama tiene un nombre fuera de formato, si algún commit nuevo no cumple la convención o si la web no compila. Borrar una rama del remoto siempre se permite.
+Si algo falla, se muestra un mensaje que explica qué corregir. Borrar una rama del remoto siempre se permite. Para renombrar una rama: `git branch -m <nombre-nuevo>`.
 
 ### Activar los hooks locales
 
-Se activan solos al ejecutar `npm install` (el script `prepare` configura `core.hooksPath`). Para activarlos a mano:
+Se activan solos con `npm install` (el script `prepare`). A mano:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
-Para probar un mensaje sin hacer commit:
+## 4. Que un pull request con errores NO se pueda unir a `develop`
 
-```bash
-echo "feat(rf12): esquema de base de datos" > /tmp/msg.txt
-node scripts/validar-commit.mjs /tmp/msg.txt
-```
+Los hooks locales se pueden saltar (`--no-verify`) y no actúan cuando se une desde la página de GitHub. Lo que **bloquea de verdad** es la protección de ramas, que activa **una vez** un administrador del repositorio:
 
-### Importante
+1. GitHub → **Settings → Rules → Rulesets → New ruleset → New branch ruleset**.
+2. **Enforcement status:** Active. **Target branches:** `develop` (agrega otra regla igual para `main`).
+3. Activar:
+   - **Require a pull request before merging**.
+   - **Require status checks to pass** y agregar como obligatorios **Commits y nombre de rama** y **Compilación**. Si no aparecen en la lista, abre antes un pull request para que corran por primera vez.
+   - **Block force pushes**.
+4. Opcional, para impedir que se creen ramas fuera de formato: otro ruleset con **Target: All branches**, activar **Restrict branch names**, método **Regex** y el patrón:
+   ```
+   ^(main|develop|(?i:rf|rnf)[0-9]{1,3}([^0-9].*)?)$
+   ```
 
-Los hooks locales se pueden saltar (`git commit --no-verify`), por eso se repiten en GitHub Actions. Para que el servidor **bloquee** de verdad un pull request con errores, un administrador del repositorio debe activarlo una vez:
-
-1. GitHub → **Settings → Branches → Add branch ruleset** (o *Add classic branch protection rule*).
-2. Rama: `develop` (y `main`).
-3. Activar **Require a pull request before merging** y **Require status checks to pass**.
-4. Elegir como obligatorios los checks **Commits y nombre de rama** y **Compilación**.
-
-Con esto, un pull request con un mensaje mal formado, una rama mal nombrada o una web que no compila no se puede unir.
+Con esto, un pull request cuya rama no cumple, con un commit sin `RFNN` o con la web rota, **no se puede unir a `develop`**.

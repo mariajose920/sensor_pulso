@@ -1,17 +1,19 @@
 #!/usr/bin/env node
-// Valida el nombre de la rama (RF74: una rama por requerimiento).
+// Valida el nombre de la rama (RF74): debe comenzar con RFNN o RNFNN, donde NN es el número
+// del requerimiento. Lo que sigue es libre; mayúsculas, minúsculas y puntos no importan.
+//   Válidas:   RF12-esquema, rf05.recepcion.wifi, Rnf04_latencia, RF118
+//   Inválidas: mi-rama, esquema-rf12, rf-12, RF1234
 //   node scripts/validar-rama.mjs [nombre]   (sin argumento usa la rama actual)
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const FIJAS = ['main', 'develop']
-// Único formato permitido: rfNN-descripcion, todo en minúscula (ej.: rf12-esquema-supabase).
-const PATRON = /^rf\d{2,3}-[a-z0-9]+(?:-[a-z0-9]+)*$/
+const PATRON = /^(?:rf|rnf)\d{1,3}(?:\D.*)?$/i
 
 export function validarRama(nombre) {
   if (FIJAS.includes(nombre)) return []
   if (PATRON.test(nombre)) return []
-  return [`La rama "${nombre}" no sigue el formato rfNN-descripcion en minúscula (ej.: rf12-esquema-supabase). Solo se permiten ramas rfNN-..., main y develop.`]
+  return [`La rama "${nombre}" debe comenzar con RFNN o RNFNN (NN = número del requerimiento). Ejemplos: RF12-esquema-supabase, rnf04.latencia.`]
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Hook pre-push (RF74): no deja subir una rama si
-//   1. su nombre no sigue el formato (rfNN-descripcion en minúscula),
-//   2. alguno de los commits nuevos no sigue la convención de mensajes, o
+//   1. su nombre no comienza con RFNN o RNFNN,
+//   2. alguno de los commits nuevos no menciona el requerimiento (RFNN o RNFNN), o
 //   3. la web no instala o no compila.
 // Git entrega por stdin una línea por referencia:  <ref local> <sha local> <ref remota> <sha remota>
 import { execFileSync, spawnSync } from 'node:child_process'

@@ -34,7 +34,7 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    rfNN-descripcion
    # Ejemplo: rf01-identificar-usuario, rf05-recepcion-wifi
    ```
-   Los mensajes de commit siguen `tipo(alcance): descripción` (ej.: `feat(rf12): esquema de base de datos`). Se validan con hooks de Git y con GitHub Actions: ver [docs/COMMITS.md](docs/COMMITS.md).
+   El nombre de la rama comienza con `RFNN` o `RNFNN` (NN = número del requerimiento; mayúsculas y puntos no importan) y la primera línea de cada commit menciona el requerimiento (ej.: `RF12: esquema de base de datos`). Se validan con hooks de Git y con GitHub Actions: ver [docs/COMMITS.md](docs/COMMITS.md).
 2. **Confirmación antes de commit/push:** Cada integrante valida sus cambios antes de hacer commit o push.
 3. **Integración:** La unión a la rama principal (`main`) se coordina en las reuniones de entrega.
 
