@@ -53,9 +53,9 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    ```
 
 3. Configurar variables de entorno:
-   Copiar `.env.example` a `.env` y configurar las credenciales de Supabase:
+   Copiar `.env.example` a `.env.local` (la URL y la clave publicable del proyecto ya vienen en el ejemplo):
    ```bash
-   cp .env.example .env
+   cp .env.example .env.local
    ```
 
 4. Iniciar el servidor de desarrollo:
