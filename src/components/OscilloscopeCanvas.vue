@@ -1,41 +1,50 @@
 <template>
   <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 1.5rem; background: #070a13; border: 1px solid var(--color-border);">
-    <!-- Barra superior de estado -->
-    <div style="padding: 0.6rem 1rem; background: #0c1222; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #cbd5e1;">
+    <!-- Barra superior de estado y selectores de capas -->
+    <div style="padding: 0.6rem 1rem; background: #0c1222; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #cbd5e1; flex-wrap: wrap; gap: 0.75rem;">
       <div style="display: flex; align-items: center; gap: 0.5rem;">
-        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%;" :style="{ backgroundColor: isRunning ? '#22c55e' : '#64748b' }"></span>
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #22c55e;"></span>
         <span style="font-weight: 600;">
-          {{ isRunning ? 'Senal Viva: Sensor ESP32 (MAX30102)' : 'Esperando senal del sensor' }}
+          Osciloscopio Comparativo en Tiempo Real
         </span>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 1rem; font-family: monospace; font-size: 0.75rem;">
-        <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
-          <input type="checkbox" v-model="showTemplate">
-          <span>Superponer Plantilla PPG de Reposo (RF24)</span>
+      <!-- Toggles para superposicion de senales (Medicion, Plantilla Reposo, ECG) -->
+      <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.75rem; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
+          <input type="checkbox" v-model="showPatient">
+          <span style="color: #4ade80; font-weight: 600;">Medicion Tomada ({{ bpm }} BPM)</span>
         </label>
-        <span style="color: #64748b;">|</span>
-        <span style="color: #94a3b8;">{{ sampleCount }} muestras</span>
+
+        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
+          <input type="checkbox" v-model="showTemplate">
+          <span style="color: #67e8f9; font-weight: 600;">Plantilla PPG Reposo (72 BPM)</span>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
+          <input type="checkbox" v-model="showEcg">
+          <span style="color: #a5b4fc; font-weight: 600;">ECG Educativo de Referencia</span>
+        </label>
       </div>
     </div>
 
-    <!-- Canvas -->
-    <div style="position: relative; width: 100%; height: 280px;">
+    <!-- Canvas del osciloscopio -->
+    <div style="position: relative; width: 100%; height: 300px;">
       <canvas ref="canvasRef" style="width: 100%; height: 100%; display: block;"></canvas>
 
-      <div v-if="!isRunning && buffer.length === 0" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; color: #64748b; background: rgba(7, 10, 19, 0.7);">
-        Conecta el sensor ESP32 por USB para recibir la senal viva y compararla con la plantilla de reposo.
-      </div>
-
-      <!-- Leyenda inferior -->
-      <div style="position: absolute; bottom: 8px; left: 12px; display: flex; gap: 1rem; font-size: 0.75rem; background: rgba(12, 18, 34, 0.9); padding: 4px 10px; border-radius: 4px; border: 1px solid #1e293b;">
-        <div style="display: flex; align-items: center; gap: 0.4rem;">
-          <span style="display: inline-block; width: 14px; height: 2px; background: #22c55e;"></span>
-          <span style="color: #86efac;">Senal del Sensor</span>
+      <!-- Leyenda flotante interactiva -->
+      <div style="position: absolute; bottom: 8px; left: 12px; display: flex; gap: 1rem; font-size: 0.75rem; background: rgba(12, 18, 34, 0.95); padding: 5px 12px; border-radius: 4px; border: 1px solid #1e293b; flex-wrap: wrap;">
+        <div v-if="showPatient" style="display: flex; align-items: center; gap: 0.4rem;">
+          <span style="display: inline-block; width: 14px; height: 3px; background: #22c55e;"></span>
+          <span style="color: #86efac; font-weight: 500;">{{ measurementName }} ({{ bpm }} BPM)</span>
         </div>
         <div v-if="showTemplate" style="display: flex; align-items: center; gap: 0.4rem;">
           <span style="display: inline-block; width: 14px; border-top: 2px dashed #06b6d4;"></span>
-          <span style="color: #67e8f9;">Plantilla PPG Reposo (72 BPM)</span>
+          <span style="color: #67e8f9; font-weight: 500;">Plantilla Reposo PPG (72 BPM)</span>
+        </div>
+        <div v-if="showEcg" style="display: flex; align-items: center; gap: 0.4rem;">
+          <span style="display: inline-block; width: 14px; height: 2.5px; background: #818cf8;"></span>
+          <span style="color: #a5b4fc; font-weight: 500;">ECG Educativo (Complejo QRS)</span>
         </div>
       </div>
     </div>
@@ -44,23 +53,24 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { ppgWaveform } from '../utils/ppgMath.js'
+import { ppgWaveform, ecgEducationalWaveform } from '../utils/ppgMath.js'
 
 const props = defineProps({
-  isRunning: { type: Boolean, default: false }
+  bpm: { type: Number, default: 78 },
+  amplitude: { type: Number, default: 100 },
+  measurementName: { type: String, default: 'Medicion Tomada' }
 })
 
 const canvasRef = ref(null)
+const showPatient = ref(true)
 const showTemplate = ref(true)
-const sampleCount = ref(0)
-
-const MAX_SAMPLES = 400
-const buffer = []
+const showEcg = ref(true)
 
 let animationFrameId = null
 let ctx = null
 let width = 0
 let height = 0
+let offsetTime = 0 // Animacion continua de desplazamiento
 
 function resizeCanvas() {
   const canvas = canvasRef.value
@@ -73,14 +83,6 @@ function resizeCanvas() {
   canvas.height = height * dpr
   ctx = canvas.getContext('2d')
   ctx.scale(dpr, dpr)
-}
-
-function addSample(value) {
-  sampleCount.value++
-  buffer.push(value)
-  if (buffer.length > MAX_SAMPLES) {
-    buffer.shift()
-  }
 }
 
 function drawGrid() {
@@ -104,52 +106,100 @@ function drawGrid() {
     ctx.lineTo(width, y)
     ctx.stroke()
   }
+
+  // Linea base principal
+  ctx.strokeStyle = '#1e293b'
+  ctx.beginPath()
+  ctx.moveTo(0, height * 0.85)
+  ctx.lineTo(width, height * 0.85)
+  ctx.stroke()
 }
 
-function drawTemplateOverlay() {
-  if (!showTemplate.value || width === 0) return
+/**
+ * 1. Curva ECG Educativa de Referencia (violeta)
+ * Muestra el complejo bioelectrico con su onda R previa a la eyeccion sanguinea
+ */
+function drawEducationalEcg() {
+  if (!showEcg.value || width === 0) return
 
   ctx.save()
-  ctx.strokeStyle = 'rgba(6, 182, 212, 0.75)'
+  ctx.strokeStyle = '#818cf8' // Violeta
   ctx.lineWidth = 2
-  ctx.setLineDash([5, 5])
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  // El ECG de referencia corre al ritmo del reposo o sincronizado
+  const restingPeriodSec = 60 / 72
+  const windowDurationSec = 4.0
 
   ctx.beginPath()
-  const cycles = MAX_SAMPLES / ((60000 / 72) / 10)
+  for (let x = 0; x <= width; x += 2) {
+    const tSeconds = (x / width) * windowDurationSec + offsetTime
+    const phase = (tSeconds / restingPeriodSec) % 1.0
+    const val = ecgEducationalWaveform(phase)
 
-  for (let i = 0; i <= MAX_SAMPLES; i += 2) {
-    const x = (i / MAX_SAMPLES) * width
-    const phase = ((i / MAX_SAMPLES) * cycles) % 1.0
-    const val = ppgWaveform(phase)
-    const y = height - (val * (height * 0.68) + height * 0.16)
+    // Escala del ECG: base centrada en 68% de altura
+    const y = height * 0.70 - val * (height * 0.42)
 
-    if (i === 0) ctx.moveTo(x, y)
+    if (x === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
   }
   ctx.stroke()
   ctx.restore()
 }
 
-function drawWave() {
-  if (buffer.length < 2) return
-
-  let min = Math.min(...buffer)
-  let max = Math.max(...buffer)
-  if (max - min < 10) max = min + 10
+/**
+ * 2. Plantilla PPG Normal en Reposo (72 BPM) (cyan punteado)
+ */
+function drawTemplate() {
+  if (!showTemplate.value || width === 0) return
 
   ctx.save()
-  ctx.strokeStyle = '#22c55e'
-  ctx.lineWidth = 2.2
+  ctx.strokeStyle = 'rgba(6, 182, 212, 0.85)' // Cyan
+  ctx.lineWidth = 2
+  ctx.setLineDash([6, 5])
+
+  const restingPeriodSec = 60 / 72
+  const windowDurationSec = 4.0
 
   ctx.beginPath()
-  const dx = width / MAX_SAMPLES
+  for (let x = 0; x <= width; x += 2) {
+    const tSeconds = (x / width) * windowDurationSec + offsetTime
+    const phase = (tSeconds / restingPeriodSec) % 1.0
+    const val = ppgWaveform(phase)
+    const y = height - (val * (height * 0.60) + height * 0.15)
 
-  for (let i = 0; i < buffer.length; i++) {
-    const x = i * dx
-    const norm = (buffer[i] - min) / (max - min)
-    const y = height - (norm * (height * 0.68) + height * 0.16)
+    if (x === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.stroke()
+  ctx.restore()
+}
 
-    if (i === 0) ctx.moveTo(x, y)
+/**
+ * 3. Medicion Tomada del Paciente (verde solida)
+ */
+function drawPatientMeasurement() {
+  if (!showPatient.value || width === 0) return
+
+  ctx.save()
+  ctx.strokeStyle = '#22c55e' // Verde
+  ctx.lineWidth = 2.4
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+
+  const patientPeriodSec = 60 / Math.max(30, props.bpm)
+  const windowDurationSec = 4.0
+  const ampFactor = props.amplitude / 100
+
+  ctx.beginPath()
+  for (let x = 0; x <= width; x += 2) {
+    const tSeconds = (x / width) * windowDurationSec + offsetTime
+    const phase = (tSeconds / patientPeriodSec) % 1.0
+    const val = ppgWaveform(phase) * ampFactor
+    const y = height - (val * (height * 0.60) + height * 0.15)
+
+    if (x === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
   }
   ctx.stroke()
@@ -159,8 +209,10 @@ function drawWave() {
 function render() {
   if (ctx && width > 0) {
     drawGrid()
-    drawTemplateOverlay()
-    drawWave()
+    drawEducationalEcg()
+    drawTemplate()
+    drawPatientMeasurement()
+    offsetTime += 0.003
   }
   animationFrameId = requestAnimationFrame(render)
 }
@@ -174,13 +226,5 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', resizeCanvas)
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
-})
-
-defineExpose({
-  addSample,
-  clear: () => {
-    buffer.length = 0
-    sampleCount.value = 0
-  }
 })
 </script>
