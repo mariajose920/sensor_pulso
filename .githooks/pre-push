@@ -1,8 +1,3 @@
 #!/bin/sh
-# Antes de subir: la web debe compilar sin errores. Si faltan dependencias, avisa y sigue.
-if [ -d node_modules ]; then
-  echo "pre-push: compilando (npm run build)..."
-  npm run build --silent || { echo "✖ La compilación falló: corrige los errores antes de subir."; exit 1; }
-else
-  echo "pre-push: node_modules no existe; se omite la compilación (ejecuta npm install)."
-fi
+# Antes de subir: nombre de la rama, mensajes de los commits nuevos y compilación (docs/COMMITS.md).
+exec node scripts/validar-push.mjs

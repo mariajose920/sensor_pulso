@@ -21,11 +21,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Nombre de la rama (solo pull requests)
-        if: github.event_name == 'pull_request'
-        run: node scripts/validar-rama.mjs "$HEAD_REF"
+      - name: Nombre de la rama
+        run: node scripts/validar-rama.mjs "$RAMA"
         env:
-          HEAD_REF: ${{ github.head_ref }}
+          RAMA: ${{ github.head_ref || github.ref_name }}
       - name: Mensajes de commit del pull request
         if: github.event_name == 'pull_request'
         run: node scripts/validar-commit.mjs --rango "origin/${{ github.base_ref }}..HEAD"

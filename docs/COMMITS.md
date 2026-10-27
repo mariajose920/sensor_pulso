@@ -78,9 +78,12 @@ feat(rf08,rf114)!: mostrar spo2 por canal
 | Control | Dónde | Archivo |
 |---|---|---|
 | Formato del mensaje de commit | tu computador (`commit-msg`) y GitHub | `scripts/validar-commit.mjs` |
-| Nombre de la rama | tu computador (`pre-commit`) y GitHub (pull requests) | `scripts/validar-rama.mjs` |
+| Nombre de la rama | tu computador (`pre-commit` y `pre-push`) y GitHub (en cada push y pull request) | `scripts/validar-rama.mjs` |
+| Mensajes de los commits que subes | tu computador (`pre-push`) | `scripts/validar-push.mjs` |
 | Secretos y archivos `.env` en lo que vas a commitear | tu computador (`pre-commit`) | `scripts/revisar-secretos.mjs` |
-| La web compila sin errores | tu computador (`pre-push`) y GitHub | `npm run build` |
+| La web instala y compila sin errores | tu computador (`pre-push`, instala con `npm ci` si faltan dependencias) y GitHub | `npm run build` |
+
+**`git push` se detiene** si la rama tiene un nombre fuera de formato, si algún commit nuevo no cumple la convención o si la web no compila. Borrar una rama del remoto siempre se permite.
 
 ### Activar los hooks locales
 
