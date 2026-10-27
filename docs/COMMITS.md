@@ -4,11 +4,11 @@ Reglas del repositorio para llevar un historial ordenado: una rama por requerimi
 
 ## 1. Ramas
 
-Una rama por cada requerimiento, creada desde `develop`:
+Una rama por cada requerimiento, creada desde `develop`. Todo en **minúscula**, con palabras separadas por guion (sin mayúsculas, espacios ni guiones bajos):
 
 | Formato | Ejemplo |
 |---|---|
-| `rfNN-descripcion` | `rf05-recepcion-wifi`, `RF12-ESQUEMA-SUPABASE` |
+| `rfNN-descripcion` | `rf05-recepcion-wifi`, `rf12-esquema-supabase` |
 | `rnfNN-descripcion` | `rnf04-latencia-tiempo-real` |
 | `docs/tema` | `docs/requerimientos` |
 | `hotfix/tema` | `hotfix/token-expirado` |
