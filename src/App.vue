@@ -8,8 +8,8 @@
         <router-link to="/" class="nav-link">Inicio</router-link>
         <router-link to="/medicion" class="nav-link">Medición</router-link>
         <router-link to="/comparacion" class="nav-link">Comparación</router-link>
-        <router-link to="/aulas" class="nav-link">Aulas</router-link>
         <router-link to="/aprendizaje" class="nav-link">Aprendizaje</router-link>
+        <router-link to="/aulas" class="nav-link">Aulas</router-link>
         <router-link to="/login" class="btn btn-secondary" style="padding: 0.35rem 0.85rem; font-size: 0.85rem;">Acceso</router-link>
       </nav>
     </header>

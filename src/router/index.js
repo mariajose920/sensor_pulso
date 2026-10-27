@@ -33,6 +33,10 @@ const routes = [
     component: AprendizajeView
   },
   {
+    path: '/simulador',
+    redirect: '/aprendizaje'
+  },
+  {
     path: '/login',
     name: 'Login',
     component: LoginView
