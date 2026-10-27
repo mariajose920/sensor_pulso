@@ -25,6 +25,9 @@
       </router-link>
     </header>
 
+    <!-- RNF03: aviso sin conexión y opción de instalar la app -->
+    <EstadoPwa />
+
     <main id="contenido" class="container">
       <router-view />
     </main>
@@ -51,6 +54,7 @@
 </template>
 
 <script setup>
+import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
 

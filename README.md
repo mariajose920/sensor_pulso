@@ -69,7 +69,12 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    npm run probar:responsivo
    ```
 
-6. Compilar para producción:
+6. Probar la app instalable (RNF03, ver [docs/RNF03-pwa.md](docs/RNF03-pwa.md)):
+   ```bash
+   npm run probar:pwa
+   ```
+
+7. Compilar para producción:
    ```bash
    npm run build
    ```

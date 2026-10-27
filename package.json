@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "validar:rama": "node scripts/validar-rama.mjs",
-    "probar:responsivo": "node scripts/probar-responsivo.mjs"
+    "probar:responsivo": "node scripts/probar-responsivo.mjs",
+    "probar:pwa": "node scripts/probar-pwa.mjs",
+    "generar:iconos": "node scripts/generar-iconos.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
@@ -19,6 +21,7 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
     "puppeteer-core": "^23.11.1",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vite-plugin-pwa": "^0.21.2"
   }
 }
