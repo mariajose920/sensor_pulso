@@ -29,11 +29,11 @@
     </div>
 
     <!-- Canvas del osciloscopio -->
-    <div style="position: relative; width: 100%; height: 300px;">
+    <div class="chart-box-osciloscopio" ref="cajaRef">
       <canvas ref="canvasRef" style="width: 100%; height: 100%; display: block;"></canvas>
 
-      <!-- Leyenda flotante interactiva -->
-      <div style="position: absolute; bottom: 8px; left: 12px; display: flex; gap: 1rem; font-size: 0.75rem; background: rgba(12, 18, 34, 0.95); padding: 5px 12px; border-radius: 4px; border: 1px solid #1e293b; flex-wrap: wrap;">
+      <!-- Leyenda flotante interactiva (en móvil pasa a ser una columna de ancho acotado) -->
+      <div style="position: absolute; bottom: 8px; left: 12px; right: 12px; max-width: calc(100% - 24px); display: flex; gap: 1rem; font-size: 0.75rem; background: rgba(12, 18, 34, 0.95); padding: 5px 12px; border-radius: 4px; border: 1px solid #1e293b; flex-wrap: wrap;">
         <div v-if="showPatient" style="display: flex; align-items: center; gap: 0.4rem;">
           <span style="display: inline-block; width: 14px; height: 3px; background: #22c55e;"></span>
           <span style="color: #86efac; font-weight: 500;">{{ measurementName }} ({{ bpm }} BPM)</span>
@@ -62,6 +62,7 @@ const props = defineProps({
 })
 
 const canvasRef = ref(null)
+const cajaRef = ref(null)
 const showPatient = ref(true)
 const showTemplate = ref(true)
 const showEcg = ref(true)
@@ -217,14 +218,25 @@ function render() {
   animationFrameId = requestAnimationFrame(render)
 }
 
+// RNF01: el lienzo sigue el tamaño de su contenedor (no solo el de la ventana), así se adapta
+// al girar el celular, al abrir o cerrar barras y al cambiar el tamaño del navegador.
+let observador = null
+
 onMounted(() => {
   resizeCanvas()
   window.addEventListener('resize', resizeCanvas)
+  window.addEventListener('orientationchange', resizeCanvas)
+  if (typeof ResizeObserver !== 'undefined' && cajaRef.value) {
+    observador = new ResizeObserver(() => resizeCanvas())
+    observador.observe(cajaRef.value)
+  }
   animationFrameId = requestAnimationFrame(render)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', resizeCanvas)
+  window.removeEventListener('orientationchange', resizeCanvas)
+  if (observador) observador.disconnect()
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
 })
 </script>

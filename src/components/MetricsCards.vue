@@ -1,5 +1,5 @@
 <template>
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
     <!-- Metrica 1: BPM de la Medicion -->
     <div class="card" style="margin-bottom: 0; padding: 1rem;">
       <div style="font-size: 0.8rem; color: var(--color-muted); font-weight: 500;">
