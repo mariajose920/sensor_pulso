@@ -11,10 +11,13 @@
         <router-link to="/aulas" class="nav-link">Aulas</router-link>
         <router-link to="/aprendizaje" class="nav-link">Aprendizaje</router-link>
         
+        <!-- Enlace solo visible para Administradores -->
+        <router-link v-if="isAdmin" to="/admin" class="nav-link">Admin</router-link>
+
         <!-- Estado de sesión -->
         <template v-if="isAuthenticated">
           <span class="user-chip">
-            👤 {{ currentUserName }}
+            👤 {{ currentUserName }} <small>({{ roleLabel }})</small>
           </span>
           <button @click="logout" class="btn btn-secondary btn-sm">
             Salir
@@ -39,7 +42,7 @@
 <script setup>
 import { useAuth } from './composables/useAuth'
 
-const { isAuthenticated, currentUserName, logout } = useAuth()
+const { isAuthenticated, currentUserName, roleLabel, isAdmin, logout } = useAuth()
 </script>
 
 <style scoped>
@@ -61,6 +64,11 @@ main.container {
   padding: 0.35rem 0.65rem;
   border-radius: 9999px;
   border: 1px solid var(--color-border);
+}
+
+.user-chip small {
+  color: var(--color-muted);
+  font-weight: 400;
 }
 
 .btn-sm {
