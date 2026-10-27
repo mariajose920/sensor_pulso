@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "git config core.hooksPath .githooks || exit 0",
+    "validar:commit": "node scripts/validar-commit.mjs",
+    "validar:rama": "node scripts/validar-rama.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",

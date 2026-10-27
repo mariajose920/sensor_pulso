@@ -1,0 +1,4 @@
+#!/bin/sh
+# Antes de cada commit: nombre de la rama y búsqueda de secretos en lo preparado.
+node scripts/validar-rama.mjs || exit 1
+node scripts/revisar-secretos.mjs || exit 1

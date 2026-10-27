@@ -1,0 +1,47 @@
+name: Validar cambios
+
+# Mismas reglas que los hooks locales, pero en el servidor: no se pueden saltar con --no-verify.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  commits-y-rama:
+    name: Commits y nombre de rama
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Nombre de la rama (solo pull requests)
+        if: github.event_name == 'pull_request'
+        run: node scripts/validar-rama.mjs "$HEAD_REF"
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+      - name: Mensajes de commit del pull request
+        if: github.event_name == 'pull_request'
+        run: node scripts/validar-commit.mjs --rango "origin/${{ github.base_ref }}..HEAD"
+
+  compilacion:
+    name: Compilación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Compilar la web
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ozzehtpqxpicfqvmulcg.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_CD_KR_pwQQQ1e_HR2aQemw_mNjM2_ml
