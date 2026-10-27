@@ -1,0 +1,42 @@
+name: Validar cambios
+
+# Mismas reglas que los hooks locales, pero en el servidor: no se pueden saltar con --no-verify.
+# Los commits dentro de una rama RFNN / RNFNN no tienen ninguna exigencia.
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  nombre-de-rama:
+    name: Nombre de rama
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: La rama debe comenzar con RFNN o RNFNN
+        run: node scripts/validar-rama.mjs "$RAMA"
+        env:
+          RAMA: ${{ github.head_ref || github.ref_name }}
+
+  compilacion:
+    name: Compilación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Compilar la web
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ozzehtpqxpicfqvmulcg.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_CD_KR_pwQQQ1e_HR2aQemw_mNjM2_ml

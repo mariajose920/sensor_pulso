@@ -34,6 +34,7 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    rfNN-descripcion
    # Ejemplo: rf01-identificar-usuario, rf05-recepcion-wifi
    ```
+   El nombre de la rama contiene `RFNN` o `RNFNN` (NN = número del requerimiento; mayúsculas, puntos y guiones no importan). Dentro de la rama los commits no tienen exigencias, pero **no se puede hacer commit ni push directo a `main` o `develop`**: todo entra por pull request. Se valida con hooks de Git y con GitHub Actions: ver [docs/COMMITS.md](docs/COMMITS.md).
 2. **Confirmación antes de commit/push:** Cada integrante valida sus cambios antes de hacer commit o push.
 3. **Integración:** La unión a la rama principal (`main`) se coordina en las reuniones de entrega.
 
