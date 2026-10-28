@@ -11,3 +11,6 @@ dist/
 supabase/.temp/
 supabase/.branches/
 supabase/seed.sql
+
+# Capturas de las pruebas responsivas (RNF01)
+pruebas-responsivas/
