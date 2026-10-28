@@ -125,6 +125,19 @@ export function useAuth() {
     }
   }
 
+  // RF96: Reenviar el correo de confirmación de la cuenta
+  const resendConfirmationEmail = async (email) => {
+    authError.value = null
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email })
+      if (error) throw error
+      return { success: true }
+    } catch (err) {
+      authError.value = err.message
+      return { success: false, error: err.message }
+    }
+  }
+
     return {
     user,
     session,
