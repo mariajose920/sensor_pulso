@@ -5,19 +5,20 @@ Requerimiento: *la plataforma debe poder desplegarse en Vercel, con la base de d
 ## Cómo queda el despliegue
 
 ```
-rama RFNN / RNFNN  ──pull request──▶  develop  ──pull request──▶  main
-     │                                   │                          │
-     ▼                                   ▼                          ▼
- vista previa en Vercel            vista previa en Vercel     PRODUCCIÓN en Vercel
- (URL propia de la rama)           (URL de develop)           https://sensorpulso.vercel.app
-                                                                      │
+rama RFNN / RNFNN  ──pull request──▶  develop
+     │                                   │
+     ▼                                   ▼
+ vista previa en Vercel            PRODUCCIÓN en Vercel
+ (URL propia de la rama)           https://sensorpulso.vercel.app
+                                         │
+                       (`main` queda vacía: no se une ninguna rama)
                           todas leen y escriben en el proyecto de Supabase ozzehtpqxpicfqvmulcg
 ```
 
 | Tema | Decisión |
 |---|---|
-| Producción | Rama **`main`**. Se actualiza cuando se une `develop` a `main` (por ejemplo, en cada entrega). |
-| Vistas previas | Cada rama y `develop` tienen su propia URL de vista previa. |
+| Producción | Rama **`develop`**. Se actualiza con cada pull request que se une a `develop`. `main` no se usa: queda vacía. |
+| Vistas previas | Cada rama de requerimiento tiene su propia URL de vista previa. |
 | Dirección | `sensorpulso.vercel.app` (la gratuita del proyecto). |
 | Acceso | **Público**: cualquier persona abre la web sin cuenta de Vercel. |
 | Base de datos | **Un solo proyecto de Supabase** (`ozzehtpqxpicfqvmulcg`) para todo. Ver el riesgo más abajo. |
@@ -38,7 +39,7 @@ rama RFNN / RNFNN  ──pull request──▶  develop  ──pull request─�
 Yo no cambié nada en Vercel ni en Supabase. Estos pasos los hace quien administra las cuentas.
 
 ### 1. Vercel · rama de producción
-**Settings → Git → Production Branch:** `main`.
+**Settings → Git → Production Branch:** `develop`.
 
 ### 2. Vercel · variables de entorno
 **Settings → Environment Variables.** Hoy existen `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` solo para Producción, pero la web lee otros nombres. Crea estas dos, marcando **Production, Preview y Development**:
@@ -73,11 +74,11 @@ Sin esto, los enlaces del correo de confirmación (RF48) y de recuperar contrase
 ### 6. Supabase · integración con GitHub
 **Project Settings → Integrations → GitHub:**
 
-- **Production branch name:** **`main`**, la misma que usa Vercel, para que las migraciones lleguen a la base junto con la web. Una sola rama, no `develop` ni `main, develop`.
+- **Production branch name:** **`develop`**, la misma que usa Vercel, para que las migraciones lleguen a la base junto con la web. Una sola rama, no `main` ni `main, develop`.
 - **Working directory:** **`.`** (o vacío). La carpeta `supabase/` está en la raíz del repositorio; con `supabase` buscaría `supabase/supabase/` y no encontraría las migraciones.
 
 ### 7. Primer despliegue de producción
-Abre un pull request de `develop` a `main`, únelo, espera a que Vercel termine y ejecuta:
+Une un pull request a `develop`, espera a que Vercel termine el despliegue de producción y ejecuta:
 
 ```bash
 npm run verificar:despliegue -- https://sensorpulso.vercel.app
