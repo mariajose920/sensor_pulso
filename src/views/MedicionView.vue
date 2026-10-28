@@ -178,12 +178,16 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
         </table>
       </div>
     </div>
+
+    <!-- RF17: detección de picos, BPM y HRV -->
+    <DeteccionPicosPanel />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
+import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
