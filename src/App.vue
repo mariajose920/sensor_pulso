@@ -7,6 +7,7 @@
       <nav class="nav-links">
         <router-link to="/" class="nav-link">Inicio</router-link>
         <router-link to="/medicion" class="nav-link">Medición</router-link>
+        <router-link to="/dispositivos" class="nav-link">Dispositivos</router-link>
         <router-link to="/comparacion" class="nav-link">Comparación</router-link>
         <router-link to="/aulas" class="nav-link">Aulas</router-link>
         <router-link to="/aprendizaje" class="nav-link">Aprendizaje</router-link>
