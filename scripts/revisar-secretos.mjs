@@ -10,7 +10,7 @@ const PATRONES = [
   [/sb_secret_[A-Za-z0-9_-]{16,}/, 'clave secreta de Supabase (sb_secret_...)'],
   [/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/, 'llave privada'],
   [/eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, 'JWT (posible clave service_role o token)'],
-  [/\b(?:SUPABASE_SECRET_KEY|CLAVE_CIFRADO_CAMPOS|SERVICE_ROLE_KEY)\s*=\s*["']?[^\s"'#]{8,}/, 'variable secreta con valor']
+  [/\b(?:SUPABASE_SECRET_KEY|CLAVE_CIFRADO_CAMPOS|SERVICE_ROLE_KEY)[ \t]*=[ \t]*["']?[^\s"'#]{8,}/, 'variable secreta con valor']
 ]
 
 const preparados = git('diff', '--cached', '--name-only', '--diff-filter=ACM').split('\n').filter(Boolean)

@@ -19,7 +19,12 @@
         >{{ e.texto }}</router-link>
       </nav>
 
-      <router-link to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
+      <!-- Estado de sesión (RF02) -->
+      <template v-if="isAuthenticated">
+        <span class="user-chip">👤 {{ currentUserName }} <small>({{ roleLabel }})</small></span>
+        <button type="button" class="btn btn-secondary btn-acceso" @click="logout">Salir</button>
+      </template>
+      <router-link v-else to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
         <NavIcon name="usuario" class="solo-movil" />
         <span class="btn-acceso-texto">Acceso</span>
       </router-link>
@@ -54,17 +59,26 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
+import { useAuth } from './composables/useAuth'
 
-const enlaces = [
+const { isAuthenticated, currentUserName, roleLabel, isAdmin, logout } = useAuth()
+
+const enlacesBase = [
   { to: '/', texto: 'Inicio', corto: 'Inicio', icono: 'inicio', exacto: true },
   { to: '/medicion', texto: 'Medición', corto: 'Medición', icono: 'medicion' },
   { to: '/comparacion', texto: 'Comparación', corto: 'Comparar', icono: 'comparacion' },
   { to: '/aulas', texto: 'Aulas', corto: 'Aulas', icono: 'aulas' },
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
+
+// RF97: el enlace Admin solo lo ven los administradores
+const enlaces = computed(() =>
+  isAdmin.value ? [...enlacesBase, { to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' }] : enlacesBase
+)
 
 // Se ocultan al bajar y reaparecen al subir. El estilo solo se aplica en móvil (ver @media).
 const { oculto, mostrar } = useScrollDirection()
@@ -90,6 +104,25 @@ main.container {
   padding: 1.25rem;
   font-size: 0.85rem;
   color: var(--color-muted);
+}
+
+.user-chip small {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.user-chip {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  background: #f1f5f9;
+  padding: 0.35rem 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Enlace para saltar la navegación con el teclado */
