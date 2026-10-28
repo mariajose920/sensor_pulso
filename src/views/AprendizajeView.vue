@@ -238,7 +238,7 @@
     </div>
 
     <!-- 3. Metricas en Tiempo Real (Calculadas a partir de la senal simulada) -->
-    <MetricsCards
+    <PeakMetricsCards
       :currentBpm="peakDetector.currentBpm.value"
       :instantBpm="peakDetector.instantBpm.value"
       :rmssd="peakDetector.rmssd.value"
@@ -251,7 +251,7 @@
     />
 
     <!-- 4. Osciloscopio con Senal Simulada y Marcadores de Picos Sistolicos (Puntos Rojos) -->
-    <OscilloscopeCanvas
+    <PeakOscilloscopeCanvas
       ref="oscilloscopeRef"
       :isRunning="simulator.isRunning.value"
     />
@@ -295,8 +295,8 @@ import { useSignalSimulator } from '../composables/useSignalSimulator.js'
 import { usePeakDetector } from '../composables/usePeakDetector.js'
 import { PpgDcFilter } from '../utils/ppgFilter.js'
 
-import MetricsCards from '../components/MetricsCards.vue'
-import OscilloscopeCanvas from '../components/OscilloscopeCanvas.vue'
+import PeakMetricsCards from '../components/PeakMetricsCards.vue'
+import PeakOscilloscopeCanvas from '../components/PeakOscilloscopeCanvas.vue'
 
 const oscilloscopeRef = ref(null)
 const activePreset = ref('normal')

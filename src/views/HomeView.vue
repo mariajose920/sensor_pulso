@@ -52,12 +52,12 @@
 <style scoped>
 .hero {
   text-align: center;
-  padding: 2.5rem 1.5rem;
+  padding: clamp(1.25rem, 5vw, 2.5rem) clamp(0.75rem, 4vw, 1.5rem);
   margin-bottom: 2rem;
 }
 
 .hero-title {
-  font-size: 2.25rem;
+  font-size: clamp(1.6rem, 6vw, 2.25rem);
   font-weight: 800;
   color: var(--color-primary);
   margin-bottom: 0.75rem;
@@ -73,8 +73,8 @@
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: clamp(0.75rem, 3vw, 1.5rem);
 }
 
 .feature-card {
