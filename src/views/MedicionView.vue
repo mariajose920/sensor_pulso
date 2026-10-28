@@ -20,6 +20,9 @@
       </div>
     </div>
 
+    <!-- RF01: Identificador del usuario que realiza la medición -->
+    <UserIdentifier />
+
     <!-- Barra de Estado WiFi del ESP32 (RF05, RF54) -->
     <Esp32WifiStatus
       :conectado="esp32State.conectado"
@@ -180,6 +183,7 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import UserIdentifier from '../components/UserIdentifier.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
