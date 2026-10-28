@@ -1,0 +1,3 @@
+#!/bin/sh
+# Las uniones hacia main/develop se hacen por pull request, no en el computador.
+exec node scripts/bloquear-directo.mjs union

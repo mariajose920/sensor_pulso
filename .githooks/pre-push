@@ -1,0 +1,3 @@
+#!/bin/sh
+# Antes de subir: nombre de la rama, mensajes de los commits nuevos y compilación (docs/COMMITS.md).
+exec node scripts/validar-push.mjs
