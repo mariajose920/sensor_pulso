@@ -61,6 +61,7 @@ import { useScrollDirection } from './composables/useScrollDirection.js'
 const enlaces = [
   { to: '/', texto: 'Inicio', corto: 'Inicio', icono: 'inicio', exacto: true },
   { to: '/medicion', texto: 'Medición', corto: 'Medición', icono: 'medicion' },
+  { to: '/dispositivos', texto: 'Dispositivos', corto: 'Equipos', icono: 'medicion' },
   { to: '/comparacion', texto: 'Comparación', corto: 'Comparar', icono: 'comparacion' },
   { to: '/aulas', texto: 'Aulas', corto: 'Aulas', icono: 'aulas' },
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }

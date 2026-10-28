@@ -5,6 +5,7 @@ import ComparacionView from '../views/ComparacionView.vue'
 import AulasView from '../views/AulasView.vue'
 import AprendizajeView from '../views/AprendizajeView.vue'
 import LoginView from '../views/LoginView.vue'
+import DispositivosView from '../views/DispositivosView.vue'
 
 const routes = [
   {
@@ -16,6 +17,11 @@ const routes = [
     path: '/medicion',
     name: 'Medicion',
     component: MedicionView
+  },
+  {
+    path: '/dispositivos',
+    name: 'Dispositivos',
+    component: DispositivosView
   },
   {
     path: '/comparacion',
