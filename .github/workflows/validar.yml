@@ -19,8 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: La rama debe comenzar con RFNN o RNFNN
+          node-version: 24
+      - name: La rama debe contener RFNN o RNFNN
         run: node scripts/validar-rama.mjs "$RAMA"
         env:
           RAMA: ${{ github.head_ref || github.ref_name }}
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
       - name: Compilar la web
