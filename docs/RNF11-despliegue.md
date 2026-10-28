@@ -71,7 +71,10 @@ Yo no cambié nada en Vercel ni en Supabase. Estos pasos los hace quien administ
 Sin esto, los enlaces del correo de confirmación (RF48) y de recuperar contraseña (RF50) apuntarían a una dirección equivocada o serían rechazados.
 
 ### 6. Supabase · integración con GitHub
-**Project Settings → Integrations → GitHub:** rama de producción **`main`**, la misma que usa Vercel, para que las migraciones lleguen a la base junto con la web. Una sola rama, no `main, develop`.
+**Project Settings → Integrations → GitHub:**
+
+- **Production branch name:** **`main`**, la misma que usa Vercel, para que las migraciones lleguen a la base junto con la web. Una sola rama, no `develop` ni `main, develop`.
+- **Working directory:** **`.`** (o vacío). La carpeta `supabase/` está en la raíz del repositorio; con `supabase` buscaría `supabase/supabase/` y no encontraría las migraciones.
 
 ### 7. Primer despliegue de producción
 Abre un pull request de `develop` a `main`, únelo, espera a que Vercel termine y ejecuta:
@@ -110,6 +113,7 @@ Si algo falla, indica qué corregir. Para otro proyecto de Supabase: `--proyecto
 | Al recargar una página sale 404 | Falta `vercel.json` o no se aplicó | Comprobar que el archivo está en la raíz |
 | La consola dice que la política de contenido bloqueó algo | Se agregó un recurso externo (fuente, imagen, API) | Agregar su dominio a la CSP de `vercel.json` y volver a verificar |
 | El correo de confirmación lleva a otra dirección | Faltan las direcciones permitidas en Supabase | Paso 5 |
+| Un check de Vercel falla con `No Output Directory named "dist"` en un proyecto distinto de `sensor_pulso` | Hay un segundo proyecto de Vercel conectado al mismo repositorio (por ejemplo `sensor_pulso-supabase`) | Borrarlo en Vercel → Settings → Advanced → Delete Project; el único proyecto debe ser `sensor_pulso` |
 | La versión nueva no aparece en la app instalada | La PWA se actualiza al abrir la app | Cerrarla por completo y abrirla (ver `docs/RNF03-pwa.md`) |
 
 ## Riesgo aceptado: una sola base de datos
