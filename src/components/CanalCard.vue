@@ -1,14 +1,24 @@
 <template>
   <div 
     class="canal-card card" 
-    :class="{ selected: seleccionado, inactive: !canalData?.activo }"
+    :class="{ selected: seleccionado, 'es-mi-canal': esMiCanal, inactive: !canalData?.activo }"
     @click="$emit('select', canalData.canal)"
   >
     <div class="card-top">
-      <span class="canal-badge">Canal {{ canalData.canal }}</span>
+      <div class="canal-badge-group">
+        <span class="canal-badge">Canal {{ canalData.canal }}</span>
+        <span v-if="esMiCanal" class="badge-mi-canal">⭐ Mi Canal</span>
+      </div>
       <span class="calidad-badge" :class="'calidad-' + (canalData.calidad || 'buena')">
         {{ canalData.calidad || 'buena' }}
       </span>
+    </div>
+
+    <div v-if="asignadoA" class="assigned-user-tag font-mono">
+      👤 {{ asignadoA }}
+    </div>
+    <div v-else class="free-user-tag">
+      🟢 Canal Libre (RF12)
     </div>
 
     <div class="metrics-row">
@@ -41,6 +51,14 @@ defineProps({
   seleccionado: {
     type: Boolean,
     default: false
+  },
+  esMiCanal: {
+    type: Boolean,
+    default: false
+  },
+  asignadoA: {
+    type: String,
+    default: null
   }
 })
 
@@ -69,6 +87,11 @@ defineEmits(['select'])
   box-shadow: 0 0 0 2px rgba(30, 64, 175, 0.2);
 }
 
+.canal-card.es-mi-canal {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
 .canal-card.inactive {
   opacity: 0.6;
 }
@@ -77,13 +100,50 @@ defineEmits(['select'])
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.canal-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .canal-badge {
   font-weight: 700;
   font-size: 0.85rem;
   color: var(--color-text);
+}
+
+.badge-mi-canal {
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.assigned-user-tag {
+  font-size: 0.725rem;
+  color: var(--color-primary);
+  background: #dbeafe;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.75rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.free-user-tag {
+  font-size: 0.725rem;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  margin-bottom: 0.75rem;
 }
 
 .calidad-badge {
@@ -153,5 +213,9 @@ defineEmits(['select'])
 
 .select-prompt {
   color: var(--color-muted);
+}
+
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 </style>

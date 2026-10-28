@@ -5,7 +5,7 @@
       <div>
         <h1 class="view-title">📡 Medición y Tiempo Real</h1>
         <p class="view-subtitle">
-          Recepción de datos del microcontrolador ESP32 por WiFi (RF05), autenticación por token (RF54) y visualización multicanal.
+          Recepción de datos del microcontrolador ESP32 por WiFi (RF05), autenticación con token (RF54) y vinculación de canales a cuentas de estudiantes (RF12 / RF111).
         </p>
       </div>
 
@@ -30,6 +30,9 @@
       :tiempoDesdeContacto="esp32State.tiempoTranscurridoSegundos"
     />
 
+    <!-- Componente de Vinculación de Canales por Cuenta (RF12 / RF111) -->
+    <VinculacionCanales @canal-seleccionado="seleccionarCanal" />
+
     <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
     <OsciloscopioCanvas
       :canal="canalSeleccionado"
@@ -42,8 +45,13 @@
     <!-- Grid de los 5 Canales Fisiológicos Simultáneos (RF08, RF12) -->
     <div class="section-container">
       <div class="section-header">
-        <h2 class="section-title">Canales Fisiológicos Simultáneos (ESP32)</h2>
-        <span class="section-hint">Selecciona un canal para inspeccionar su traza en el osciloscopio</span>
+        <div>
+          <h2 class="section-title">Canales Fisiológicos Simultáneos (ESP32)</h2>
+          <span class="section-hint">Selecciona un canal para inspeccionar su traza en el osciloscopio</span>
+        </div>
+        <div v-if="miCanalAsignado" class="mi-canal-indicator">
+          <span>Estás midiendo en el <strong>Canal {{ miCanalAsignado }}</strong></span>
+        </div>
       </div>
 
       <div class="canales-grid">
@@ -52,6 +60,8 @@
           :key="c.canal"
           :canalData="c"
           :seleccionado="canalSeleccionado === c.canal"
+          :esMiCanal="miCanalAsignado === c.canal"
+          :asignadoA="obtenerNombreAsignado(c.canal)"
           @select="seleccionarCanal"
         />
       </div>
@@ -79,7 +89,7 @@
           :class="{ active: tabActiva === 'api' }"
           @click="tabActiva = 'api'"
         >
-          🌐 Documentación de Endpoint Ingesta
+          🌐 Documentación de Ingesta y Canales
         </button>
       </div>
 
@@ -149,28 +159,24 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
       <!-- Tab 3: Documentación de Ingesta -->
       <div v-if="tabActiva === 'api'" class="tab-content">
         <p class="tab-description">
-          Especificación del endpoint REST de ingesta de telemetría de alta disponibilidad para Vercel y Vite:
+          Especificación de la arquitectura de vinculación de canales (RF12) y telemetría (RF05):
         </p>
         <table class="api-table">
           <tr>
-            <th>Método & Ruta</th>
-            <td><code>POST /api/esp32/telemetria</code></td>
+            <th>Vinculación Canales (RF12)</th>
+            <td>Función atómica <code>elegir_canal(p_sesion, p_canal)</code>: Asigna el canal al estudiante que lo selecciona si está libre.</td>
           </tr>
           <tr>
-            <th>Cabeceras</th>
-            <td>
-              <code>Content-Type: application/json</code><br />
-              <code>X-ESP32-Token: &lt;token_del_esp32&gt;</code> (RF54)<br />
-              <code>Authorization: Bearer &lt;token_del_esp32&gt;</code>
-            </td>
+            <th>Gestión Docente (RF111)</th>
+            <td>Función <code>asignar_canal()</code> para liberar/corregir canales y control de rondas consecutivas de 5 estudiantes.</td>
           </tr>
           <tr>
             <th>Seguridad (RF54)</th>
-            <td>Validación criptográfica SHA-256 del token en la tabla <code>dispositivos</code> y comprobación de estado no revocado.</td>
+            <td>Token SHA-256 por microcontrolador, validación de sesiones activas y revocación en tiempo real.</td>
           </tr>
           <tr>
             <th>Consulta en vivo</th>
-            <td><code>GET /api/esp32/telemetria</code> retorna el estado actual de conexión y métricas del último paquete.</td>
+            <td><code>GET /api/esp32/telemetria</code> retorna estado de conexión, canales y métricas fisiológicas.</td>
           </tr>
         </table>
       </div>
@@ -179,10 +185,11 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
+import VinculacionCanales from '../components/VinculacionCanales.vue'
 import {
   esp32State,
   senalBuffer,
@@ -192,6 +199,10 @@ import {
   emitirPaquetePruebaWiFi,
   toggleSimuladorWiFi
 } from '../services/esp32Service'
+import {
+  canalesState,
+  miCanalAsignado
+} from '../services/canalesService'
 
 const canalSeleccionado = ref(1)
 const tabActiva = ref('simulador')
@@ -215,10 +226,23 @@ const canalesMostrados = computed(() => {
   return canalesPorDefecto
 })
 
+function obtenerNombreAsignado(canalNum) {
+  const ch = canalesState.canales.find(c => c.canal === canalNum)
+  if (!ch || !ch.usuario_id) return null
+  return ch.usuario_nombre || ch.usuario_email || 'Estudiante asignado'
+}
+
 function seleccionarCanal(canal) {
   canalSeleccionado.value = canal
   senalBuffer.canalSeleccionado = canal
 }
+
+// Si el usuario vincula su canal, auto-enfocamos el osciloscopio en su canal
+watch(miCanalAsignado, (nuevoCanal) => {
+  if (nuevoCanal) {
+    seleccionarCanal(nuevoCanal)
+  }
+})
 
 function toggleSimulador() {
   toggleSimuladorWiFi(tokenPrueba.value)
@@ -247,6 +271,9 @@ async function enviarUnicoPaquete() {
 onMounted(() => {
   // Iniciar sondeo automático para detectar recepción WiFi en tiempo real
   iniciarSondeoWiFi(1000)
+  if (miCanalAsignado.value) {
+    seleccionarCanal(miCanalAsignado.value)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -308,6 +335,16 @@ onBeforeUnmount(() => {
 .section-hint {
   font-size: 0.8rem;
   color: var(--color-muted);
+}
+
+.mi-canal-indicator {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-weight: 600;
 }
 
 .canales-grid {
