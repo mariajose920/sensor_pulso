@@ -199,3 +199,141 @@ body {
   border: 1px solid #fecaca;
   color: #991b1b;
 }
+
+/* =============================================================================
+   RNF01 · Diseño responsivo (computador, tablet y móvil)
+   Puntos de corte (mantener igual que src/utils/breakpoints.js):
+     hasta 400 px    móvil muy pequeño
+     401 a 640 px    móvil
+     641 a 1024 px   tablet
+     1025 a 1399 px  computador
+     desde 1400 px   pantalla muy ancha
+   ============================================================================= */
+
+:root {
+  --alto-barra-superior: 64px;
+  --alto-barra-superior-movil: 52px;
+  --alto-barra-inferior: 60px;
+  --alto-tactil: 44px;
+  /* Alto de los gráficos: crece con el ancho de la pantalla, entre un mínimo y un máximo */
+  --alto-grafico: clamp(240px, 32vw, 380px);
+  --alto-grafico-osciloscopio: clamp(240px, 28vw, 300px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overflow-wrap: break-word;
+}
+
+img, svg, canvas, video {
+  max-width: 100%;
+}
+
+/* Evita que un hijo ancho empuje la tarjeta o la cuadrícula fuera de la pantalla */
+.container,
+.card,
+.card > *,
+[style*="display: grid"] > *,
+[style*="display:grid"] > *,
+.features-grid > * {
+  min-width: 0;
+}
+
+/* Gráficos con alto adaptable */
+.chart-box {
+  position: relative;
+  width: 100%;
+  height: var(--alto-grafico);
+}
+.chart-box-osciloscopio {
+  position: relative;
+  width: 100%;
+  height: var(--alto-grafico-osciloscopio);
+}
+
+/* Tablas: completa en pantallas grandes, versión apilada con "Ver más" en móvil */
+.tabla-escritorio { display: block; overflow-x: auto; }
+.tabla-movil { display: none; }
+
+/* Pantalla muy ancha */
+@media (min-width: 1400px) {
+  .container { max-width: 1280px; }
+}
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .container { padding: 1.25rem 1rem; }
+}
+
+/* Móvil */
+@media (max-width: 640px) {
+  .container {
+    padding: 1rem max(0.75rem, env(safe-area-inset-right)) 1rem max(0.75rem, env(safe-area-inset-left));
+  }
+  .card { padding: 1rem; margin-bottom: 1rem; }
+  .card-title { font-size: 1.1rem; }
+
+  /* Campos y botones cómodos para el dedo; 16 px evita el zoom automático del navegador móvil */
+  .form-input, .form-select, input, select, textarea { font-size: 1rem; }
+  .btn { min-height: var(--alto-tactil); }
+
+  /* Texto pequeño escrito en línea (0,7 a 0,8 rem): se sube a 14 px para poder leerlo */
+  [style*="font-size: 0.7rem"],
+  [style*="font-size: 0.75rem"],
+  [style*="font-size: 0.8rem"],
+  [style*="font-size:0.75rem"],
+  [style*="font-size:0.8rem"] {
+    font-size: 0.875rem !important;
+  }
+
+  .tabla-escritorio { display: none; }
+  .tabla-movil { display: block; }
+  .solo-escritorio { display: none !important; }
+  .btn-bloque-movil { width: 100%; }
+  .chart-box, .chart-box-osciloscopio { height: clamp(200px, 56vw, 300px); }
+}
+
+/* Móvil muy pequeño */
+@media (max-width: 400px) {
+  .container { padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: max(0.5rem, env(safe-area-inset-right)); }
+  .card { padding: 0.875rem; border-radius: 0.625rem; }
+}
+
+/* Pantallas táctiles (cualquier tamaño): áreas de toque de al menos 44 px */
+@media (pointer: coarse) {
+  .btn,
+  .form-input,
+  .form-select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select {
+    min-height: var(--alto-tactil);
+  }
+  input[type="range"] { min-height: var(--alto-tactil); }
+  input[type="checkbox"], input[type="radio"] {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--color-primary);
+  }
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    min-height: var(--alto-tactil);
+  }
+}
+
+/* Foco visible para quien navega con teclado */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
