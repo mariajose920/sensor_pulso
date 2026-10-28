@@ -34,8 +34,9 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    rfNN-descripcion
    # Ejemplo: rf01-identificar-usuario, rf05-recepcion-wifi
    ```
+   El nombre de la rama contiene `RFNN` o `RNFNN` (NN = número del requerimiento; mayúsculas, puntos y guiones no importan). Dentro de la rama los commits no tienen exigencias, pero **no se puede hacer commit ni push directo a `main` o `develop`**: todo entra por pull request. Se valida con hooks de Git y con GitHub Actions: ver [docs/COMMITS.md](docs/COMMITS.md).
 2. **Confirmación antes de commit/push:** Cada integrante valida sus cambios antes de hacer commit o push.
-3. **Integración:** La unión a la rama principal (`main`) se coordina en las reuniones de entrega.
+3. **Integración:** Todas las ramas de requerimiento salen de `develop` y vuelven a `develop` por pull request. `main` queda vacía y no se une ninguna rama a ella.
 
 ---
 
@@ -53,9 +54,9 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    ```
 
 3. Configurar variables de entorno:
-   Copiar `.env.example` a `.env` y configurar las credenciales de Supabase:
+   Copiar `.env.example` a `.env.local` (la URL y la clave publicable del proyecto ya vienen en el ejemplo):
    ```bash
-   cp .env.example .env
+   cp .env.example .env.local
    ```
 
 4. Iniciar el servidor de desarrollo:
@@ -63,7 +64,23 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    npm run dev
    ```
 
-5. Compilar para producción:
+5. Probar el diseño responsivo (RNF01, ver [docs/RNF01-diseno-responsivo.md](docs/RNF01-diseno-responsivo.md)):
+   ```bash
+   npm run probar:responsivo
+   ```
+
+6. Probar la app instalable (RNF03, ver [docs/RNF03-pwa.md](docs/RNF03-pwa.md)):
+   ```bash
+   npm run probar:pwa
+   ```
+
+7. Verificar el despliegue en Vercel y Supabase (RNF11, ver [docs/RNF11-despliegue.md](docs/RNF11-despliegue.md)):
+   ```bash
+   npm run verificar:despliegue -- --local
+   npm run verificar:despliegue -- https://sensorpulso.vercel.app
+   ```
+
+8. Compilar para producción:
    ```bash
    npm run build
    ```
