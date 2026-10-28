@@ -11,7 +11,7 @@ rama RFNN / RNFNN  ──pull request──▶  develop  ──pull request─�
  vista previa en Vercel            vista previa en Vercel     PRODUCCIÓN en Vercel
  (URL propia de la rama)           (URL de develop)           https://sensorpulso.vercel.app
                                                                       │
-                          todas leen y escriben en el proyecto de Supabase ohdgfdbmnrwndffhtqdg
+                          todas leen y escriben en el proyecto de Supabase ozzehtpqxpicfqvmulcg
 ```
 
 | Tema | Decisión |
