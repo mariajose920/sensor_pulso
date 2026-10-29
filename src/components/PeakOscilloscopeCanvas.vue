@@ -86,7 +86,22 @@ function addSample(normValue, isPeak = false) {
   }
 
   if (isPeak) {
-    peakMarkers.push(buffer.length - 1)
+    // Buscar el maximo real en las ultimas 6 muestras del buffer (= 60 ms a 100 Hz).
+    // El detector por cambio de pendiente puede dispararse 1-3 muestras tarde
+    // segun el ruido o el techo plano del pulso, por lo que asumir siempre
+    // buffer.length-1 o buffer.length-2 produce desfases inconsistentes.
+    // Localizar el indice de maxima amplitud en esa ventana garantiza que el punto
+    // rojo caiga exactamente en la cuspide sistolica visible.
+    const ventana = Math.min(6, buffer.length - 1)
+    let maxVal = -Infinity
+    let maxIdx = buffer.length - 1
+    for (let k = buffer.length - 1 - ventana; k <= buffer.length - 1; k++) {
+      if (buffer[k] > maxVal) {
+        maxVal = buffer[k]
+        maxIdx = k
+      }
+    }
+    peakMarkers.push(maxIdx)
   }
 }
 
