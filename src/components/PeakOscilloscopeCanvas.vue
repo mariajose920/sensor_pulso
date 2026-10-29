@@ -86,7 +86,25 @@ function addSample(normValue, isPeak = false) {
   }
 
   if (isPeak) {
-    peakMarkers.push(buffer.length - 1)
+    // Ventana adaptativa de 10 muestras (100 ms a 100 Hz): cubre cualquier retardo
+    // de pendiente o meseta sistolica sin invadir la onda dicrota (a >180 ms).
+    const ventana = Math.min(10, buffer.length - 1)
+    let maxVal = -Infinity
+    const maxIndices = []
+    for (let k = buffer.length - 1 - ventana; k <= buffer.length - 1; k++) {
+      if (buffer[k] > maxVal + 0.001) {
+        maxVal = buffer[k]
+        maxIndices.length = 0
+        maxIndices.push(k)
+      } else if (Math.abs(buffer[k] - maxVal) <= 0.001) {
+        maxIndices.push(k)
+      }
+    }
+    // Si la cuspide es plana (meseta), toma el indice central exacto
+    const midIdx = maxIndices.length > 0
+      ? maxIndices[Math.floor(maxIndices.length / 2)]
+      : buffer.length - 1
+    peakMarkers.push(midIdx)
   }
 }
 
