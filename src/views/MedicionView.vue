@@ -30,7 +30,7 @@
     <UserIdentifier />
 
     <!-- RF03: Datos del paciente obligatorios y factores que afectan la medición -->
-    <DatosPacienteCard @paciente-actualizado="onPacienteActualizado" />
+    <DatosPacienteCard @paciente-actualizado="onPacienteActualizado" @abrir-consentimiento="modalConsentimientoVisible = true" />
 
     <!-- Vinculación del Paciente Activo a la Medición en Vivo (RF03 / RF19) -->
     <div v-if="pacienteActivo" class="paciente-vinculado-banner">

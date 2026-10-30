@@ -7,7 +7,7 @@
           <h2 id="consent-title" class="modal-title">
             Consentimiento Informado para Medición
           </h2>
-          <span class="version-tag">Documento oficial — Versión {{ doc.version }} (RF59 / RF76)</span>
+          <span class="version-tag">Documento oficial — Versión {{ doc.version }}</span>
         </div>
         <button 
           type="button" 
@@ -22,69 +22,74 @@
       <!-- Cuerpo del Documento -->
       <div class="modal-body">
         <div class="alerta-medica">
-          <strong>Aviso importante:</strong> La plataforma <em>sensor_pulso</em> y los dispositivos asociados son herramientas didácticas y pedagógicas de la Universidad Adventista de Chile (UNACH). <strong>No constituyen un dispositivo médico ni proporcionan diagnósticos clínicos.</strong>
+          <strong>Aviso importante:</strong> La plataforma <em>sensor pulso</em> y los dispositivos asociados son herramientas didácticas y pedagógicas de la Universidad Adventista de Chile (UNACH). <strong>No constituyen un dispositivo médico ni proporcionan diagnósticos clínicos.</strong>
         </div>
 
         <div class="secciones-consentimiento">
-          <!-- 1. Finalidad -->
-          <div class="seccion-item">
-            <h3 class="seccion-titulo">1. Finalidad de la Medición</h3>
+          <!-- Pilar 1: Finalidad (RF76) -->
+          <div class="seccion-item pilar-card">
+            <div class="pilar-header">
+              <h3 class="seccion-titulo">Finalidad del Tratamiento</h3>
+            </div>
             <p class="seccion-texto">{{ doc.finalidad }}</p>
+            <div class="pilar-nota">
+              <strong>Uso restringido:</strong> Estrictamente didáctico y de laboratorio universitario. Los datos no se utilizarán para diagnósticos médicos clínicos ni para fines comerciales.
+            </div>
           </div>
 
-          <!-- 2. Datos Recogidos -->
-          <div class="seccion-item">
-            <h3 class="seccion-titulo">2. Datos Fisiológicos Recogidos</h3>
+          <!-- Pilar 2: Datos Recogidos (RF76) -->
+          <div class="seccion-item pilar-card">
+            <div class="pilar-header">
+
+              <h3 class="seccion-titulo">Datos Fisiológicos y Factores Recogidos</h3>
+            </div>
             <p class="seccion-texto">{{ doc.datosRecogidos }}</p>
+            
+            <ul class="datos-lista">
+              <li>Fotopletismografía (PPG IR y Rojo a 100 Hz)</li>
+              <li>Frecuencia Cardíaca (BPM)</li>
+              <li>Saturación de Oxígeno (% SpO₂)</li>
+              <li>Variabilidad R-R (HRV / pulso)</li>
+              <li>Factores RF03 (estrés, sueño, cafeína, medicación)</li>
+            </ul>
             <small class="seccion-hint">
-              Los factores declarados en la Ficha del Paciente se asocian de forma confidencial a la curva PPG capturada.
+              Los factores declarados en la Ficha del Paciente se asocian de forma confidencial a la curva fotopletismográfica capturada.
             </small>
           </div>
 
-          <!-- 3. Responsable y Resguardo -->
-          <div class="seccion-item">
-            <h3 class="seccion-titulo">3. Responsable del Tratamiento y Privacidad</h3>
+          <!-- Pilar 3: Quién los trata (RF76) -->
+          <div class="seccion-item pilar-card">
+            <div class="pilar-header">
+              <h3 class="seccion-titulo">Quién los Trata (Responsable del Tratamiento)</h3>
+            </div>
             <p class="seccion-texto">{{ doc.responsable }}</p>
-            <p class="seccion-texto">
-              Tus datos se procesan bajo políticas de control de acceso por nivel de fila (RLS) y cifrado de datos de salud en reposo.
+            <p class="seccion-texto" style="margin-top: 0.35rem;">
+              <strong>Seguridad y resguardo técnico:</strong> Almacenamiento protegido mediante Row Level Security (RLS) en Supabase PostgreSQL, cifrado TLS en tránsito y aislamiento por cuenta de usuario.
             </p>
           </div>
 
-          <!-- 4. Plazo y Revocación -->
-          <div class="seccion-item">
-            <h3 class="seccion-titulo">4. Conservación y Derecho de Revocación</h3>
+          <!-- Pilar 4: Plazo de conservación (RF76) -->
+          <div class="seccion-item pilar-card">
+            <div class="pilar-header">
+              <h3 class="seccion-titulo">Plazo de Conservación y Derechos del Titular</h3>
+            </div>
             <p class="seccion-texto">
-              {{ doc.plazoConservacion }} Puedes revocar este consentimiento informado en cualquier momento desde tu perfil o la configuración del sistema.
+              {{ doc.plazoConservacion }}
             </p>
+            <div class="pilar-nota">
+              <strong>Derechos de Supresión y Revocación:</strong> El titular de los datos puede revocar este consentimiento o solicitar la eliminación total de sus registros en cualquier momento.
+            </div>
           </div>
 
           <!-- 5. Registro Inmutable de Auditoría (RF59) -->
           <div class="seccion-item auditoria-box">
-            <h3 class="seccion-titulo" style="color: #1e40af;">5. Registro de Versión, Fecha y Hora</h3>
+            <div class="pilar-header">
+              <span class="pilar-badge badge-pilar5">Auditoría RF59</span>
+              <h3 class="seccion-titulo" style="color: #1e40af;">Registro Inmutable de Versión, Fecha y Hora</h3>
+            </div>
             <p class="seccion-texto">
-              Al presionar "Aceptar" la plataforma registrará de forma inmutable la <strong>Versión {{ doc.version }}</strong> con la <strong>fecha y hora exacta</strong> del momento de autorización.
+              Al otorgar el consentimiento, la plataforma registrará de forma permanente e inmutable la <strong>Versión {{ doc.version }}</strong> con la <strong>fecha y hora exacta</strong> del momento de aceptación.
             </p>
-            <div v-if="consentimientoEstado.aceptadoEn || consentimientoEstado.registroPrevio?.aceptadoEn" class="registro-previo-tag">
-              <span>● Último registro: <strong>v{{ consentimientoEstado.aceptadoEn ? consentimientoEstado.version : consentimientoEstado.registroPrevio.version }}</strong> aceptado el {{ consentimientoEstado.fechaHoraTexto || consentimientoEstado.registroPrevio.fechaHoraTexto }} (RF59)</span>
-            </div>
-
-            <div v-if="historial.length > 0" class="historial-container">
-              <button 
-                type="button" 
-                class="btn-toggle-historial"
-                @click="mostrarHistorial = !mostrarHistorial"
-              >
-                {{ mostrarHistorial ? '▲ Ocultar historial de registros' : '▼ Ver historial de registros anteriores (' + historial.length + ' veces aceptado)' }}
-              </button>
-              <ul v-if="mostrarHistorial" class="historial-lista">
-                <li v-for="item in historial" :key="item.id" class="historial-item">
-                  <span class="historial-version">Versión {{ item.version }}</span>
-                  <span class="historial-fecha">— {{ item.fechaHoraTexto }}</span>
-                  <span class="historial-origen">[{{ item.origen }}]</span>
-                </li>
-              </ul>
-            </div>
-
           </div>
         </div>
 
@@ -100,7 +105,7 @@
               class="checkbox-input"
             />
             <span class="checkbox-text">
-              He leído detenidamente, comprendo y acepto de forma libre e informada las condiciones anteriores.
+              He leído detenidamente, comprendo y otorgo mi consentimiento expreso, previo, informado y específico para los 4 aspectos señalados (RF76).
             </span>
           </label>
         </div>
@@ -441,4 +446,66 @@ async function confirmarAceptacion() {
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
 }
+
+.pilar-card {
+  border-left: 3px solid #0284c7;
+}
+.pilar-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.pilar-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  letter-spacing: 0.03em;
+}
+.badge-pilar1 { background: #e0f2fe; color: #0369a1; }
+.badge-pilar2 { background: #fef3c7; color: #b45309; }
+.badge-pilar3 { background: #e0e7ff; color: #4338ca; }
+.badge-pilar4 { background: #dcfce7; color: #15803d; }
+.badge-pilar5 { background: #dbeafe; color: #1e40af; }
+.pilar-nota {
+  margin-top: 0.45rem;
+  font-size: 0.76rem;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.25rem;
+  color: #475569;
+}
+.datos-tags-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.tag-dato {
+  font-size: 0.72rem;
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+
+.datos-lista {
+  margin: 0.5rem 0 0.5rem 1.25rem;
+  padding: 0;
+  font-size: 0.825rem;
+  color: #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.datos-lista li {
+  line-height: 1.4;
+}
+
 </style>

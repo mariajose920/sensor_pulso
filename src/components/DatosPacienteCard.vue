@@ -107,16 +107,27 @@
             🕒 Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
           </span>
         </div>
-        <button 
-          v-if="consentimientoEstado.vigente"
-          type="button" 
-          class="btn btn-secondary btn-sm"
-          style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
-          @click="revocarConsentimientoPrueba"
-          title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
-        >
-          Reiniciar consentimiento para probar
-        </button>
+        <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+          <button 
+            type="button" 
+            class="btn btn-secondary btn-sm"
+            style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;"
+            @click="emit('abrir-consentimiento')"
+            title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
+          >
+            📋 Ver términos (RF76)
+          </button>
+          <button 
+            v-if="consentimientoEstado.vigente"
+            type="button" 
+            class="btn btn-secondary btn-sm"
+            style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
+            @click="revocarConsentimientoPrueba"
+            title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+          >
+            Reiniciar consentimiento
+          </button>
+        </div>
       </div>
     </div>
 
@@ -353,9 +364,19 @@
                 ○ Consentimiento pendiente (saltará al medir / conectar)
               </span>
               <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
-                🕒 Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+                Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
               </span>
             </div>
+            <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+            <button 
+              type="button" 
+              class="btn btn-secondary btn-sm"
+              style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;"
+              @click="emit('abrir-consentimiento')"
+              title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
+            >
+              Ver términos
+            </button>
             <button 
               v-if="consentimientoEstado.vigente"
               type="button" 
@@ -364,8 +385,9 @@
               @click="revocarConsentimientoPrueba"
               title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
             >
-              Reiniciar consentimiento para probar
+              Reiniciar consentimiento
             </button>
+          </div>
           </div>
         </div>
 
@@ -398,7 +420,7 @@ import {
   CONDICIONES_SALUD_COMUNES 
 } from '../services/pacienteService'
 
-const emit = defineEmits(['paciente-actualizado'])
+const emit = defineEmits(['paciente-actualizado', 'abrir-consentimiento'])
 const { currentUserName } = useAuth()
 
 const paciente = ref(null)
