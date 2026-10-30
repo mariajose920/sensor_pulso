@@ -68,11 +68,11 @@ export const CONSENTIMIENTO_BASE = {
   version: '1.0',
   titulo: 'Consentimiento Informado para Medición de Pulso y SpO₂',
   finalidad: 'Actividad educativa de laboratorio: medir, visualizar, analizar y comparar la frecuencia cardíaca y saturación de oxígeno mediante fotopletismografía (PPG).',
-  advertenciaMedica: 'Esta plataforma web y el dispositivo ESP32 son herramientas estrictamente didácticas y educativas. No constituyen un dispositivo médico de diagnóstico ni sustituyen la evaluación de un profesional de la salud.',
+  advertenciaMedica: 'Esta plataforma web y el dispositivo ESP32 son herramientas estrictamente didácticas y educativas. <strong>No constituyen un dispositivo médico de diagnóstico ni sustituyen la evaluación de un profesional de la salud.</strong>',
   datosRecogidos: 'Señal de pulso fotopletismográfica (infrarroja y roja), frecuencia cardíaca (BPM), saturación de oxígeno (% SpO₂), variabilidad R-R, edad, nombre y factores fisiológicos declarados (estrés, sueño, medicación, cafeína, actividad previa y condición de salud).',
-  responsable: 'Equipo del proyecto sensor_pulso — Universidad Adventista de Chile (UNACH).',
-  plazoConservacion: 'Hasta 12 meses desde la última medición, salvo solicitud previa de eliminación por parte del titular (Derecho de Supresión / RF90).',
-  textoLegal: 'Consiento de forma libre, previa, expresa e informada la captura y procesamiento de mis datos fisiológicos con fines estrictamente académicos. Entiendo que puedo revocar este consentimiento en cualquier momento.'
+  responsable: 'Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.',
+  plazoConservacion: 'Hasta 12 meses desde la última medición académica, salvo solicitud previa de eliminación por parte del titular (Derecho de Supresión).',
+  textoLegal: 'Consiento de forma previa, expresa, informada y específica la captura y procesamiento de mis datos fisiológicos con fines estrictamente académicos. Entiendo que puedo revocar este consentimiento en cualquier momento.'
 }
 
 // Estado reactivo global del consentimiento en la sesión activa (RF59: incluye fechaHoraTexto)
