@@ -39,19 +39,26 @@
       </div>
     </div>
 
-    <!-- Metrica 3: Regularidad del Ritmo (RF17) -->
+    <!-- Metrica 3: Ritmo y Regularidad (RF17 / RF18) -->
     <div class="card" style="margin-bottom: 0; padding: 1rem;">
-      <div style="font-size: 0.8rem; color: var(--color-muted); font-weight: 500;">Regularidad del Ritmo (RF17)</div>
-      <div style="margin-top: 0.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--color-muted); font-weight: 500;">
+        <span>Ritmo Cardíaco (RF18)</span>
+        <span style="font-size: 0.72rem; color: #64748b;">AHA</span>
+      </div>
+      <div style="margin-top: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem;">
         <span
           class="badge"
-          :class="badgeClass"
+          :class="clasificacion.badgeClass"
+          style="align-self: flex-start; font-size: 0.82rem;"
         >
+          {{ clasificacion.nombre }}
+        </span>
+        <span style="font-size: 0.74rem; color: var(--color-muted);">
           {{ regularityStatus }}
         </span>
       </div>
-      <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--color-muted); border-top: 1px solid var(--color-border); padding-top: 0.5rem;">
-        Criterio: Coeficiente de variacion
+      <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--color-muted); border-top: 1px solid var(--color-border); padding-top: 0.5rem; display: flex; justify-content: space-between;">
+        <span>Rango ref: <b style="font-family: monospace; color: var(--color-text);">{{ clasificacion.rangoBpm }}</b></span>
       </div>
     </div>
 
@@ -74,6 +81,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { clasificarRitmo } from '../services/ritmoService.js'
 
 const props = defineProps({
   currentBpm: { type: Number, default: 0 },
@@ -93,4 +101,25 @@ const badgeClass = computed(() => {
   if (props.regularityLevel === 'irregular') return 'badge-admin' // rojo
   return 'badge-usuario'
 })
+
+const clasificacion = computed(() => {
+  return clasificarRitmo({
+    bpm: props.currentBpm,
+    instantBpm: props.instantBpm,
+    sdnn: props.sdnn,
+    rmssd: props.rmssd,
+    lastIntervalMs: props.lastIntervalMs,
+    regularityLevel: props.regularityLevel,
+    totalBeats: props.totalBeats
+  })
+})
+
 </script>
+
+<style scoped>
+.badge-purple {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #d8b4fe;
+}
+</style>

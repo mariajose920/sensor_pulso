@@ -54,17 +54,33 @@
       :totalBeats="peakDetector.totalBeatsDetected.value"
       :lastIntervalMs="peakDetector.lastIntervalMs.value"
     />
-
     <!-- 3. Osciloscopio con Senal Filtrada y Picos Sistolicos (Puntos Rojos) -->
     <PeakOscilloscopeCanvas
       ref="oscilloscopeRef"
       :isRunning="isSignalActive"
+    />
+
+    <!-- 4. Clasificación del Ritmo Cardíaco y Explicación Fisiológica (RF18) - Ubicado debajo de la onda -->
+    <ClasificacionRitmoCard
+      style="margin-top: 1rem;"
+      :bpm="peakDetector.currentBpm.value"
+      :instantBpm="peakDetector.instantBpm.value"
+      :sdnn="peakDetector.sdnn.value"
+      :rmssd="peakDetector.rmssd.value"
+      :lastIntervalMs="peakDetector.lastIntervalMs.value"
+      :regularityLevel="peakDetector.regularityLevel.value"
+      :totalBeats="peakDetector.totalBeatsDetected.value"
+      :paciente="paciente"
     />
   </div>
 </template>
 
 <script setup>
 const emit = defineEmits(['solicitar-consentimiento'])
+
+const props = defineProps({
+  paciente: { type: Object, default: null }
+})
 import { ref, computed, onUnmounted } from 'vue'
 import { consentimientoEstado } from '../services/consentimientoService'
 import { useSerialSensor } from '../composables/useSerialSensor.js'
@@ -74,6 +90,7 @@ import { PpgDcFilter } from '../utils/ppgFilter.js'
 import Esp32Connection from './Esp32Connection.vue'
 import PeakMetricsCards from './PeakMetricsCards.vue'
 import PeakOscilloscopeCanvas from './PeakOscilloscopeCanvas.vue'
+import ClasificacionRitmoCard from './ClasificacionRitmoCard.vue'
 
 const oscilloscopeRef = ref(null)
 const serialSensor = useSerialSensor()

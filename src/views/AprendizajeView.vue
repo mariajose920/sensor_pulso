@@ -255,6 +255,18 @@
       ref="oscilloscopeRef"
       :isRunning="simulator.isRunning.value"
     />
+
+    <!-- Clasificación del Ritmo Cardíaco en el Simulador (RF18) - Ubicado debajo de la onda -->
+    <ClasificacionRitmoCard
+      style="margin-top: 1rem;"
+      :bpm="peakDetector.currentBpm.value"
+      :instantBpm="peakDetector.instantBpm.value"
+      :sdnn="peakDetector.sdnn.value"
+      :rmssd="peakDetector.rmssd.value"
+      :lastIntervalMs="peakDetector.lastIntervalMs.value"
+      :regularityLevel="peakDetector.regularityLevel.value"
+      :totalBeats="peakDetector.totalBeatsDetected.value"
+    />
   </div>
 
       <!-- 5. Acciones de Integracion ("Pruebas sin ESP32") -->
@@ -297,6 +309,7 @@ import { PpgDcFilter } from '../utils/ppgFilter.js'
 
 import PeakMetricsCards from '../components/PeakMetricsCards.vue'
 import PeakOscilloscopeCanvas from '../components/PeakOscilloscopeCanvas.vue'
+import ClasificacionRitmoCard from '../components/ClasificacionRitmoCard.vue'
 
 const oscilloscopeRef = ref(null)
 const activePreset = ref('normal')
