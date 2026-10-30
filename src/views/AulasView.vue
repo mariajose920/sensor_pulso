@@ -10,11 +10,22 @@
       <div v-if="isProfesor" class="role-section">
         <div class="section-header">
           <h2>Panel Docente</h2>
-          <button class="btn btn-primary">+ Crear Nueva Aula</button>
+          <button 
+            class="btn btn-primary" 
+            :disabled="!tienePermisoProfesor('crear_aulas')"
+          >
+            + Crear Nueva Aula
+          </button>
         </div>
+
         <p class="section-desc">
           Como docente, puedes crear aulas virtuales y generar códigos de acceso para tus estudiantes.
         </p>
+
+        <!-- Aviso si no tiene el permiso otorgado -->
+        <div v-if="!tienePermisoProfesor('crear_aulas')" class="alert alert-warning" style="margin-top: 0.5rem; font-size: 0.85rem;">
+          ⚠️ Aún no tienes habilitado el permiso para crear aulas. Solicita al administrador que te active este permiso en el panel.
+        </div>
       </div>
 
       <!-- Vista para Estudiante / Usuario -->
@@ -40,7 +51,7 @@
 <script setup>
 import { useAuth } from '../composables/useAuth'
 
-const { isProfesor } = useAuth()
+const { isProfesor, tienePermisoProfesor } = useAuth()
 </script>
 
 <style scoped>

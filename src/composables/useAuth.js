@@ -60,6 +60,17 @@ export function useAuth() {
     return ROLES.USUARIO
   })
 
+    // RF98: Comprobar si el usuario actual tiene un permiso específico de profesor
+  const tienePermisoProfesor = (clavePermiso) => {
+    // Los administradores tienen todos los permisos habilitados por defecto
+    if (isAdmin.value) return true
+    // Si no es profesor, no tiene permisos
+    if (!isProfesor.value) return false
+    // Si es profesor, revisa sus permisos asignados
+    const permisos = profile.value?.permisos || {}
+    return !!permisos[clavePermiso]
+  }
+
   const roleLabel = computed(() => obtenerEtiquetaPerfil(profile.value))
 
   const can = (permiso) => tienePermiso(currentUserRole.value, permiso)
@@ -151,7 +162,7 @@ export function useAuth() {
     if (user.value) await cargarPerfilDesdeBD(user.value.id)
   }
 
-  return {
+    return {
     user,
     profile,
     session,
@@ -167,6 +178,7 @@ export function useAuth() {
     isEstudiante,
     roleLabel,
     can,
+    tienePermisoProfesor, // <-- Agregado aquí
     login,
     register,
     logout,
