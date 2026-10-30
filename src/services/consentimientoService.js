@@ -4,6 +4,7 @@
  * Cumple con:
  * - Consulta de versión activa de consentimiento en Supabase (tabla consentimientos_version).
  * - Verificación de consentimiento aceptado y no revocado (tabla consentimientos_aceptados).
+ * - Registro inmutable de la versión aceptada, con fecha y hora exacta (RF59).
  * - Persistencia local en localStorage para soporte sin conexión / PWA (RNF03).
  * - Control de bloqueo previo a la captura del sensor (RF04).
  */
@@ -11,6 +12,49 @@ import { ref } from 'vue'
 import { supabase } from './supabase'
 
 const LOCAL_CONSENT_KEY = 'sensor_consentimiento_aceptado_rf04'
+const LOCAL_HISTORIAL_KEY = 'sensor_consentimiento_historial_rf59'
+
+/**
+ * Formatea una estampa ISO a fecha y hora completa en formato chileno (RF59)
+ * Ej: "30-10-2026, 15:35:10"
+ */
+export function formatearFechaHora(isoString) {
+  if (!isoString) return ''
+  try {
+    const d = new Date(isoString)
+    if (isNaN(d.getTime())) return String(isoString)
+    return d.toLocaleString('es-CL', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+  } catch {
+    return String(isoString)
+  }
+}
+
+/**
+ * Formatea una estampa ISO a solo hora (HH:mm:ss) para etiquetas compactas
+ */
+export function formatearFechaHoraCorta(isoString) {
+  if (!isoString) return ''
+  try {
+    const d = new Date(isoString)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleTimeString('es-CL', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    })
+  } catch {
+    return ''
+  }
+}
 
 // Para fines pedagógicos (RF04), cada recarga de página exige validar el consentimiento
 try {
@@ -31,12 +75,14 @@ export const CONSENTIMIENTO_BASE = {
   textoLegal: 'Consiento de forma libre, previa, expresa e informada la captura y procesamiento de mis datos fisiológicos con fines estrictamente académicos. Entiendo que puedo revocar este consentimiento en cualquier momento.'
 }
 
-// Estado reactivo global del consentimiento en la sesión activa
+// Estado reactivo global del consentimiento en la sesión activa (RF59: incluye fechaHoraTexto)
 export const consentimientoEstado = ref({
   cargando: false,
   vigente: false,
   version: '1.0',
   aceptadoEn: null,
+  fechaHoraTexto: '',
+  registroPrevio: null, // Guarda la vez anterior que entró (RF59)
   origen: 'local'
 })
 
@@ -82,34 +128,94 @@ export const consentimientoService = {
       }
     } catch (e) {}
 
+    // RF59: Recuperar el registro de la vez anterior para no perder el historial al recargar
+    let previo = null
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.id) {
+        const { data } = await supabase
+          .from('consentimientos_aceptados')
+          .select('id, version, aceptado_en, revocado_en')
+          .eq('usuario_id', session.user.id)
+          .is('revocado_en', null)
+          .order('aceptado_en', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (data) {
+          previo = {
+            version: data.version,
+            aceptadoEn: data.aceptado_en,
+            fechaHoraTexto: formatearFechaHora(data.aceptado_en),
+            origen: 'supabase'
+          }
+        }
+      }
+    } catch (e) {}
+
+    if (!previo) {
+      try {
+        const raw = localStorage.getItem(LOCAL_HISTORIAL_KEY)
+        if (raw) {
+          const list = JSON.parse(raw)
+          if (list.length > 0) {
+            previo = {
+              version: list[0].version,
+              aceptadoEn: list[0].aceptado_en,
+              fechaHoraTexto: list[0].fecha_hora_texto || formatearFechaHora(list[0].aceptado_en),
+              origen: 'local'
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
     consentimientoEstado.value = {
       cargando: false,
       vigente: false,
-      version: '1.0',
+      version: previo?.version || '1.0',
       aceptadoEn: null,
-      origen: 'local'
+      fechaHoraTexto: '',
+      registroPrevio: previo,
+      origen: previo?.origen || 'local'
     }
     return false
   },
 
   /**
-   * Registra la aceptación del consentimiento informado (RF04)
+   * Registra la aceptación del consentimiento informado con versión, fecha y hora (RF04, RF59)
    */
   async aceptarConsentimiento(version = '1.0') {
     const ahora = new Date().toISOString()
+    const fechaHoraTexto = formatearFechaHora(ahora)
+
     const nuevoEstado = {
       cargando: false,
       vigente: true,
       version,
       aceptadoEn: ahora,
+      fechaHoraTexto,
       origen: 'local'
     }
 
-    // 1. Guardar en localStorage siempre
+    // 1. Guardar en localStorage siempre (estado activo + historial de auditoría RF59)
     try {
       localStorage.setItem(LOCAL_CONSENT_KEY, JSON.stringify(nuevoEstado))
+
+      // Historial de auditoría local (RF59)
+      const rawHistorial = localStorage.getItem(LOCAL_HISTORIAL_KEY)
+      const historial = rawHistorial ? JSON.parse(rawHistorial) : []
+      historial.unshift({
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'local-' + Date.now(),
+        version,
+        aceptado_en: ahora,
+        fecha_hora_texto: fechaHoraTexto,
+        origen: 'local'
+      })
+      // Mantener los últimos 50 registros para auditoría
+      localStorage.setItem(LOCAL_HISTORIAL_KEY, JSON.stringify(historial.slice(0, 50)))
     } catch (e) {
-      console.warn('Error guardando consentimiento local:', e)
+      console.warn('Error guardando consentimiento local (RF59):', e)
     }
 
     // 2. Si hay sesión iniciada en Supabase, registrar en la tabla consentimientos_aceptados
@@ -118,12 +224,12 @@ export const consentimientoService = {
       if (session?.user?.id) {
         const { error } = await supabase
           .from('consentimientos_aceptados')
-          .upsert({
+          .insert({
             usuario_id: session.user.id,
             version,
             aceptado_en: ahora,
             revocado_en: null
-          }, { onConflict: 'usuario_id, version' })
+          })
 
         if (!error) {
           nuevoEstado.origen = 'supabase'
@@ -133,11 +239,61 @@ export const consentimientoService = {
         }
       }
     } catch (err) {
-      console.warn('Error de red al registrar consentimiento:', err)
+      console.warn('Error de red al registrar consentimiento en Supabase:', err)
     }
 
     consentimientoEstado.value = nuevoEstado
     return { ok: true, data: nuevoEstado }
+  },
+
+  /**
+   * Obtiene el historial de registros de consentimientos aceptados (RF59)
+   */
+  async obtenerHistorialRegistros() {
+    // 1. Intentar consultar desde Supabase si hay sesión
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user?.id) {
+        const { data, error } = await supabase
+          .from('consentimientos_aceptados')
+          .select('id, version, aceptado_en, revocado_en')
+          .eq('usuario_id', session.user.id)
+          .order('aceptado_en', { ascending: false })
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data.map(item => ({
+            id: item.id,
+            version: item.version,
+            aceptadoEn: item.aceptado_en,
+            fechaHoraTexto: formatearFechaHora(item.aceptado_en),
+            revocadoEn: item.revocado_en,
+            vigente: !item.revocado_en,
+            origen: 'supabase'
+          }))
+        }
+      }
+    } catch (e) {
+      console.warn('Aviso: no se pudo consultar historial en Supabase, recurriendo a local:', e)
+    }
+
+    // 2. Consultar historial local
+    try {
+      const raw = localStorage.getItem(LOCAL_HISTORIAL_KEY)
+      if (raw) {
+        const items = JSON.parse(raw)
+        return items.map(item => ({
+          id: item.id,
+          version: item.version,
+          aceptadoEn: item.aceptado_en,
+          fechaHoraTexto: item.fecha_hora_texto || formatearFechaHora(item.aceptado_en),
+          revocadoEn: null,
+          vigente: true,
+          origen: 'local'
+        }))
+      }
+    } catch (e) {}
+
+    return []
   },
 
   /**
@@ -170,6 +326,7 @@ export const consentimientoService = {
       vigente: false,
       version: '1.0',
       aceptadoEn: null,
+      fechaHoraTexto: '',
       revocadoEn: ahora,
       origen: 'local'
     }

@@ -42,6 +42,13 @@
         <span class="badge-subtle">Estrés: {{ pacienteActivo.nivelEstres }}</span>
         <span class="badge-subtle">Medicación: {{ pacienteActivo.medicacion || 'Ninguna' }}</span>
         <span class="badge-subtle">Actividad: {{ pacienteActivo.actividadPrevia || 'Reposo' }}</span>
+        <span 
+          v-if="consentimientoEstado.vigente" 
+          class="badge-subtle badge-consentimiento-rf59"
+          :title="'Consentimiento RF59 registrado el ' + formatearFechaHora(consentimientoEstado.aceptadoEn)"
+        >
+          ✓ Consentimiento v{{ consentimientoEstado.version }} ({{ formatearFechaHoraCorta(consentimientoEstado.aceptadoEn) }})
+        </span>
       </div>
     </div>
 
@@ -224,7 +231,7 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
 import ConsentimientoModal from '../components/ConsentimientoModal.vue'
-import { consentimientoService, consentimientoEstado } from '../services/consentimientoService'
+import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'
 import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
@@ -635,6 +642,13 @@ onBeforeUnmount(() => {
   padding: 0.15rem 0.45rem;
   border-radius: 0.25rem;
   font-size: 0.75rem;
+}
+
+.badge-consentimiento-rf59 {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+  font-weight: 600;
 }
 .alerta-consentimiento-rechazado {
   display: flex;
