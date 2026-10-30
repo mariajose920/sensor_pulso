@@ -69,15 +69,17 @@ const router = createRouter({
   routes
 })
 
-// RF97: Navigation Guard para control de acceso según roles
+// RF97 y RF45: Navigation Guard para control de acceso según roles desde BD
 router.beforeEach(async (to, _from, next) => {
-  const { isAuthenticated, currentUserRole, loading } = useAuth()
+  const { isAuthenticated, isAdmin, isProfesor, currentUserRole, loading } = useAuth()
 
-  // Esperar a que se resuelva la sesión inicial si aún está cargando
+  // Esperar a que se resuelva la sesión inicial (con límite de seguridad de 1s para evitar pantalla blanca)
   if (loading.value) {
     await new Promise(resolve => {
+      let intentos = 0
       const interval = setInterval(() => {
-        if (!loading.value) {
+        intentos++
+        if (!loading.value || intentos >= 20) {
           clearInterval(interval)
           resolve()
         }
@@ -91,8 +93,17 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   // Si la ruta está restringida a ciertos roles
-  if (to.meta.roles && !to.meta.roles.includes(currentUserRole.value)) {
-    return next({ name: 'Forbidden' })
+  if (to.meta.roles) {
+    const tienePermiso = to.meta.roles.some(rol => {
+      if (rol === ROLES.ADMIN) return isAdmin.value
+      if (rol === ROLES.PROFESOR) return isProfesor.value
+      if (rol === ROLES.USUARIO) return true
+      return false
+    })
+
+    if (!tienePermiso) {
+      return next({ name: 'Forbidden' })
+    }
   }
 
   next()

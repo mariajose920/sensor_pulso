@@ -1,5 +1,5 @@
 /**
- * RF52: Control de acceso por roles con principio de mínimo privilegio
+ * RF52 y RF45: Control de acceso por roles y principio de mínimo privilegio
  */
 
 export const ROLES = {
@@ -20,7 +20,7 @@ export const PERMISOS = {
   GESTIONAR_EVALUACIONES: [ROLES.PROFESOR, ROLES.ADMIN],
   VER_ESTUDIANTES_AULA: [ROLES.PROFESOR, ROLES.ADMIN],
 
-  // Administración del sistema
+  // Administración del sistema (RF45)
   ADMINISTRAR_USUARIOS: [ROLES.ADMIN],
   ASIGNAR_ROLES: [ROLES.ADMIN],
   CONFIGURAR_RANGOS_GLOBALES: [ROLES.ADMIN]
@@ -35,7 +35,24 @@ export function tienePermiso(rolUsuario, permiso) {
 }
 
 /**
- * Nombre legible para mostrar en pantalla
+ * RF45: Retorna la etiqueta legible del perfil (soporta ser Administrador y Profesor a la vez)
+ */
+export function obtenerEtiquetaPerfil(perfil) {
+  if (!perfil) return 'Invitado'
+  if (perfil.es_admin && perfil.rol === 'profesor') {
+    return 'Administrador y Profesor'
+  }
+  if (perfil.es_admin) {
+    return 'Administrador'
+  }
+  if (perfil.rol === 'profesor') {
+    return 'Profesor'
+  }
+  return 'Estudiante'
+}
+
+/**
+ * Retorna la etiqueta por rol simple
  */
 export function obtenerEtiquetaRol(rol) {
   switch (rol) {

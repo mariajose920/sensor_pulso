@@ -1,62 +1,108 @@
 import { ref, computed } from 'vue'
 import { supabase } from '../services/supabase'
 import { validarCorreoInstitucional } from '../utils/validators'
-import { ROLES, tienePermiso, obtenerEtiquetaRol } from '../utils/roles'
+import { ROLES, tienePermiso, obtenerEtiquetaPerfil } from '../utils/roles'
+import { PRIMER_ADMIN } from '../../scripts/seedAdmin.js'
 
-// Estado reactivo global del usuario en sesión
-const user = ref(null)
+// Estado reactivo global
+const user = ref(JSON.parse(localStorage.getItem('sensor_user') || 'null'))
+const profile = ref(JSON.parse(localStorage.getItem('sensor_profile') || 'null'))
 const session = ref(null)
-const loading = ref(true)
+const loading = ref(false)
 const authError = ref(null)
 
-// Inicializar y escuchar cambios de sesión en Supabase Auth
-supabase.auth.getSession().then(({ data }) => {
-  session.value = data.session
-  user.value = data.session?.user ?? null
-  loading.value = false
-})
+async function cargarPerfilDesdeBD(userId) {
+  if (!userId) return
+  try {
+    const { data, error } = await supabase
+      .from('perfiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle()
 
-supabase.auth.onAuthStateChange((_event, newSession) => {
-  session.value = newSession
-  user.value = newSession?.user ?? null
+    if (!error && data) {
+      profile.value = data
+      localStorage.setItem('sensor_profile', JSON.stringify(data))
+    }
+  } catch (err) {
+    console.warn('Aviso cargando perfil:', err)
+  }
+}
+
+// Inicializar sesión
+supabase.auth.getSession().then(async ({ data }) => {
+  if (data?.session?.user) {
+    session.value = data.session
+    user.value = data.session.user
+    await cargarPerfilDesdeBD(user.value.id)
+  }
+}).catch(() => {}).finally(() => {
   loading.value = false
 })
 
 export function useAuth() {
-  // RF01: Identificación del usuario activo
   const isAuthenticated = computed(() => !!user.value)
   const currentUserId = computed(() => user.value?.id || null)
-  const currentUserEmail = computed(() => user.value?.email || '')
+  const currentUserEmail = computed(() => user.value?.email || profile.value?.correo || '')
   
   const currentUserName = computed(() => {
-    if (!user.value) return 'Invitado / No identificado'
-    return user.value.user_metadata?.nombre_completo || 
-           user.value.email?.split('@')[0] || 
-           'Usuario'
+    return profile.value?.nombre || user.value?.user_metadata?.nombre_completo || 'Usuario'
   })
+
+  // RF45: Roles desde la base de datos o perfil activo
+  const isAdmin = computed(() => profile.value?.es_admin === true)
+  const isProfesor = computed(() => profile.value?.rol === 'profesor' || isAdmin.value)
+  const isEstudiante = computed(() => profile.value?.rol === 'usuario')
 
   const currentUserRole = computed(() => {
-    return user.value?.user_metadata?.rol || 'usuario'
+    if (isAdmin.value) return ROLES.ADMIN
+    if (profile.value?.rol === 'profesor') return ROLES.PROFESOR
+    return ROLES.USUARIO
   })
 
-  // RF02: Inicio de sesión con correo y contraseña (Supabase Auth)
+  const roleLabel = computed(() => obtenerEtiquetaPerfil(profile.value))
+
+  const can = (permiso) => tienePermiso(currentUserRole.value, permiso)
+
+  // RF02 & RF44: Inicio de sesión con soporte para Administrador Inicial
   const login = async (email, password) => {
     authError.value = null
     loading.value = true
+
+    // Detección directa del Administrador Inicial definido en código (RF44)
+    if (email === PRIMER_ADMIN.email && password === PRIMER_ADMIN.password) {
+      const adminUser = {
+        id: '00000000-0000-0000-0000-000000000001',
+        email: PRIMER_ADMIN.email,
+        user_metadata: { nombre_completo: PRIMER_ADMIN.nombreCompleto, rol: 'admin' }
+      }
+      const adminProfile = {
+        id: '00000000-0000-0000-0000-000000000001',
+        correo: PRIMER_ADMIN.email,
+        nombre: PRIMER_ADMIN.nombreCompleto,
+        rol: 'profesor',
+        es_admin: true
+      }
+      user.value = adminUser
+      profile.value = adminProfile
+      session.value = { user: adminUser }
+      localStorage.setItem('sensor_user', JSON.stringify(adminUser))
+      localStorage.setItem('sensor_profile', JSON.stringify(adminProfile))
+      loading.value = false
+      return { success: true }
+    }
+
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+      user.value = data.user
+      localStorage.setItem('sensor_user', JSON.stringify(data.user))
+      await cargarPerfilDesdeBD(data.user.id)
       return { success: true, data }
     } catch (err) {
       let mensaje = err.message
-      if (mensaje.includes('Invalid login credentials')) {
-        mensaje = 'Correo o contraseña incorrectos.'
-      } else if (mensaje.includes('Email not confirmed')) {
-        mensaje = 'Debes confirmar tu correo antes de iniciar sesión.'
-      }
+      if (mensaje.includes('Invalid login credentials')) mensaje = 'Correo o contraseña incorrectos.'
+      else if (mensaje.includes('Email not confirmed')) mensaje = 'Debes confirmar tu correo antes de iniciar sesión.'
       authError.value = mensaje
       return { success: false, error: mensaje }
     } finally {
@@ -64,15 +110,10 @@ export function useAuth() {
     }
   }
 
- // RF02 y RF96: Registro con asignación de rol según dominio UNACH
   const register = async (email, password, nombreCompleto) => {
     authError.value = null
-    // RF96: Validación previa estricta del dominio institucional
     const validacion = validarCorreoInstitucional(email)
-    if (!validacion.valido) {
-      authError.value = validacion.error
-      return { success: false, error: validacion.error }
-    }
+    if (!validacion.valido) return { success: false, error: validacion.error }
     loading.value = true
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -81,65 +122,38 @@ export function useAuth() {
         options: {
           data: {
             nombre_completo: nombreCompleto,
-            rol: validacion.rol, // RF96: 'usuario' o 'profesor' según el dominio
+            rol: validacion.rol,
             tipo_cuenta: validacion.tipo
           }
         }
       })
       if (error) throw error
-      return { success: true, data, validacion }
+      return { success: true, data }
     } catch (err) {
-      let mensaje = err.message
-      if (mensaje.includes('User already registered')) {
-        mensaje = 'Ya existe una cuenta registrada con este correo.'
-      }
-      authError.value = mensaje
-      return { success: false, error: mensaje }
+      return { success: false, error: err.message }
     } finally {
       loading.value = false
     }
   }
 
-    // RF52: Helpers de roles y principio de mínimo privilegio
-  const isAdmin = computed(() => currentUserRole.value === ROLES.ADMIN)
-  const isProfesor = computed(() => currentUserRole.value === ROLES.PROFESOR || isAdmin.value)
-  const isEstudiante = computed(() => currentUserRole.value === ROLES.USUARIO)
-
-  const roleLabel = computed(() => obtenerEtiquetaRol(currentUserRole.value))
-
-  const can = (permiso) => {
-    return tienePermiso(currentUserRole.value, permiso)
-  }
-
-  // RF02: Cerrar sesión
   const logout = async () => {
-    loading.value = true
     try {
       await supabase.auth.signOut()
-      user.value = null
-      session.value = null
-    } catch (err) {
-      authError.value = err.message
-    } finally {
-      loading.value = false
-    }
+    } catch (_) {}
+    user.value = null
+    profile.value = null
+    session.value = null
+    localStorage.removeItem('sensor_user')
+    localStorage.removeItem('sensor_profile')
   }
 
-  // RF96: Reenviar el correo de confirmación de la cuenta
-  const resendConfirmationEmail = async (email) => {
-    authError.value = null
-    try {
-      const { error } = await supabase.auth.resend({ type: 'signup', email })
-      if (error) throw error
-      return { success: true }
-    } catch (err) {
-      authError.value = err.message
-      return { success: false, error: err.message }
-    }
+  const refrescarPerfil = async () => {
+    if (user.value) await cargarPerfilDesdeBD(user.value.id)
   }
 
-    return {
+  return {
     user,
+    profile,
     session,
     loading,
     authError,
@@ -148,14 +162,14 @@ export function useAuth() {
     currentUserEmail,
     currentUserName,
     currentUserRole,
-    isAdmin,      // <-- Agregado
-    isProfesor,   // <-- Agregado
-    isEstudiante, // <-- Agregado
-    roleLabel,    // <-- Agregado
-    can,          // <-- Agregado
+    isAdmin,
+    isProfesor,
+    isEstudiante,
+    roleLabel,
+    can,
     login,
     register,
     logout,
-    resendConfirmationEmail
+    refrescarPerfil
   }
 }
