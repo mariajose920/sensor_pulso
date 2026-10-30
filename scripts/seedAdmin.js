@@ -52,6 +52,6 @@ async function inicializarPrimerAdmin() {
 }
 
 // Ejecutar si se llama directamente con Node
-if (process.argv[1]?.includes('seedAdmin.js')) {
+if (typeof process !== 'undefined' && process?.argv?.[1]?.includes('seedAdmin.js')) {
   inicializarPrimerAdmin()
 }

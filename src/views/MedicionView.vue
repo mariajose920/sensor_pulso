@@ -15,13 +15,29 @@
           :class="simuladorActivo ? 'btn-danger' : 'btn-primary'"
           @click="toggleSimulador"
         >
-          {{ simuladorActivo ? '⏹️ Detener Emulador WiFi' : '▶️ Iniciar Prueba WiFi (5 canales)' }}
+          {{ simuladorActivo ? ' Detener Emulador WiFi' : ' Iniciar Prueba WiFi (5 canales)' }}
         </button>
       </div>
     </div>
 
     <!-- RF01: Identificador del usuario que realiza la medición -->
     <UserIdentifier />
+
+    <!-- RF03: Datos del paciente obligatorios y factores que afectan la medición -->
+    <DatosPacienteCard @paciente-actualizado="onPacienteActualizado" />
+
+    <!-- Vinculación del Paciente Activo a la Medición en Vivo (RF03 / RF19) -->
+    <div v-if="pacienteActivo" class="paciente-vinculado-banner">
+      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <span class="punto-verde">●</span>
+        <span>Paciente en medición: <strong>{{ pacienteActivo.nombre }}</strong> ({{ pacienteActivo.edad }} años)</span>
+      </div>
+      <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; font-size: 0.8rem;">
+        <span class="badge-subtle">Estrés: {{ pacienteActivo.nivelEstres }}</span>
+        <span class="badge-subtle">Medicación: {{ pacienteActivo.medicacion || 'Ninguna' }}</span>
+        <span class="badge-subtle">Actividad: {{ pacienteActivo.actividadPrevia || 'Reposo' }}</span>
+      </div>
+    </div>
 
     <!-- Barra de Estado WiFi del ESP32 (RF05, RF54) -->
     <Esp32WifiStatus
@@ -193,6 +209,7 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
+import DatosPacienteCard from '../components/DatosPacienteCard.vue'
 import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
@@ -211,6 +228,12 @@ import {
   canalesState,
   miCanalAsignado
 } from '../services/canalesService'
+
+const pacienteActivo = ref(null)
+
+function onPacienteActualizado(datos) {
+  pacienteActivo.value = datos
+}
 
 const canalSeleccionado = ref(1)
 const tabActiva = ref('simulador')
@@ -526,5 +549,33 @@ onBeforeUnmount(() => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+.paciente-vinculado-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: #166534;
+}
+
+.punto-verde {
+  color: #16a34a;
+  font-size: 0.9rem;
+}
+
+.badge-subtle {
+  background: #ffffff;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
 }
 </style>
