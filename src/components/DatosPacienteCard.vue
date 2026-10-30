@@ -91,12 +91,22 @@
         <strong>Relevancia biomédica:</strong> La edad, el nivel de estrés y el consumo previo de estimulantes condicionan la frecuencia cardíaca basal esperada y la variabilidad de intervalos R-R (HRV).
       </div>
       <div style="margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem; background: #f8fafc; padding: 0.4rem 0.75rem; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
-        <span v-if="consentimientoEstado.vigente" style="color: #15803d; font-weight: 600;">
-          ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
-        </span>
-        <span v-else style="color: #d97706; font-weight: 600;">
-          ○ Consentimiento pendiente (saltará al medir / conectar)
-        </span>
+        <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
+          <span style="color: #15803d; font-weight: 600;">
+            ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
+          </span>
+          <span v-if="consentimientoEstado.aceptadoEn" style="color: #475569; font-size: 0.74rem;">
+            Registrado: <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> (RF59)
+          </span>
+        </div>
+        <div v-else style="display: flex; flex-direction: column; gap: 0.15rem;">
+          <span style="color: #d97706; font-weight: 600;">
+            ○ Consentimiento pendiente (saltará al medir / conectar)
+          </span>
+          <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
+            🕒 Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+          </span>
+        </div>
         <button 
           v-if="consentimientoEstado.vigente"
           type="button" 
@@ -330,12 +340,22 @@
             La información médica declarada se almacena cifrada en base de datos bajo control de acceso de nivel de fila (RLS). Para fines <strong>pedagógicos</strong>, en las vistas compartidas solo se exponen nombre y rangos etarios.
           </small>
           <div style="margin-top: 0.5rem; pt: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem;">
-            <span v-if="consentimientoEstado.vigente" style="color: #15803d; font-weight: 600;">
-              ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
-            </span>
-            <span v-else style="color: #d97706; font-weight: 600;">
-              ○ Consentimiento pendiente (saltará al medir / conectar)
-            </span>
+            <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
+              <span style="color: #15803d; font-weight: 600;">
+                ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
+              </span>
+              <span v-if="consentimientoEstado.aceptadoEn" style="color: #475569; font-size: 0.74rem;">
+                Registrado: <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> (RF59)
+              </span>
+            </div>
+            <div v-else style="display: flex; flex-direction: column; gap: 0.15rem;">
+              <span style="color: #d97706; font-weight: 600;">
+                ○ Consentimiento pendiente (saltará al medir / conectar)
+              </span>
+              <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
+                🕒 Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+              </span>
+            </div>
             <button 
               v-if="consentimientoEstado.vigente"
               type="button" 
@@ -367,7 +387,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { consentimientoService, consentimientoEstado } from '../services/consentimientoService'
+import { consentimientoService, consentimientoEstado, formatearFechaHora } from '../services/consentimientoService'
 import { 
   pacienteService, 
   NIVELES_ESTRES, 

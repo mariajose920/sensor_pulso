@@ -7,7 +7,7 @@
           <h2 id="consent-title" class="modal-title">
             Consentimiento Informado para Medición
           </h2>
-          <span class="version-tag">Documento oficial — Versión {{ doc.version }} (Vigente)</span>
+          <span class="version-tag">Documento oficial — Versión {{ doc.version }} (RF59 / RF76)</span>
         </div>
         <button 
           type="button" 
@@ -57,6 +57,35 @@
               {{ doc.plazoConservacion }} Puedes revocar este consentimiento informado en cualquier momento desde tu perfil o la configuración del sistema.
             </p>
           </div>
+
+          <!-- 5. Registro Inmutable de Auditoría (RF59) -->
+          <div class="seccion-item auditoria-box">
+            <h3 class="seccion-titulo" style="color: #1e40af;">5. Registro de Versión, Fecha y Hora</h3>
+            <p class="seccion-texto">
+              Al presionar "Aceptar" la plataforma registrará de forma inmutable la <strong>Versión {{ doc.version }}</strong> con la <strong>fecha y hora exacta</strong> del momento de autorización.
+            </p>
+            <div v-if="consentimientoEstado.aceptadoEn || consentimientoEstado.registroPrevio?.aceptadoEn" class="registro-previo-tag">
+              <span>● Último registro: <strong>v{{ consentimientoEstado.aceptadoEn ? consentimientoEstado.version : consentimientoEstado.registroPrevio.version }}</strong> aceptado el {{ consentimientoEstado.fechaHoraTexto || consentimientoEstado.registroPrevio.fechaHoraTexto }} (RF59)</span>
+            </div>
+
+            <div v-if="historial.length > 0" class="historial-container">
+              <button 
+                type="button" 
+                class="btn-toggle-historial"
+                @click="mostrarHistorial = !mostrarHistorial"
+              >
+                {{ mostrarHistorial ? '▲ Ocultar historial de registros' : '▼ Ver historial de registros anteriores (' + historial.length + ' veces aceptado)' }}
+              </button>
+              <ul v-if="mostrarHistorial" class="historial-lista">
+                <li v-for="item in historial" :key="item.id" class="historial-item">
+                  <span class="historial-version">Versión {{ item.version }}</span>
+                  <span class="historial-fecha">— {{ item.fechaHoraTexto }}</span>
+                  <span class="historial-origen">[{{ item.origen }}]</span>
+                </li>
+              </ul>
+            </div>
+
+          </div>
         </div>
 
         <!-- Declaración Expresa -->
@@ -101,7 +130,12 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
-import { consentimientoService, CONSENTIMIENTO_BASE } from '../services/consentimientoService'
+import {
+  consentimientoService,
+  CONSENTIMIENTO_BASE,
+  consentimientoEstado,
+  formatearFechaHora
+} from '../services/consentimientoService'
 
 const props = defineProps({
   visible: {
@@ -119,30 +153,32 @@ const emit = defineEmits(['aceptado', 'rechazado', 'cerrar'])
 const doc = ref(CONSENTIMIENTO_BASE)
 const aceptadoCheckbox = ref(false)
 const guardando = ref(false)
+const historial = ref([])
+const mostrarHistorial = ref(false)
 
-watch(() => props.visible, (val) => {
+async function cargarHistorial() {
+  try {
+    historial.value = await consentimientoService.obtenerHistorialRegistros()
+  } catch (e) {
+    historial.value = []
+  }
+}
+
+watch(() => props.visible, async (val) => {
   if (val) {
     aceptadoCheckbox.value = false
+    await cargarHistorial()
   }
 })
 
 onMounted(async () => {
   doc.value = await consentimientoService.obtenerVersionActiva()
+  await cargarHistorial()
 })
-
-function manejarClickFondo() {
-  if (!props.forzoso) {
-    cerrar()
-  }
-}
 
 function rechazar() {
   emit('rechazado')
   emit('cerrar')
-}
-
-function cerrar() {
-  rechazar()
 }
 
 async function confirmarAceptacion() {
@@ -150,9 +186,10 @@ async function confirmarAceptacion() {
   guardando.value = true
   try {
     const res = await consentimientoService.aceptarConsentimiento(doc.value.version)
+    await cargarHistorial()
     emit('aceptado', res.data)
   } catch (err) {
-    console.error('Error al registrar consentimiento:', err)
+    console.error('Error al registrar consentimiento (RF59):', err)
   } finally {
     guardando.value = false
   }
@@ -252,6 +289,71 @@ async function confirmarAceptacion() {
   padding: 0.75rem 1rem;
   border-radius: 0.4rem;
   border: 1px solid #e2e8f0;
+}
+
+.auditoria-box {
+  background: #f0f7ff;
+  border-left: 3px solid #2563eb;
+}
+
+.registro-previo-tag {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #1e40af;
+  background: #dbeafe;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+.historial-container {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #cbd5e1;
+}
+
+.btn-toggle-historial {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.btn-toggle-historial:hover {
+  color: #1d4ed8;
+}
+
+.historial-lista {
+  margin: 0.4rem 0 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.75rem;
+  color: #334155;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.historial-item {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.historial-version {
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+.historial-fecha {
+  color: #475569;
+}
+
+.historial-origen {
+  font-size: 0.7rem;
+  color: #94a3b8;
 }
 
 .seccion-titulo {
