@@ -215,7 +215,7 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
     </div>
 
     <!-- RF17: detección de picos, BPM y HRV -->
-    <DeteccionPicosPanel @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+    <DeteccionPicosPanel :paciente="pacienteActivo" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
 
     <!-- RF04: Pantalla emergente de consentimiento informado antes de medir -->
     <ConsentimientoModal

@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { clasificarRitmo } from '../services/ritmoService.js'
 
 /**
  * Algoritmo de Deteccion de Picos en tiempo real y Metricas Cardiacas (RF17)
@@ -237,6 +238,20 @@ export function usePeakDetector(options = {}) {
     }
   }
 
+
+  // Clasificación del Ritmo Cardíaco en tiempo real (RF18: normal, taquicardia, bradicardia, irregular)
+  const rhythmClassification = computed(() => {
+    return clasificarRitmo({
+      bpm: currentBpm.value,
+      instantBpm: instantBpm.value,
+      sdnn: sdnn.value,
+      rmssd: rmssd.value,
+      lastIntervalMs: lastIntervalMs.value,
+      regularityLevel: regularityLevel.value,
+      totalBeats: totalBeatsDetected.value
+    })
+  })
+
   return {
     currentBpm,
     instantBpm,
@@ -244,6 +259,7 @@ export function usePeakDetector(options = {}) {
     sdnn,
     regularityStatus,
     regularityLevel,
+    rhythmClassification,
     isBeating,
     totalBeatsDetected,
     lastIntervalMs,
