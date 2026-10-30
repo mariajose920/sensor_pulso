@@ -64,7 +64,9 @@
 </template>
 
 <script setup>
+const emit = defineEmits(['solicitar-consentimiento'])
 import { ref, computed, onUnmounted } from 'vue'
+import { consentimientoEstado } from '../services/consentimientoService'
 import { useSerialSensor } from '../composables/useSerialSensor.js'
 import { usePeakDetector } from '../composables/usePeakDetector.js'
 import { PpgDcFilter } from '../utils/ppgFilter.js'
@@ -124,6 +126,12 @@ serialSensor.subscribe((sample) => {
 })
 
 async function handleConnectUsb() {
+  // RF04: El consentimiento informado emerge cuando uno conecta el sensor por USB
+  if (!consentimientoEstado.value.vigente) {
+    emit('solicitar-consentimiento', () => handleConnectUsb())
+    return
+  }
+
   if (isSimulating.value) {
     stopSimulation()
   }

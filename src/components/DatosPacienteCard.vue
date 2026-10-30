@@ -90,6 +90,24 @@
       <div class="aviso-fisiologico">
         <strong>Relevancia biomédica:</strong> La edad, el nivel de estrés y el consumo previo de estimulantes condicionan la frecuencia cardíaca basal esperada y la variabilidad de intervalos R-R (HRV).
       </div>
+      <div style="margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem; background: #f8fafc; padding: 0.4rem 0.75rem; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
+        <span v-if="consentimientoEstado.vigente" style="color: #15803d; font-weight: 600;">
+          ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
+        </span>
+        <span v-else style="color: #d97706; font-weight: 600;">
+          ○ Consentimiento pendiente (saltará al medir / conectar)
+        </span>
+        <button 
+          v-if="consentimientoEstado.vigente"
+          type="button" 
+          class="btn btn-secondary btn-sm"
+          style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
+          @click="revocarConsentimientoPrueba"
+          title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+        >
+          Reiniciar consentimiento para probar
+        </button>
+      </div>
     </div>
 
     <!-- Vista Formulario de Ingreso o Edición (RF03) -->
@@ -311,6 +329,24 @@
           <small>
             La información médica declarada se almacena cifrada en base de datos bajo control de acceso de nivel de fila (RLS). Para fines <strong>pedagógicos</strong>, en las vistas compartidas solo se exponen nombre y rangos etarios.
           </small>
+          <div style="margin-top: 0.5rem; pt: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem;">
+            <span v-if="consentimientoEstado.vigente" style="color: #15803d; font-weight: 600;">
+              ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
+            </span>
+            <span v-else style="color: #d97706; font-weight: 600;">
+              ○ Consentimiento pendiente (saltará al medir / conectar)
+            </span>
+            <button 
+              v-if="consentimientoEstado.vigente"
+              type="button" 
+              class="btn btn-secondary btn-sm"
+              style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
+              @click="revocarConsentimientoPrueba"
+              title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+            >
+              Reiniciar consentimiento para probar
+            </button>
+          </div>
         </div>
 
         <!-- Botones de Acción -->
@@ -331,6 +367,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { consentimientoService, consentimientoEstado } from '../services/consentimientoService'
 import { 
   pacienteService, 
   NIVELES_ESTRES, 
@@ -451,6 +488,10 @@ function colorEfectoMedicacion(pac) {
   if (opt.efecto === 'eleva') return '#d97706'
   if (opt.efecto === 'reduce') return '#0284c7'
   return '#64748b'
+}
+
+async function revocarConsentimientoPrueba() {
+  await consentimientoService.revocarConsentimiento()
 }
 
 async function guardar() {

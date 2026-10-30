@@ -3,7 +3,7 @@
     <div class="box-header">
       <div>
         <div class="tag-badge">RF12 · Vinculación Multiusuario / RF111 · Rondas</div>
-        <h3 class="box-title">🔗 Asignación de Canales ESP32 por Cuenta</h3>
+        <h3 class="box-title"> Asignación de Canales ESP32 por Cuenta</h3>
         <p class="box-subtitle">
           En cada sesión, cada canal (1 a 5) se asocia a la cuenta de un estudiante, quien ve su señal de pulso en vivo desde su propio dispositivo.
         </p>
@@ -31,7 +31,7 @@
       <div class="assignment-summary">
         <template v-if="miCanalAsignado">
           <span class="assigned-alert">
-            🎯 Estás midiendo en el <strong>Canal {{ miCanalAsignado }}</strong>
+             Estás midiendo en el <strong>Canal {{ miCanalAsignado }}</strong>
           </span>
           <button class="btn btn-secondary btn-sm" @click="desvincular" :disabled="canalesState.cargando">
             Desvincular mi canal
@@ -149,6 +149,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { consentimientoEstado } from '../services/consentimientoService'
 import {
   canalesState,
   usuarioActual,
@@ -160,7 +161,7 @@ import {
   abrirSiguienteRonda
 } from '../services/canalesService'
 
-const emit = defineEmits(['canal-seleccionado'])
+const emit = defineEmits(['canal-seleccionado', 'solicitar-consentimiento'])
 const errorMensaje = ref('')
 
 function formatearHora(isoString) {
@@ -169,7 +170,13 @@ function formatearHora(isoString) {
 }
 
 async function vincular(canalNum) {
-  errorMensaje.value = ''
+    errorMensaje.value = ''
+  // RF04: El consentimiento informado emerge cuando el usuario toma el canal
+  if (!consentimientoEstado.value.vigente) {
+    emit('solicitar-consentimiento', () => vincular(canalNum))
+    return
+  }
+
   try {
     await vincularMiCuentaACanal(canalNum)
     emit('canal-seleccionado', canalNum)

@@ -3,24 +3,30 @@
     <!-- Encabezado de la vista -->
     <div class="view-header">
       <div>
-        <h1 class="view-title">📡 Medición y Tiempo Real</h1>
+        <h1 class="view-title">Medición y Tiempo Real</h1>
         <p class="view-subtitle">
-          Recepción de datos del microcontrolador ESP32 por WiFi (RF05), autenticación con token (RF54) y vinculación de canales a cuentas de estudiantes (RF12 / RF111).
+          Recepción de datos del microcontrolador ESP32 por WiFi, autenticación con token y vinculación de canales a cuentas de estudiantes.
         </p>
-      </div>
-
-      <div class="header-actions">
-        <button 
-          class="btn" 
-          :class="simuladorActivo ? 'btn-danger' : 'btn-primary'"
-          @click="toggleSimulador"
-        >
-          {{ simuladorActivo ? ' Detener Emulador WiFi' : ' Iniciar Prueba WiFi (5 canales)' }}
-        </button>
       </div>
     </div>
 
     <!-- RF01: Identificador del usuario que realiza la medición -->
+    <!-- Banner de Alerta cuando no se otorga consentimiento (RF04) -->
+    <div v-if="mensajeAlertaConsentimiento" class="alerta-consentimiento-rechazado">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 1.15rem;">⚠️</span>
+        <span>{{ mensajeAlertaConsentimiento }}</span>
+      </div>
+      <button 
+        type="button" 
+        class="btn btn-sm btn-secondary" 
+        style="padding: 0.25rem 0.65rem; font-size: 0.78rem;"
+        @click="abrirConsentimiento"
+      >
+        Revisar Consentimiento
+      </button>
+    </div>
+
     <UserIdentifier />
 
     <!-- RF03: Datos del paciente obligatorios y factores que afectan la medición -->
@@ -50,7 +56,7 @@
     />
 
     <!-- Componente de Vinculación de Canales por Cuenta (RF12 / RF111) -->
-    <VinculacionCanales @canal-seleccionado="seleccionarCanal" />
+    <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
 
     <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
     <OsciloscopioCanvas
@@ -202,13 +208,23 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
     </div>
 
     <!-- RF17: detección de picos, BPM y HRV -->
-    <DeteccionPicosPanel />
+    <DeteccionPicosPanel @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+
+    <!-- RF04: Pantalla emergente de consentimiento informado antes de medir -->
+    <ConsentimientoModal
+      :visible="modalConsentimientoVisible"
+      @aceptado="onConsentimientoAceptado"
+      @rechazado="onConsentimientoRechazado"
+      @cerrar="cerrarConsentimiento"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
+import ConsentimientoModal from '../components/ConsentimientoModal.vue'
+import { consentimientoService, consentimientoEstado } from '../services/consentimientoService'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'
 import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
@@ -230,9 +246,44 @@ import {
 } from '../services/canalesService'
 
 const pacienteActivo = ref(null)
+const modalConsentimientoVisible = ref(false)
 
 function onPacienteActualizado(datos) {
   pacienteActivo.value = datos
+}
+
+const accionPendienteConsentimiento = ref(null)
+
+const mensajeAlertaConsentimiento = ref('')
+
+function solicitarConsentimientoConAccion(accion) {
+  mensajeAlertaConsentimiento.value = ''
+  accionPendienteConsentimiento.value = typeof accion === 'function' ? accion : null
+  modalConsentimientoVisible.value = true
+}
+
+function abrirConsentimiento() {
+  modalConsentimientoVisible.value = true
+}
+
+function cerrarConsentimiento() {
+  onConsentimientoRechazado()
+}
+
+function onConsentimientoRechazado() {
+  modalConsentimientoVisible.value = false
+  accionPendienteConsentimiento.value = null
+  mensajeAlertaConsentimiento.value = 'Consentimiento no otorgado. No es posible iniciar la medición ni tomar un canal sin consentimiento informado (RF04).'
+}
+
+function onConsentimientoAceptado() {
+  modalConsentimientoVisible.value = false
+  mensajeAlertaConsentimiento.value = ''
+  if (accionPendienteConsentimiento.value) {
+    const fn = accionPendienteConsentimiento.value
+    accionPendienteConsentimiento.value = null
+    fn()
+  }
 }
 
 const canalSeleccionado = ref(1)
@@ -276,6 +327,10 @@ watch(miCanalAsignado, (nuevoCanal) => {
 })
 
 function toggleSimulador() {
+  if (!consentimientoEstado.value.vigente) {
+    solicitarConsentimientoConAccion(() => toggleSimulador())
+    return
+  }
   toggleSimuladorWiFi(tokenPrueba.value)
 }
 
@@ -299,7 +354,10 @@ async function enviarUnicoPaquete() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // RF04: Reiniciar consentimiento en silencio al cargar/recargar (solo emergerá al usar los sensores)
+  await consentimientoService.verificarConsentimientoVigente()
+
   // Iniciar sondeo automático para detectar recepción WiFi en tiempo real
   iniciarSondeoWiFi(1000)
   if (miCanalAsignado.value) {
@@ -577,5 +635,46 @@ onBeforeUnmount(() => {
   padding: 0.15rem 0.45rem;
   border-radius: 0.25rem;
   font-size: 0.75rem;
+}
+.alerta-consentimiento-rechazado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.consentimiento-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.badge-consent-ok {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.badge-consent-alert {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 </style>
