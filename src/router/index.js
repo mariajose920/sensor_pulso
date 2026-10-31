@@ -7,6 +7,7 @@ import AprendizajeView from '../views/AprendizajeView.vue'
 import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
 import AdminView from '../views/AdminView.vue'
+import RangosView from '../views/RangosView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
@@ -56,6 +57,13 @@ const routes = [
     name: 'Admin',
     component: AdminView,
     meta: { requiresAuth: true, roles: [ROLES.ADMIN] }
+  },
+  {
+    // RF19: el profesor edita sus rangos si tiene el permiso editar_rangos (RF98); lo valida la vista y la RLS
+    path: '/rangos',
+    name: 'Rangos',
+    component: RangosView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {
     path: '/sin-acceso',
