@@ -65,7 +65,7 @@ import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
 import { useAuth } from './composables/useAuth'
 
-const { isAuthenticated, currentUserName, roleLabel, isAdmin, logout } = useAuth()
+const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout } = useAuth()
 
 const enlacesBase = [
   { to: '/', texto: 'Inicio', corto: 'Inicio', icono: 'inicio', exacto: true },
@@ -76,10 +76,12 @@ const enlacesBase = [
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
 
-// RF97: el enlace Admin solo lo ven los administradores
-const enlaces = computed(() =>
-  isAdmin.value ? [...enlacesBase, { to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' }] : enlacesBase
-)
+// RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
+const enlaces = computed(() => {
+  if (isAdmin.value) return [...enlacesBase, { to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' }]
+  if (isProfesor.value) return [...enlacesBase, { to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' }]
+  return enlacesBase
+})
 
 // Se ocultan al bajar y reaparecen al subir. El estilo solo se aplica en móvil (ver @media).
 const { oculto, mostrar } = useScrollDirection()

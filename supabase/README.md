@@ -1,8 +1,8 @@
 # Base de datos de sensor_pulso (Supabase)
 
 - Proyecto: `ozzehtpqxpicfqvmulcg` (https://ozzehtpqxpicfqvmulcg.supabase.co), región us-east-1, Postgres 17.
-- `migrations/`: esquema completo en 9 migraciones, que la integración con GitHub aplica al hacer merge en la rama de producción.
-- `sensor_pulso_base_de_datos_completa.sql`: las mismas 9 migraciones en un solo archivo, para pegar en el SQL Editor de un proyecto vacío. No ejecutar si ya se aplicaron las migraciones.
+- `migrations/`: esquema completo en 10 migraciones, que la integración con GitHub aplica al hacer merge en la rama de producción.
+- `sensor_pulso_base_de_datos_completa.sql`: las mismas 10 migraciones en un solo archivo, para pegar en el SQL Editor de un proyecto vacío. No ejecutar si ya se aplicaron las migraciones.
 - `seed.example.sql`: ejemplo para registrar el correo del primer administrador (RF44). No poner el correo real en un archivo versionado.
 
 ## Conexión desde la web (Vue + Vite)
