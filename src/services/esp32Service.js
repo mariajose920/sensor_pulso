@@ -16,12 +16,14 @@ export const esp32State = reactive({
   error: null
 })
 
-// Buffer circular de muestras de señal para graficar en tiempo real
+// Buffer circular de muestras de señal para graficar en tiempo real (RF06)
 export const senalBuffer = reactive({
   canalSeleccionado: 1,
-  // Mantener las últimas 250 muestras para el osciloscopio
+  // Soporta hasta 500 muestras (~10 segundos a 50 Hz)
+  capacidadMaxima: 500,
   ir: [],
-  rojo: []
+  rojo: [],
+  congelado: false
 })
 
 let pollingInterval = null
@@ -52,8 +54,10 @@ export async function consultarTelemetriaWiFi() {
       esp32State.tiempoTranscurridoSegundos = Math.max(0, Math.round(diffMs / 1000))
     }
 
-    // Actualizar buffer de muestras del canal actualmente visible
-    actualizarBufferCanal()
+    // Actualizar buffer de muestras del canal actualmente visible si no está congelado (RF06)
+    if (!senalBuffer.congelado) {
+      actualizarBufferCanal()
+    }
 
     esp32State.error = null
     return data
@@ -66,19 +70,33 @@ export async function consultarTelemetriaWiFi() {
 /**
  * Actualiza el buffer de graficación para el canal seleccionado
  */
-function actualizarBufferCanal() {
+export function actualizarBufferCanal() {
   const canalData = esp32State.canales.find(c => c.canal === senalBuffer.canalSeleccionado)
   if (!canalData) return
 
   if (Array.isArray(canalData.ir) && canalData.ir.length > 0) {
     canalData.ir.forEach(val => senalBuffer.ir.push(val))
-    while (senalBuffer.ir.length > 250) senalBuffer.ir.shift()
+    while (senalBuffer.ir.length > senalBuffer.capacidadMaxima) {
+      senalBuffer.ir.shift()
+    }
   }
 
   if (Array.isArray(canalData.rojo) && canalData.rojo.length > 0) {
     canalData.rojo.forEach(val => senalBuffer.rojo.push(val))
-    while (senalBuffer.rojo.length > 250) senalBuffer.rojo.shift()
+    while (senalBuffer.rojo.length > senalBuffer.capacidadMaxima) {
+      senalBuffer.rojo.shift()
+    }
   }
+}
+
+/**
+ * Cambia el canal observado en el osciloscopio y limpia/recarga el buffer
+ */
+export function setCanalOsciloscopio(canalNum) {
+  senalBuffer.canalSeleccionado = canalNum
+  senalBuffer.ir = []
+  senalBuffer.rojo = []
+  actualizarBufferCanal()
 }
 
 /**
