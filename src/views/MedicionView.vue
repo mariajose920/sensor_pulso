@@ -65,20 +65,36 @@
     <!-- Componente de Vinculación de Canales por Cuenta (RF12 / RF111) -->
     <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
 
-    <!-- RF07: Monitor y Despliegue del Valor de Frecuencia Cardíaca (BPM) -->
-    <ValorBpmCard
-      :canal="canalSeleccionado"
-      :bpm="canalActivoData?.bpm || 0"
-      :instantBpm="monitorBpm.stats.instantBpm"
-      :promedioBpm="monitorBpm.stats.averageBpm"
-      :minBpm="monitorBpm.stats.minBpm"
-      :maxBpm="monitorBpm.stats.maxBpm"
-      :totalLecturas="monitorBpm.stats.totalLecturas"
-      :estabilidadTexto="monitorBpm.stats.estabilidad"
-      :estabilidadNivel="monitorBpm.stats.estabilidadNivel"
-      :edadPaciente="pacienteActivo?.edad || 25"
-      :actividadPaciente="pacienteActivo?.actividadPrevia || 'reposo'"
-    />
+    <!-- Monitores de Biomarcadores Fisiológicos en Tiempo Real (RF07: BPM, RF114: SpO₂) -->
+    <div class="biomarcadores-grid">
+      <!-- RF07: Monitor y Despliegue del Valor de Frecuencia Cardíaca (BPM) -->
+      <ValorBpmCard
+        :canal="canalSeleccionado"
+        :bpm="canalActivoData?.bpm || 0"
+        :instantBpm="monitorBpm.stats.instantBpm"
+        :promedioBpm="monitorBpm.stats.averageBpm"
+        :minBpm="monitorBpm.stats.minBpm"
+        :maxBpm="monitorBpm.stats.maxBpm"
+        :totalLecturas="monitorBpm.stats.totalLecturas"
+        :estabilidadTexto="monitorBpm.stats.estabilidad"
+        :estabilidadNivel="monitorBpm.stats.estabilidadNivel"
+        :edadPaciente="pacienteActivo?.edad || 25"
+        :actividadPaciente="pacienteActivo?.actividadPrevia || 'reposo'"
+      />
+
+      <!-- RF114: Monitor y Despliegue de la Saturación de Oxígeno (SpO₂) con MAX30102 -->
+      <ValorSpo2Card
+        :canal="canalSeleccionado"
+        :spo2="canalActivoData?.spo2 || 0"
+        :instantSpo2="monitorSpo2.stats.instantSpo2"
+        :promedioSpo2="monitorSpo2.stats.averageSpo2"
+        :minSpo2="monitorSpo2.stats.minSpo2"
+        :maxSpo2="monitorSpo2.stats.maxSpo2"
+        :totalLecturas="monitorSpo2.stats.totalLecturas"
+        :ratioR="monitorSpo2.stats.ratioR"
+        :perfusionIndex="monitorSpo2.stats.indicePerfusion"
+      />
+    </div>
 
     <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
     <OsciloscopioCanvas
@@ -210,6 +226,10 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
         </p>
         <table class="api-table">
           <tr>
+            <th>Medición SpO₂ (RF114)</th>
+            <td>Adquisición óptica dual 660 nm (Rojo) y 880-940 nm (IR) con sensor MAX30102 para hasta 5 canales simultáneos, ratio de razones R y curva empírica <code>SpO₂ = 110 - 25·R</code>.</td>
+          </tr>
+          <tr>
             <th>Vinculación Canales (RF12)</th>
             <td>Función atómica <code>elegir_canal(p_sesion, p_canal)</code>: Asigna el canal al estudiante que lo selecciona si está libre.</td>
           </tr>
@@ -252,6 +272,8 @@ import DatosPacienteCard from '../components/DatosPacienteCard.vue'
 import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
 import ValorBpmCard from '../components/ValorBpmCard.vue'
+import ValorSpo2Card from '../components/ValorSpo2Card.vue'
+import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
@@ -312,6 +334,7 @@ function onConsentimientoAceptado() {
 }
 
 const monitorBpm = crearMonitorEstadisticasBpm()
+const monitorSpo2 = crearMonitorEstadisticasSpo2()
 
 const canalSeleccionado = ref(1)
 const tabActiva = ref('simulador')
@@ -348,12 +371,23 @@ function obtenerNombreAsignado(canalNum) {
 function seleccionarCanal(canal) {
   canalSeleccionado.value = canal
   setCanalOsciloscopio(canal)
+  const ch = canalesMostrados.value.find(c => c.canal === canal)
+  if (ch) {
+    if (ch.bpm) monitorBpm.registrarLectura(ch.bpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
+    if (ch.spo2) monitorSpo2.registrarLectura(ch.spo2)
+  }
 }
 
 // Si el usuario vincula su canal, auto-enfocamos el osciloscopio en su canal
 watch(() => canalActivoData.value?.bpm, (nuevoBpm) => {
   if (nuevoBpm) {
     monitorBpm.registrarLectura(nuevoBpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
+  }
+}, { immediate: true })
+
+watch(() => canalActivoData.value?.spo2, (nuevoSpo2) => {
+  if (nuevoSpo2) {
+    monitorSpo2.registrarLectura(nuevoSpo2)
   }
 }, { immediate: true })
 
@@ -471,6 +505,20 @@ onBeforeUnmount(() => {
   padding: 0.25rem 0.65rem;
   border-radius: 9999px;
   font-weight: 600;
+}
+
+.biomarcadores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 860px) {
+  .biomarcadores-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 }
 
 .canales-grid {

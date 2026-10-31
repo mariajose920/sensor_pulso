@@ -144,8 +144,10 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
       const t = (now / 1000 + i * (1 / 50)) * (2 * Math.PI * freqHz)
       const ph = t % (2 * Math.PI)
       const ppg = Math.exp(-Math.pow(ph - 1.2, 2) / 0.18) + 0.35 * Math.exp(-Math.pow(ph - 2.3, 2) / 0.12)
-      const valIr = 24500 + c * 300 + 1400 * ppg + (Math.random() - 0.5) * 10
-      const valRed = 21000 + c * 250 + 900 * ppg + (Math.random() - 0.5) * 10
+      // Modelo de absorción óptica del MAX30102 (RF114)
+      const ratioSpO2 = (110.0 - spo2) / 25.0
+      const valIr = 24500 + c * 300 + 1400 * ppg + (Math.random() - 0.5) * 8
+      const valRed = 21000 + c * 250 + (1400 * ppg * ratioSpO2 * ((21000 + c * 250) / (24500 + c * 300))) + (Math.random() - 0.5) * 8
       ir.push(parseFloat(valIr.toFixed(1)))
       rojo.push(parseFloat(valRed.toFixed(1)))
     }
