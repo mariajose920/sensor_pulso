@@ -245,7 +245,8 @@ import {
   iniciarSondeoWiFi,
   detenerSondeoWiFi,
   emitirPaquetePruebaWiFi,
-  toggleSimuladorWiFi
+  toggleSimuladorWiFi,
+  setCanalOsciloscopio
 } from '../services/esp32Service'
 import {
   canalesState,
@@ -323,7 +324,7 @@ function obtenerNombreAsignado(canalNum) {
 
 function seleccionarCanal(canal) {
   canalSeleccionado.value = canal
-  senalBuffer.canalSeleccionado = canal
+  setCanalOsciloscopio(canal)
 }
 
 // Si el usuario vincula su canal, auto-enfocamos el osciloscopio en su canal
