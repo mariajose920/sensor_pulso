@@ -15,7 +15,8 @@
 
 export const UMBRALES_CALIDAD = {
   // ruido / amplitud del pulso (adimensional)
-  ruido: { regular: 0.12, mala: 0.25 },
+  // (con el simulador: ruido 7 % ≈ 0.05, ruido 35 % ≈ 0.14–0.22)
+  ruido: { regular: 0.08, mala: 0.13 },
   // variación de la línea base / amplitud del pulso (adimensional)
   movimiento: { regular: 0.6, mala: 1.2 },
   // fracción de muestras en el tope del sensor: con recorte la señal es mala
