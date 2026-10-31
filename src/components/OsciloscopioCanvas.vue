@@ -158,9 +158,7 @@
 
       <div class="metric-pill" title="Calidad estimada de la señal PPG">
         <span class="lbl">Calidad:</span>
-        <span class="badge-calidad" :class="'calidad-' + metricas.calidad">
-          {{ metricas.calidad.toUpperCase() }}
-        </span>
+        <CalidadSenalBadge :nivel="metricas.calidad" :causas="metricas.causasCalidad" mostrar-causa />
       </div>
     </div>
   </div>
@@ -168,6 +166,8 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import CalidadSenalBadge from './CalidadSenalBadge.vue'
+import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
 import {
   filtroSuavizadoEMA,
   calcularMetricasSenal,
@@ -219,7 +219,8 @@ const metricas = reactive({
   dc: 0,
   pi: 0,
   snrDb: 0,
-  calidad: 'buena'
+  calidad: 'sin_senal',
+  causasCalidad: []
 })
 
 // Muestras congeladas para permitir inspección sin que los datos nuevos alteren la pantalla
@@ -259,7 +260,11 @@ watch(() => props.muestrasIr.length, () => {
     metricas.dc = res.dc
     metricas.pi = res.pi
     metricas.snrDb = res.snrDb
-    metricas.calidad = res.calidad
+    // RF15: calidad por ruido, movimiento y recorte sobre la ventana reciente (~3 s)
+    const ventana = props.muestrasIr.slice(-Math.round(3 * props.frecuenciaHz))
+    const q = evaluarCalidad(ventana, { frecuenciaHz: props.frecuenciaHz, maximo: MAXIMO_MAX30102 })
+    metricas.calidad = q.nivel
+    metricas.causasCalidad = q.causas
   }
 })
 
