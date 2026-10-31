@@ -184,7 +184,7 @@
             <small class="form-text">Identifica al titular de la medición.</small>
           </div>
 
-          <!-- Edad obligatoria (5 a 100 años) -->
+          <!-- Edad obligatoria (solo mayores de edad: 18 a 100 años) -->
           <div class="form-group">
             <label class="form-label" for="edadPaciente">
               Edad (años) <span class="required">*</span>
@@ -193,13 +193,13 @@
               id="edadPaciente"
               v-model.number="formulario.edad"
               type="number" 
-              min="5" 
+              min="18" 
               max="100"
               class="form-control"
               placeholder="Ej: 22"
               required
             />
-            <small class="form-text">Rango válido: entre 5 y 100 años.</small>
+            <small class="form-text">Solo se miden personas mayores de edad: entre 18 y 100 años.</small>
           </div>
 
           <!-- Nivel de estrés obligatorio -->
