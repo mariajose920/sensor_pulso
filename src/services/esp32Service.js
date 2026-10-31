@@ -1,5 +1,6 @@
 import { ref, reactive } from 'vue'
 import { supabase } from './supabase'
+import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
 
 // Estado reactivo global de la telemetría del ESP32
 export const esp32State = reactive({
@@ -26,6 +27,26 @@ export const senalBuffer = reactive({
   congelado: false
 })
 
+// RF15: ventana reciente de muestras IR por canal (~3 s) para medir la calidad de cada uno
+const SEGUNDOS_VENTANA_CALIDAD = 3
+const ventanasCalidad = new Map()
+
+function calidadPorCanal(canales) {
+  const hz = esp32State.frecuenciaHz || 50
+  const maxMuestras = Math.round(SEGUNDOS_VENTANA_CALIDAD * hz)
+  return canales.map((c) => {
+    const ventana = ventanasCalidad.get(c.canal) || []
+    if (Array.isArray(c.ir)) ventana.push(...c.ir)
+    if (ventana.length > maxMuestras) ventana.splice(0, ventana.length - maxMuestras)
+    ventanasCalidad.set(c.canal, ventana)
+
+    const r = evaluarCalidad(ventana, { frecuenciaHz: hz, maximo: MAXIMO_MAX30102 })
+    // Sin muestras suficientes se conserva la calidad que informó el dispositivo.
+    if (r.nivel === 'sin_senal') return { ...c, causasCalidad: [] }
+    return { ...c, calidad: r.nivel, causasCalidad: r.causas }
+  })
+}
+
 let pollingInterval = null
 let simuladorInterval = null
 export const simuladorActivo = ref(false)
@@ -47,7 +68,7 @@ export async function consultarTelemetriaWiFi() {
     esp32State.ip = data.ip
     esp32State.rssi = data.rssi
     esp32State.paquete = data.paquete || 0
-    esp32State.canales = data.canales || []
+    esp32State.canales = calidadPorCanal(data.canales || [])
 
     if (data.ultimoContacto) {
       const diffMs = Date.now() - new Date(data.ultimoContacto).getTime()
