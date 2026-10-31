@@ -65,6 +65,21 @@
     <!-- Componente de Vinculación de Canales por Cuenta (RF12 / RF111) -->
     <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
 
+    <!-- RF07: Monitor y Despliegue del Valor de Frecuencia Cardíaca (BPM) -->
+    <ValorBpmCard
+      :canal="canalSeleccionado"
+      :bpm="canalActivoData?.bpm || 0"
+      :instantBpm="monitorBpm.stats.instantBpm"
+      :promedioBpm="monitorBpm.stats.averageBpm"
+      :minBpm="monitorBpm.stats.minBpm"
+      :maxBpm="monitorBpm.stats.maxBpm"
+      :totalLecturas="monitorBpm.stats.totalLecturas"
+      :estabilidadTexto="monitorBpm.stats.estabilidad"
+      :estabilidadNivel="monitorBpm.stats.estabilidadNivel"
+      :edadPaciente="pacienteActivo?.edad || 25"
+      :actividadPaciente="pacienteActivo?.actividadPrevia || 'reposo'"
+    />
+
     <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
     <OsciloscopioCanvas
       :canal="canalSeleccionado"
@@ -231,10 +246,12 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
 import ConsentimientoModal from '../components/ConsentimientoModal.vue'
+import { crearMonitorEstadisticasBpm } from '../services/bpmService'
 import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'
 import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
+import ValorBpmCard from '../components/ValorBpmCard.vue'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
@@ -245,7 +262,8 @@ import {
   iniciarSondeoWiFi,
   detenerSondeoWiFi,
   emitirPaquetePruebaWiFi,
-  toggleSimuladorWiFi
+  toggleSimuladorWiFi,
+  setCanalOsciloscopio
 } from '../services/esp32Service'
 import {
   canalesState,
@@ -293,6 +311,8 @@ function onConsentimientoAceptado() {
   }
 }
 
+const monitorBpm = crearMonitorEstadisticasBpm()
+
 const canalSeleccionado = ref(1)
 const tabActiva = ref('simulador')
 const tokenPrueba = ref('esp_demotoken_unach_2026_rf05')
@@ -307,6 +327,10 @@ const canalesPorDefecto = [
   { canal: 4, activo: true, bpm: 75.2, spo2: 98.0, calidad: 'regular' },
   { canal: 5, activo: true, bpm: 65.0, spo2: 96.8, calidad: 'buena' }
 ]
+
+const canalActivoData = computed(() => {
+  return canalesMostrados.value.find(c => c.canal === canalSeleccionado.value)
+})
 
 const canalesMostrados = computed(() => {
   if (esp32State.canales && esp32State.canales.length > 0) {
@@ -323,10 +347,16 @@ function obtenerNombreAsignado(canalNum) {
 
 function seleccionarCanal(canal) {
   canalSeleccionado.value = canal
-  senalBuffer.canalSeleccionado = canal
+  setCanalOsciloscopio(canal)
 }
 
 // Si el usuario vincula su canal, auto-enfocamos el osciloscopio en su canal
+watch(() => canalActivoData.value?.bpm, (nuevoBpm) => {
+  if (nuevoBpm) {
+    monitorBpm.registrarLectura(nuevoBpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
+  }
+}, { immediate: true })
+
 watch(miCanalAsignado, (nuevoCanal) => {
   if (nuevoCanal) {
     seleccionarCanal(nuevoCanal)
