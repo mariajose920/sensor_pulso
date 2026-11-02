@@ -8,6 +8,7 @@ import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
 import AdminView from '../views/AdminView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
+import HistorialView from '../views/HistorialView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 
@@ -26,6 +27,12 @@ const routes = [
     path: '/dispositivos',
     name: 'Dispositivos',
     component: DispositivosView
+  },
+  {
+    path: '/historial',
+    name: 'Historial',
+    component: HistorialView,
+    meta: { requiresAuth: true }
   },
   {
     path: '/comparacion',
