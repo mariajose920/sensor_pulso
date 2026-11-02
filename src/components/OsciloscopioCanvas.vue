@@ -161,12 +161,20 @@
         <CalidadSenalBadge :nivel="metricas.calidad" :causas="metricas.causasCalidad" mostrar-causa />
       </div>
     </div>
+
+    <!-- RF16: con calidad regular o mala explica la causa y sugiere repetir; con calidad buena no aparece -->
+    <AvisoCalidadSenal
+      :nivel="metricas.calidad"
+      :causas="metricas.causasCalidad"
+      @repetir="emit('repetir')"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import CalidadSenalBadge from './CalidadSenalBadge.vue'
+import AvisoCalidadSenal from './AvisoCalidadSenal.vue'
 import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
 import {
   filtroSuavizadoEMA,
@@ -197,6 +205,8 @@ const props = defineProps({
     default: 50
   }
 })
+
+const emit = defineEmits(['repetir'])
 
 const canvasRef = ref(null)
 const mostrarIr = ref(true)
@@ -265,6 +275,10 @@ watch(() => props.muestrasIr.length, () => {
     const q = evaluarCalidad(ventana, { frecuenciaHz: props.frecuenciaHz, maximo: MAXIMO_MAX30102 })
     metricas.calidad = q.nivel
     metricas.causasCalidad = q.causas
+  } else {
+    // Sin muestras (p. ej. tras repetir la medición): no queda ningún aviso anterior
+    metricas.calidad = 'sin_senal'
+    metricas.causasCalidad = []
   }
 })
 

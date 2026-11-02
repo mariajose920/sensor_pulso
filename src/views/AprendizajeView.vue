@@ -256,6 +256,9 @@
       <CalidadSenalBadge :nivel="calidadSenal.nivel" :causas="calidadSenal.causas" mostrar-causa />
     </div>
 
+    <!-- RF16: con calidad regular o mala explica la causa y sugiere repetir; con calidad buena no aparece -->
+    <AvisoCalidadSenal :nivel="calidadSenal.nivel" :causas="calidadSenal.causas" @repetir="handleResetSim" />
+
     <!-- 4. Osciloscopio con Senal Simulada y Marcadores de Picos Sistolicos (Puntos Rojos) -->
     <PeakOscilloscopeCanvas
       ref="oscilloscopeRef"
@@ -272,6 +275,7 @@
       :lastIntervalMs="peakDetector.lastIntervalMs.value"
       :regularityLevel="peakDetector.regularityLevel.value"
       :totalBeats="peakDetector.totalBeatsDetected.value"
+      :calidad="calidadSenal.nivel"
     />
   </div>
 
@@ -311,6 +315,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useSignalSimulator } from '../composables/useSignalSimulator.js'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
+import AvisoCalidadSenal from '../components/AvisoCalidadSenal.vue'
 import { evaluarCalidad, MAXIMO_SIMULADOR } from '../utils/calidadSenal.js'
 import { usePeakDetector } from '../composables/usePeakDetector.js'
 import { PpgDcFilter } from '../utils/ppgFilter.js'
