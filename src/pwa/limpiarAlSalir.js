@@ -2,9 +2,11 @@
 // y las lecciones en caché, para no dejar datos de salud en un dispositivo compartido.
 import { supabase } from '../services/supabase.js'
 import { borrarMedicionesVistas } from './medicionesOffline.js'
+import { borrarPendientes } from './medicionesPendientes.js'
 
 export async function limpiarDatosLocales() {
   await borrarMedicionesVistas()
+  borrarPendientes() // RF30: mediciones guardadas sin conexión que aún no se enviaron
   if (typeof caches !== 'undefined') {
     try { await caches.delete('lecciones') } catch { /* sin acceso a la caché */ }
   }

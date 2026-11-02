@@ -131,6 +131,19 @@
       </div>
     </div>
 
+    <!-- RF30: guardar la medición del canal seleccionado (solo con datos reales del ESP32, no los de ejemplo) -->
+    <GuardarMedicionCard
+      v-if="canalRealParaGuardar"
+      :bpm="canalRealParaGuardar.bpm || 0"
+      :spo2="canalRealParaGuardar.spo2 || 0"
+      :calidad="canalRealParaGuardar.calidad || 'sin_senal'"
+      :causasCalidad="canalRealParaGuardar.causasCalidad || []"
+      fuente="sensor"
+      :canal="canalSeleccionado"
+      :paciente="pacienteActivo"
+      @solicitar-consentimiento="solicitarConsentimientoConAccion"
+    />
+
     <!-- Panel de Pruebas, Diagnóstico y Firmware -->
     <div class="card test-panel">
       <div class="test-tabs">
@@ -277,6 +290,7 @@ import ValorSpo2Card from '../components/ValorSpo2Card.vue'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
+import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
 import {
   esp32State,
@@ -355,6 +369,13 @@ const canalesPorDefecto = [
 
 const canalActivoData = computed(() => {
   return canalesMostrados.value.find(c => c.canal === canalSeleccionado.value)
+})
+
+// RF30: solo se guarda lo que llega del ESP32 conectado; los canales de ejemplo no se guardan
+const canalRealParaGuardar = computed(() => {
+  if (!esp32State.conectado || !esp32State.canales?.length) return null
+  const c = esp32State.canales.find(x => x.canal === canalSeleccionado.value)
+  return c && c.activo ? c : null
 })
 
 const canalesMostrados = computed(() => {
