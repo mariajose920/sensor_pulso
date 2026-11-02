@@ -85,6 +85,9 @@
         </div>
       </div>
 
+      <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad (RF19) -->
+      <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+
       <!-- SECCIÓN: Primer Administrador (Arranque Inicial) -->
       <div class="seed-card card mt-4">
         <h2 class="section-title">Inicialización del Sistema</h2>
@@ -234,6 +237,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import RangosPanel from '../components/RangosPanel.vue'
 import { verificarOCrearPrimerAdmin, obtenerCuentas, actualizarRolCuenta } from '../services/adminService'
 import { obtenerEtiquetaPerfil } from '../utils/roles'
 import { obtenerPermisosProfesor, guardarPermisosProfesor, PERMISOS_DEFAULT } from '../services/adminService'

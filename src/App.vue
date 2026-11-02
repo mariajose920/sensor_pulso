@@ -65,7 +65,7 @@ import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
 import { useAuth } from './composables/useAuth'
 
-const { isAuthenticated, currentUserName, roleLabel, isAdmin, logout } = useAuth()
+const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout } = useAuth()
 
 const enlacesBase = [
   { to: '/', texto: 'Inicio', corto: 'Inicio', icono: 'inicio', exacto: true },
@@ -76,12 +76,13 @@ const enlacesBase = [
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
 
-// RF97: el enlace Admin solo lo ven los administradores
+// RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
 // RF30: el historial de mediciones solo lo ve quien tiene sesión
 const enlaces = computed(() => {
   const lista = [...enlacesBase]
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
+  else if (isProfesor.value) lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
   return lista
 })
 
