@@ -26,8 +26,16 @@
       </button>
     </div>
 
+    <!-- RF16: con calidad mala no se clasifica el ritmo; se avisa en lugar de clasificar -->
+    <div v-if="!clasificable" class="ritmo-banner ritmo-no-clasificado" role="alert">
+      <strong>No se clasifica el ritmo.</strong>
+      La calidad de la señal es mala, así que esta medición no se clasifica ni se guarda como válida.
+      Corrige la causa indicada en el aviso de calidad y repite la medición.
+    </div>
+
     <!-- 1. Estado Activo de la Medición en Vivo -->
     <div
+      v-else
       class="ritmo-banner"
       :style="{
         backgroundColor: clasificacion.bgHex,
@@ -150,6 +158,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { clasificarRitmo, GUIA_RITMOS_CLINICOS } from '../services/ritmoService.js'
+import { puedeClasificar } from '../utils/explicacionCalidad.js'
 
 const props = defineProps({
   bpm: { type: Number, default: 0 },
@@ -159,8 +168,12 @@ const props = defineProps({
   lastIntervalMs: { type: Number, default: 0 },
   regularityLevel: { type: String, default: 'normal' },
   totalBeats: { type: Number, default: 0 },
-  paciente: { type: Object, default: null }
+  paciente: { type: Object, default: null },
+  // RF16: calidad de la señal (RF15). Con 'mala' no se clasifica. Sin dato, se clasifica como antes.
+  calidad: { type: String, default: 'buena' }
 })
+
+const clasificable = computed(() => puedeClasificar(props.calidad))
 
 const mostrarGuiaCompleta = ref(false)
 const tabSeleccionada = ref('normal')
@@ -184,6 +197,14 @@ const ritmoSeleccionado = computed(() => {
 </script>
 
 <style scoped>
+.ritmo-no-clasificado {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #7f1d1d;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .clasificacion-header {
   display: flex;
   justify-content: space-between;

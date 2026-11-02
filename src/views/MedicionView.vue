@@ -103,6 +103,7 @@
       :muestrasIr="senalBuffer.ir"
       :muestrasRojo="senalBuffer.rojo"
       :frecuenciaHz="esp32State.frecuenciaHz"
+      @repetir="repetirMedicionCanal"
     />
 
     <!-- Grid de los 5 Canales Fisiológicos Simultáneos (RF08, RF12) -->
@@ -285,7 +286,8 @@ import {
   detenerSondeoWiFi,
   emitirPaquetePruebaWiFi,
   toggleSimuladorWiFi,
-  setCanalOsciloscopio
+  setCanalOsciloscopio,
+  repetirMedicionCanal
 } from '../services/esp32Service'
 import {
   canalesState,
