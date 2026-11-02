@@ -9,9 +9,7 @@
         <span class="canal-badge">Canal {{ canalData.canal }}</span>
         <span v-if="esMiCanal" class="badge-mi-canal">⭐ Mi Canal</span>
       </div>
-      <span class="calidad-badge" :class="'calidad-' + (canalData.calidad || 'buena')">
-        {{ canalData.calidad || 'buena' }}
-      </span>
+      <CalidadSenalBadge :nivel="canalData.calidad || 'buena'" :causas="canalData.causasCalidad || []" />
     </div>
 
     <div v-if="asignadoA" class="assigned-user-tag font-mono">
@@ -43,6 +41,8 @@
 </template>
 
 <script setup>
+import CalidadSenalBadge from './CalidadSenalBadge.vue'
+
 defineProps({
   canalData: {
     type: Object,

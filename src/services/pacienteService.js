@@ -2,7 +2,7 @@
  * Servicio para Datos Declarados del Paciente y Factores de Medición (RF03)
  *
  * Cumple estrictamente con:
- * - Datos obligatorios: nombre, edad (5-120) y nivel de estrés.
+ * - Datos obligatorios: nombre, edad (18-120, solo mayores de edad) y nivel de estrés.
  * - Factores que afectan la medición: sueño, cafeína, medicación, actividad previa y condición de salud.
  * - Persistencia en Supabase (tabla declaraciones_paciente con bytea para datos_cifrados)
  * - Persistencia en localStorage para soporte sin conexión (RNF03 - PWA offline).
@@ -161,8 +161,8 @@ export const pacienteService = {
     }
 
     const edadNum = Number(datos.edad)
-    if (!datos.edad || isNaN(edadNum) || !Number.isInteger(edadNum) || edadNum < 5 || edadNum > 120) {
-      errores.push('La edad es obligatoria y debe ser un número entero entre 5 y 120 años.')
+    if (!datos.edad || isNaN(edadNum) || !Number.isInteger(edadNum) || edadNum < 18 || edadNum > 120) {
+      errores.push('La edad es obligatoria y debe ser un número entero entre 18 y 120 años. Solo se miden personas mayores de edad.')
     }
 
     if (!datos.nivelEstres || !NIVELES_ESTRES.some(n => n.id === datos.nivelEstres)) {

@@ -77,10 +77,13 @@ const enlacesBase = [
 ]
 
 // RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
+// RF30: el historial de mediciones solo lo ve quien tiene sesión
 const enlaces = computed(() => {
-  if (isAdmin.value) return [...enlacesBase, { to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' }]
-  if (isProfesor.value) return [...enlacesBase, { to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' }]
-  return enlacesBase
+  const lista = [...enlacesBase]
+  if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
+  if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
+  else if (isProfesor.value) lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
+  return lista
 })
 
 // Se ocultan al bajar y reaparecen al subir. El estilo solo se aplica en móvil (ver @media).

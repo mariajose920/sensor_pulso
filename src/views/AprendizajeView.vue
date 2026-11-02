@@ -248,7 +248,17 @@
       :isBeating="peakDetector.isBeating.value"
       :totalBeats="peakDetector.totalBeatsDetected.value"
       :lastIntervalMs="peakDetector.lastIntervalMs.value"
+      :calidad="calidadSenal.nivel"
     />
+
+    <!-- Calidad de la señal simulada (RF15): ruido, movimiento y recorte, en vivo -->
+    <div class="calidad-simulador" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+      <strong style="font-size:0.85rem;">Calidad de la señal:</strong>
+      <CalidadSenalBadge :nivel="calidadSenal.nivel" :causas="calidadSenal.causas" mostrar-causa />
+    </div>
+
+    <!-- RF16: con calidad regular o mala explica la causa y sugiere repetir; con calidad buena no aparece -->
+    <AvisoCalidadSenal :nivel="calidadSenal.nivel" :causas="calidadSenal.causas" @repetir="handleResetSim" />
 
     <!-- 4. Osciloscopio con Senal Simulada y Marcadores de Picos Sistolicos (Puntos Rojos) -->
     <PeakOscilloscopeCanvas
@@ -266,6 +276,7 @@
       :lastIntervalMs="peakDetector.lastIntervalMs.value"
       :regularityLevel="peakDetector.regularityLevel.value"
       :totalBeats="peakDetector.totalBeatsDetected.value"
+      :calidad="calidadSenal.nivel"
     />
   </div>
 
@@ -304,6 +315,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useSignalSimulator } from '../composables/useSignalSimulator.js'
+import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
+import AvisoCalidadSenal from '../components/AvisoCalidadSenal.vue'
+import { evaluarCalidad, MAXIMO_SIMULADOR } from '../utils/calidadSenal.js'
 import { usePeakDetector } from '../composables/usePeakDetector.js'
 import { PpgDcFilter } from '../utils/ppgFilter.js'
 
@@ -335,8 +349,26 @@ const simulator = useSignalSimulator({
   arrhythmia: 'normal'
 })
 
+// RF15: ventana de ~3 s del valor crudo (0-4095) para evaluar la calidad cada 0,25 s
+const VENTANA_CALIDAD = 300
+const ventanaCalidad = []
+let muestrasDesdeCalidad = 0
+const calidadSenal = ref({ nivel: 'sin_senal', causas: [] })
+
+function actualizarCalidad(valor) {
+  ventanaCalidad.push(valor)
+  if (ventanaCalidad.length > VENTANA_CALIDAD) ventanaCalidad.shift()
+  if (++muestrasDesdeCalidad < 25) return
+  muestrasDesdeCalidad = 0
+  const r = evaluarCalidad(ventanaCalidad, { frecuenciaHz: 100, maximo: MAXIMO_SIMULADOR })
+  calidadSenal.value = { nivel: r.nivel, causas: r.causas }
+  peakDetector.setCalidad(r.nivel) // RF16: con calidad mala no se guarda como válida
+}
+
 // Conectar el flujo continuo de 100 Hz del simulador al filtro y detector
 simulator.subscribe((sample) => {
+  actualizarCalidad(sample.value)
+
   // 1. Filtrar componente DC
   const filtered = dcFilter.process(sample.value)
 
@@ -362,6 +394,9 @@ function handleArrhythmiaSelect(type) {
 }
 
 function handleResetSim() {
+  ventanaCalidad.length = 0
+  calidadSenal.value = { nivel: 'sin_senal', causas: [] }
+  peakDetector.setCalidad('sin_senal')
   simulator.reset()
   dcFilter.reset()
   peakDetector.reset()
