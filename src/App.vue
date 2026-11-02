@@ -77,9 +77,13 @@ const enlacesBase = [
 ]
 
 // RF97: el enlace Admin solo lo ven los administradores
-const enlaces = computed(() =>
-  isAdmin.value ? [...enlacesBase, { to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' }] : enlacesBase
-)
+// RF30: el historial de mediciones solo lo ve quien tiene sesión
+const enlaces = computed(() => {
+  const lista = [...enlacesBase]
+  if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
+  if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
+  return lista
+})
 
 // Se ocultan al bajar y reaparecen al subir. El estilo solo se aplica en móvil (ver @media).
 const { oculto, mostrar } = useScrollDirection()

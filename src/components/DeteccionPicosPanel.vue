@@ -42,6 +42,21 @@
       </router-link>
     </div>
 
+    <!-- RF30: guardar la medición en la cuenta y consultarla en el historial -->
+    <GuardarMedicionCard
+      v-if="peakDetector.currentBpm.value > 0"
+      :bpm="peakDetector.currentBpm.value"
+      :rmssd="peakDetector.rmssd.value"
+      :sdnn="peakDetector.sdnn.value"
+      :ritmo="clasificacionParaGuardar.id"
+      :explicacionRitmo="clasificacionParaGuardar.explicacionPorque"
+      :calidad="calidadSenal.nivel"
+      :causasCalidad="calidadSenal.causas"
+      :fuente="isSimulating ? 'simulador' : 'sensor'"
+      :paciente="paciente"
+      @solicitar-consentimiento="(accion) => emit('solicitar-consentimiento', accion)"
+    />
+
     <!-- 2. Metricas en Tiempo Real (RF17: BPM, HRV, Regularidad, Picos) -->
     <PeakMetricsCards
       :currentBpm="peakDetector.currentBpm.value"
@@ -104,6 +119,8 @@ import ClasificacionRitmoCard from './ClasificacionRitmoCard.vue'
 import CalidadSenalBadge from './CalidadSenalBadge.vue'
 import AvisoCalidadSenal from './AvisoCalidadSenal.vue'
 import { evaluarCalidad, MAXIMO_SIMULADOR } from '../utils/calidadSenal.js'
+import GuardarMedicionCard from './GuardarMedicionCard.vue'
+import { clasificarRitmo } from '../services/ritmoService.js'
 
 const oscilloscopeRef = ref(null)
 const serialSensor = useSerialSensor()
@@ -122,6 +139,18 @@ const peakDetector = usePeakDetector({
   refractoryMs: 380,
   windowSize: 8
 })
+
+// RF30: ritmo (RF18) y su explicación para guardarlos junto a la medición
+const clasificacionParaGuardar = computed(() => clasificarRitmo({
+  bpm: peakDetector.currentBpm.value,
+  instantBpm: peakDetector.instantBpm.value,
+  sdnn: peakDetector.sdnn.value,
+  rmssd: peakDetector.rmssd.value,
+  lastIntervalMs: peakDetector.lastIntervalMs.value,
+  regularityLevel: peakDetector.regularityLevel.value,
+  totalBeats: peakDetector.totalBeatsDetected.value,
+  paciente: props.paciente
+}))
 
 const isSignalActive = computed(() => {
   return (serialSensor.isConnected.value && serialSensor.isReading.value) || isSimulating.value
