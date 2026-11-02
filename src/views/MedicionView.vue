@@ -106,30 +106,14 @@
       @repetir="repetirMedicionCanal"
     />
 
-    <!-- Grid de los 5 Canales Fisiológicos Simultáneos (RF08, RF12) -->
-    <div class="section-container">
-      <div class="section-header">
-        <div>
-          <h2 class="section-title">Canales Fisiológicos Simultáneos (ESP32)</h2>
-          <span class="section-hint">Selecciona un canal para inspeccionar su traza en el osciloscopio</span>
-        </div>
-        <div v-if="miCanalAsignado" class="mi-canal-indicator">
-          <span>Estás midiendo en el <strong>Canal {{ miCanalAsignado }}</strong></span>
-        </div>
-      </div>
-
-      <div class="canales-grid">
-        <CanalCard
-          v-for="c in canalesMostrados"
-          :key="c.canal"
-          :canalData="c"
-          :seleccionado="canalSeleccionado === c.canal"
-          :esMiCanal="miCanalAsignado === c.canal"
-          :asignadoA="obtenerNombreAsignado(c.canal)"
-          @select="seleccionarCanal"
-        />
-      </div>
-    </div>
+    <!-- RF08: Visualizar hasta 5 canales a la vez, cada uno con BPM y SpO₂ (con soporte de asignación RF12) -->
+    <MultiCanalMonitor
+      :canales="canalesMostrados"
+      :canalSeleccionado="canalSeleccionado"
+      :miCanalAsignado="miCanalAsignado"
+      :obtenerNombreAsignado="obtenerNombreAsignado"
+      @select="seleccionarCanal"
+    />
 
     <!-- RF30: guardar la medición del canal seleccionado (solo con datos reales del ESP32, no los de ejemplo) -->
     <GuardarMedicionCard
@@ -240,6 +224,10 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
         </p>
         <table class="api-table">
           <tr>
+            <th>Visualización 5 Canales (RF08)</th>
+            <td>Supervisión simultánea y concurrente de hasta 5 canales fisiológicos del ESP32 con BPM, SpO₂, calidad y mini-traza PPG en tiempo real (vista tarjetas, monitor UCI y tabla comparativa).</td>
+          </tr>
+          <tr>
             <th>Medición SpO₂ (RF114)</th>
             <td>Adquisición óptica dual 660 nm (Rojo) y 880-940 nm (IR) con sensor MAX30102 para hasta 5 canales simultáneos, ratio de razones R y curva empírica <code>SpO₂ = 110 - 25·R</code>.</td>
           </tr>
@@ -290,6 +278,7 @@ import ValorSpo2Card from '../components/ValorSpo2Card.vue'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
+import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
 import {

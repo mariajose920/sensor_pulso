@@ -1,6 +1,7 @@
 import { ref, reactive } from 'vue'
 import { supabase } from './supabase'
 import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
+import { actualizarBuffersMultiCanal } from './multiCanalService'
 
 // Estado reactivo global de la telemetría del ESP32
 export const esp32State = reactive({
@@ -69,6 +70,7 @@ export async function consultarTelemetriaWiFi() {
     esp32State.rssi = data.rssi
     esp32State.paquete = data.paquete || 0
     esp32State.canales = calidadPorCanal(data.canales || [])
+    actualizarBuffersMultiCanal(esp32State.canales)
 
     if (data.ultimoContacto) {
       const diffMs = Date.now() - new Date(data.ultimoContacto).getTime()
