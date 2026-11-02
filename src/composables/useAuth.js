@@ -3,6 +3,12 @@ import { supabase } from '../services/supabase'
 import { validarCorreoInstitucional } from '../utils/validators'
 import { ROLES, tienePermiso, obtenerEtiquetaPerfil } from '../utils/roles'
 import { PRIMER_ADMIN } from '../../scripts/seedAdmin.js'
+import { 
+  verificarEstadoBloqueo, 
+  registrarIntentoLogin, 
+  formatearTiempoRestante, 
+  solicitarRecuperacionContrasena 
+} from '../services/seguridadLoginService'
 
 // Estado reactivo global
 const user = ref(JSON.parse(localStorage.getItem('sensor_user') || 'null'))
@@ -76,12 +82,28 @@ export function useAuth() {
   const can = (permiso) => tienePermiso(currentUserRole.value, permiso)
 
   // RF02 & RF44: Inicio de sesión con soporte para Administrador Inicial
-  const login = async (email, password) => {
+    const login = async (email, password) => {
     authError.value = null
     loading.value = true
 
-    // Detección directa del Administrador Inicial definido en código (RF44)
+    // 1. Criterio de aceptación RF50: Verificar si la cuenta está bloqueada ANTES de validar la contraseña
+    const estadoBloqueo = await verificarEstadoBloqueo(email)
+    if (estadoBloqueo.bloqueado) {
+      loading.value = false
+      const tiempoTexto = formatearTiempoRestante(estadoBloqueo.segundosRestantes)
+      const errorMsg = `Cuenta temporalmente bloqueada por superar el límite de intentos. Podrás reintentar en ${tiempoTexto}.`
+      authError.value = errorMsg
+      return { 
+        success: false, 
+        error: errorMsg, 
+        bloqueado: true, 
+        segundosRestantes: estadoBloqueo.segundosRestantes 
+      }
+    }
+
+    // 2. Detección directa del Administrador Inicial definido en código (RF44)
     if (email === PRIMER_ADMIN.email && password === PRIMER_ADMIN.password) {
+      await registrarIntentoLogin({ correo: email, exitoso: true })
       const adminUser = {
         id: '00000000-0000-0000-0000-000000000001',
         email: PRIMER_ADMIN.email,
@@ -103,19 +125,37 @@ export function useAuth() {
       return { success: true }
     }
 
+    // 3. Intento de inicio de sesión con Supabase Auth
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw error
+
+      // Login exitoso: restablecer contador de fallos
+      await registrarIntentoLogin({ correo: email, exitoso: true })
+
       user.value = data.user
       localStorage.setItem('sensor_user', JSON.stringify(data.user))
       await cargarPerfilDesdeBD(data.user.id)
       return { success: true, data }
     } catch (err) {
-      let mensaje = err.message
-      if (mensaje.includes('Invalid login credentials')) mensaje = 'Correo o contraseña incorrectos.'
-      else if (mensaje.includes('Email not confirmed')) mensaje = 'Debes confirmar tu correo antes de iniciar sesión.'
+      // Login fallido: registrar intento y evaluar bloqueo
+      const resultadoFallo = await registrarIntentoLogin({ correo: email, exitoso: false })
+
+      let mensaje = ''
+      if (resultadoFallo.bloqueado) {
+        const tiempoTexto = formatearTiempoRestante(resultadoFallo.segundosRestantes)
+        mensaje = `Has alcanzado el límite de 5 intentos fallidos. Tu cuenta ha sido bloqueada temporalmente. Espera ${tiempoTexto} antes de reintentar.`
+      } else {
+        mensaje = `Credenciales incorrectas. Te quedan ${resultadoFallo.intentosRestantes} intento(s) antes de que tu cuenta sea bloqueada por 15 minutos.`
+      }
+
       authError.value = mensaje
-      return { success: false, error: mensaje }
+      return { 
+        success: false, 
+        error: mensaje, 
+        bloqueado: resultadoFallo.bloqueado, 
+        segundosRestantes: resultadoFallo.segundosRestantes || 0 
+      }
     } finally {
       loading.value = false
     }
@@ -178,10 +218,11 @@ export function useAuth() {
     isEstudiante,
     roleLabel,
     can,
-    tienePermisoProfesor, // <-- Agregado aquí
+    tienePermisoProfesor,
     login,
     register,
     logout,
-    refrescarPerfil
+    refrescarPerfil,
+    solicitarRecuperacionContrasena
   }
 }
