@@ -110,9 +110,6 @@ export function actualizarBufferCanal() {
   }
 }
 
-/**
- * Cambia el canal observado en el osciloscopio y limpia/recarga el buffer
- */
 // RF16: repetir la medición del canal en pantalla: se descarta lo recibido y se vuelve a evaluar la calidad
 export function repetirMedicionCanal() {
   ventanasCalidad.clear()
@@ -120,6 +117,9 @@ export function repetirMedicionCanal() {
   senalBuffer.rojo = []
 }
 
+/**
+ * Cambia el canal observado en el osciloscopio y limpia/recarga el buffer
+ */
 export function setCanalOsciloscopio(canalNum) {
   senalBuffer.canalSeleccionado = canalNum
   senalBuffer.ir = []
