@@ -26,6 +26,8 @@ export function usePeakDetector(options = {}) {
   const isBeating = ref(false)
   const totalBeatsDetected = ref(0)
   const lastIntervalMs = ref(0)
+  // RF16: calidad de la senal (RF15). Con 'mala' la medicion no se guarda como valida
+  const calidad = ref('buena')
 
   // Variables internas del detector adaptativo
   let peakMax = 50
@@ -184,7 +186,8 @@ export function usePeakDetector(options = {}) {
       }
     }
 
-    // Persistir automaticamente la medicion para RF24
+    // Persistir automaticamente la medicion para RF24 (RF16: no con calidad mala)
+    if (calidad.value === 'mala') return
     try {
       localStorage.setItem('sensor_last_measurement', JSON.stringify({
         bpm: currentBpm.value,
@@ -239,6 +242,10 @@ export function usePeakDetector(options = {}) {
   }
 
 
+  function setCalidad(nivel) {
+    calidad.value = nivel
+  }
+
   // Clasificación del Ritmo Cardíaco en tiempo real (RF18: normal, taquicardia, bradicardia, irregular)
   const rhythmClassification = computed(() => {
     return clasificarRitmo({
@@ -264,6 +271,7 @@ export function usePeakDetector(options = {}) {
     totalBeatsDetected,
     lastIntervalMs,
     processSample,
+    setCalidad,
     handleLeadsOff,
     reset
   }

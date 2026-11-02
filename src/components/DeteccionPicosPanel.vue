@@ -22,7 +22,7 @@
 
     <!-- Barra de Accion: Enviar Medicion a Comparacion (RF24) -->
     <div
-      v-if="peakDetector.currentBpm.value > 0"
+      v-if="peakDetector.currentBpm.value > 0 && calidadSenal.nivel !== 'mala'"
       class="card"
       style="margin-bottom: 1rem; padding: 0.75rem 1.25rem; background: #f0fdf4; border-color: #86efac; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;"
     >
@@ -53,7 +53,16 @@
       :isBeating="peakDetector.isBeating.value"
       :totalBeats="peakDetector.totalBeatsDetected.value"
       :lastIntervalMs="peakDetector.lastIntervalMs.value"
+      :calidad="calidadSenal.nivel"
     />
+
+    <!-- Calidad de la señal (RF15) con la causa y la sugerencia de repetir (RF16) -->
+    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+      <strong style="font-size: 0.85rem;">Calidad de la señal:</strong>
+      <CalidadSenalBadge :nivel="calidadSenal.nivel" :causas="calidadSenal.causas" mostrar-causa />
+    </div>
+    <AvisoCalidadSenal :nivel="calidadSenal.nivel" :causas="calidadSenal.causas" @repetir="repetirMedicion" />
+
     <!-- 3. Osciloscopio con Senal Filtrada y Picos Sistolicos (Puntos Rojos) -->
     <PeakOscilloscopeCanvas
       ref="oscilloscopeRef"
@@ -71,6 +80,7 @@
       :regularityLevel="peakDetector.regularityLevel.value"
       :totalBeats="peakDetector.totalBeatsDetected.value"
       :paciente="paciente"
+      :calidad="calidadSenal.nivel"
     />
   </div>
 </template>
@@ -91,6 +101,9 @@ import Esp32Connection from './Esp32Connection.vue'
 import PeakMetricsCards from './PeakMetricsCards.vue'
 import PeakOscilloscopeCanvas from './PeakOscilloscopeCanvas.vue'
 import ClasificacionRitmoCard from './ClasificacionRitmoCard.vue'
+import CalidadSenalBadge from './CalidadSenalBadge.vue'
+import AvisoCalidadSenal from './AvisoCalidadSenal.vue'
+import { evaluarCalidad, MAXIMO_SIMULADOR } from '../utils/calidadSenal.js'
 
 const oscilloscopeRef = ref(null)
 const serialSensor = useSerialSensor()
@@ -114,9 +127,43 @@ const isSignalActive = computed(() => {
   return (serialSensor.isConnected.value && serialSensor.isReading.value) || isSimulating.value
 })
 
+// RF15: ventana de ~3 s del valor crudo (100 Hz) para evaluar la calidad cada 0,25 s
+const VENTANA_CALIDAD = 300
+const ventanaCalidad = []
+let muestrasDesdeCalidad = 0
+const calidadSenal = ref({ nivel: 'sin_senal', causas: [] })
+
+function actualizarCalidad(valor) {
+  ventanaCalidad.push(valor)
+  if (ventanaCalidad.length > VENTANA_CALIDAD) ventanaCalidad.shift()
+  if (++muestrasDesdeCalidad < 25) return
+  muestrasDesdeCalidad = 0
+  const r = evaluarCalidad(ventanaCalidad, { frecuenciaHz: 100, maximo: MAXIMO_SIMULADOR })
+  calidadSenal.value = { nivel: r.nivel, causas: r.causas }
+  peakDetector.setCalidad(r.nivel) // RF16: con calidad mala no se guarda como válida
+}
+
+function reiniciarCalidad() {
+  ventanaCalidad.length = 0
+  muestrasDesdeCalidad = 0
+  calidadSenal.value = { nivel: 'sin_senal', causas: [] }
+  peakDetector.setCalidad('sin_senal')
+}
+
+// RF16: repetir la medición: se descarta lo medido y se vuelve a evaluar desde cero
+function repetirMedicion() {
+  reiniciarCalidad()
+  dcFilter.reset()
+  peakDetector.reset()
+  if (oscilloscopeRef.value) {
+    oscilloscopeRef.value.clear()
+  }
+}
+
 function processSampleData(tMs, rawValue, leadsOff = false, hardwareBpm = 0) {
   // Si no hay dedo sobre el sensor
   if (leadsOff) {
+    reiniciarCalidad()
     dcFilter.reset()
     peakDetector.handleLeadsOff()
     if (oscilloscopeRef.value) {
@@ -124,6 +171,8 @@ function processSampleData(tMs, rawValue, leadsOff = false, hardwareBpm = 0) {
     }
     return
   }
+
+  actualizarCalidad(rawValue)
 
   // 1. Filtrar la senal
   const filtered = dcFilter.process(rawValue)
@@ -154,6 +203,7 @@ async function handleConnectUsb() {
   }
   const ok = await serialSensor.connect()
   if (ok) {
+    reiniciarCalidad()
     dcFilter.reset()
     peakDetector.reset()
     if (oscilloscopeRef.value) {
@@ -177,6 +227,7 @@ function handleToggleSim() {
 
 function startSimulation() {
   isSimulating.value = true
+  reiniciarCalidad()
   dcFilter.reset()
   peakDetector.reset()
   if (oscilloscopeRef.value) {

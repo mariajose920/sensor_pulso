@@ -46,19 +46,28 @@
         <span style="font-size: 0.72rem; color: #64748b;">AHA</span>
       </div>
       <div style="margin-top: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem;">
-        <span
-          class="badge"
-          :class="clasificacion.badgeClass"
-          style="align-self: flex-start; font-size: 0.82rem;"
-        >
-          {{ clasificacion.nombre }}
-        </span>
-        <span style="font-size: 0.74rem; color: var(--color-muted);">
-          {{ regularityStatus }}
-        </span>
+        <!-- RF16: con calidad mala no se clasifica el ritmo -->
+        <template v-if="!clasificable">
+          <span class="badge badge-usuario" style="align-self: flex-start; font-size: 0.82rem;">Sin clasificar</span>
+          <span style="font-size: 0.74rem; color: var(--color-muted);">
+            Calidad de señal mala: repite la medición.
+          </span>
+        </template>
+        <template v-else>
+          <span
+            class="badge"
+            :class="clasificacion.badgeClass"
+            style="align-self: flex-start; font-size: 0.82rem;"
+          >
+            {{ clasificacion.nombre }}
+          </span>
+          <span style="font-size: 0.74rem; color: var(--color-muted);">
+            {{ regularityStatus }}
+          </span>
+        </template>
       </div>
       <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--color-muted); border-top: 1px solid var(--color-border); padding-top: 0.5rem; display: flex; justify-content: space-between;">
-        <span>Rango ref: <b style="font-family: monospace; color: var(--color-text);">{{ clasificacion.rangoBpm }}</b></span>
+        <span>Rango ref: <b style="font-family: monospace; color: var(--color-text);">{{ clasificable ? clasificacion.rangoBpm : '--' }}</b></span>
       </div>
     </div>
 
@@ -82,6 +91,7 @@
 <script setup>
 import { computed } from 'vue'
 import { clasificarRitmo } from '../services/ritmoService.js'
+import { puedeClasificar } from '../utils/explicacionCalidad.js'
 
 const props = defineProps({
   currentBpm: { type: Number, default: 0 },
@@ -92,8 +102,12 @@ const props = defineProps({
   regularityLevel: { type: String, default: 'normal' },
   isBeating: { type: Boolean, default: false },
   totalBeats: { type: Number, default: 0 },
-  lastIntervalMs: { type: Number, default: 0 }
+  lastIntervalMs: { type: Number, default: 0 },
+  // RF16: calidad de la señal (RF15). Con 'mala' no se clasifica. Sin dato, se clasifica como antes.
+  calidad: { type: String, default: 'buena' }
 })
+
+const clasificable = computed(() => puedeClasificar(props.calidad))
 
 const badgeClass = computed(() => {
   if (props.regularityLevel === 'normal') return 'badge-profesor' // verde/amarillo sutil

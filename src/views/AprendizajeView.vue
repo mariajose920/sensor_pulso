@@ -248,6 +248,7 @@
       :isBeating="peakDetector.isBeating.value"
       :totalBeats="peakDetector.totalBeatsDetected.value"
       :lastIntervalMs="peakDetector.lastIntervalMs.value"
+      :calidad="calidadSenal.nivel"
     />
 
     <!-- Calidad de la señal simulada (RF15): ruido, movimiento y recorte, en vivo -->
@@ -361,6 +362,7 @@ function actualizarCalidad(valor) {
   muestrasDesdeCalidad = 0
   const r = evaluarCalidad(ventanaCalidad, { frecuenciaHz: 100, maximo: MAXIMO_SIMULADOR })
   calidadSenal.value = { nivel: r.nivel, causas: r.causas }
+  peakDetector.setCalidad(r.nivel) // RF16: con calidad mala no se guarda como válida
 }
 
 // Conectar el flujo continuo de 100 Hz del simulador al filtro y detector
@@ -394,6 +396,7 @@ function handleArrhythmiaSelect(type) {
 function handleResetSim() {
   ventanaCalidad.length = 0
   calidadSenal.value = { nivel: 'sin_senal', causas: [] }
+  peakDetector.setCalidad('sin_senal')
   simulator.reset()
   dcFilter.reset()
   peakDetector.reset()
