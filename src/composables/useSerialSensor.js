@@ -1,8 +1,13 @@
 import { ref } from 'vue'
 
 /**
- * Composable para conectar y recibir datos en tiempo real de un sensor físico
- * (ESP32 / MAX30102) a través de la Web Serial API (USB/COM).
+ * Composable para conectar y recibir datos en tiempo real de un sensor fisico
+ * (ESP32 con MAX30100 o MAX30102) a traves de la Web Serial API (USB/COM).
+ *
+ * Compatible con:
+ * - Protocolo 4 columnas: "t_ms, ecg_raw, leads_off, bpm" (MAX30100)
+ * - Protocolo 2 columnas: "ir, red" (MAX30102 crudo)
+ * - Protocolo 3 columnas: "t_ms, ir, red"
  */
 export function useSerialSensor() {
   const isSupported = typeof navigator !== 'undefined' && 'serial' in navigator
@@ -61,7 +66,7 @@ export function useSerialSensor() {
     isReading.value = true
 
     const textDecoder = new TextDecoderStream()
-    const readableStreamClosed = port.readable.pipeTo(textDecoder.writable)
+    port.readable.pipeTo(textDecoder.writable).catch(() => {})
     reader = textDecoder.readable.getReader()
 
     let buffer = ''
@@ -78,27 +83,36 @@ export function useSerialSensor() {
 
           for (const line of lines) {
             const trimmed = line.trim()
-            if (!trimmed) continue
+            if (!trimmed || trimmed.startsWith('#')) continue // Ignorar lineas de depuracion '#...'
             rawLine.value = trimmed
 
             const parts = trimmed.split(/[,;\s]+/).map(Number).filter(n => !isNaN(n))
             if (parts.length > 0) {
-              const tMs = performance.now() - t0
+              let tMs = performance.now() - t0
               let signalVal = parts[0]
-              let ir = parts[0]
-              let red = parts.length > 1 ? parts[1] : parts[0]
+              let leadsOff = false
+              let hardwareBpm = 0
 
-              if (parts.length >= 3) {
-                ir = parts[1]
-                red = parts[2]
-                signalVal = ir
+              if (parts.length >= 4) {
+                // Protocolo: t_ms, ecg_raw/ppg, leads_off, bpm
+                tMs = parts[0]
+                signalVal = parts[1]
+                leadsOff = parts[2] === 1
+                hardwareBpm = parts[3]
+              } else if (parts.length === 3) {
+                // Protocolo: t_ms, ir, red
+                tMs = parts[0]
+                signalVal = parts[1]
+              } else if (parts.length === 2) {
+                // Protocolo: ir, red
+                signalVal = parts[0]
               }
 
               emitSample({
                 tMs,
                 value: signalVal,
-                irRaw: ir,
-                redRaw: red,
+                leadsOff,
+                hardwareBpm,
                 isPhysical: true
               })
             }
@@ -114,24 +128,19 @@ export function useSerialSensor() {
 
   async function disconnect() {
     keepReading = false
-    if (reader) {
-      try {
+    try {
+      if (reader) {
         await reader.cancel()
-      } catch (e) {
-        // Ignorar
+        reader.releaseLock()
+        reader = null
       }
-      reader = null
-    }
-
-    if (port) {
-      try {
+      if (port) {
         await port.close()
-      } catch (e) {
-        // Ignorar
+        port = null
       }
-      port = null
+    } catch (err) {
+      // Ignorar errores al cerrar
     }
-
     isConnected.value = false
     isReading.value = false
     portInfo.value = ''

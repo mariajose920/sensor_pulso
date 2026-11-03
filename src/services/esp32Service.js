@@ -1,5 +1,7 @@
 import { ref, reactive } from 'vue'
 import { supabase } from './supabase'
+import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
+import { actualizarBuffersMultiCanal } from './multiCanalService'
 
 // Estado reactivo global de la telemetría del ESP32
 export const esp32State = reactive({
@@ -16,13 +18,35 @@ export const esp32State = reactive({
   error: null
 })
 
-// Buffer circular de muestras de señal para graficar en tiempo real
+// Buffer circular de muestras de señal para graficar en tiempo real (RF06)
 export const senalBuffer = reactive({
   canalSeleccionado: 1,
-  // Mantener las últimas 250 muestras para el osciloscopio
+  // Soporta hasta 500 muestras (~10 segundos a 50 Hz)
+  capacidadMaxima: 500,
   ir: [],
-  rojo: []
+  rojo: [],
+  congelado: false
 })
+
+// RF15: ventana reciente de muestras IR por canal (~3 s) para medir la calidad de cada uno
+const SEGUNDOS_VENTANA_CALIDAD = 3
+const ventanasCalidad = new Map()
+
+function calidadPorCanal(canales) {
+  const hz = esp32State.frecuenciaHz || 50
+  const maxMuestras = Math.round(SEGUNDOS_VENTANA_CALIDAD * hz)
+  return canales.map((c) => {
+    const ventana = ventanasCalidad.get(c.canal) || []
+    if (Array.isArray(c.ir)) ventana.push(...c.ir)
+    if (ventana.length > maxMuestras) ventana.splice(0, ventana.length - maxMuestras)
+    ventanasCalidad.set(c.canal, ventana)
+
+    const r = evaluarCalidad(ventana, { frecuenciaHz: hz, maximo: MAXIMO_MAX30102 })
+    // Sin muestras suficientes se conserva la calidad que informó el dispositivo.
+    if (r.nivel === 'sin_senal') return { ...c, causasCalidad: [] }
+    return { ...c, calidad: r.nivel, causasCalidad: r.causas }
+  })
+}
 
 let pollingInterval = null
 let simuladorInterval = null
@@ -45,15 +69,18 @@ export async function consultarTelemetriaWiFi() {
     esp32State.ip = data.ip
     esp32State.rssi = data.rssi
     esp32State.paquete = data.paquete || 0
-    esp32State.canales = data.canales || []
+    esp32State.canales = calidadPorCanal(data.canales || [])
+    actualizarBuffersMultiCanal(esp32State.canales)
 
     if (data.ultimoContacto) {
       const diffMs = Date.now() - new Date(data.ultimoContacto).getTime()
       esp32State.tiempoTranscurridoSegundos = Math.max(0, Math.round(diffMs / 1000))
     }
 
-    // Actualizar buffer de muestras del canal actualmente visible
-    actualizarBufferCanal()
+    // Actualizar buffer de muestras del canal actualmente visible si no está congelado (RF06)
+    if (!senalBuffer.congelado) {
+      actualizarBufferCanal()
+    }
 
     esp32State.error = null
     return data
@@ -66,19 +93,40 @@ export async function consultarTelemetriaWiFi() {
 /**
  * Actualiza el buffer de graficación para el canal seleccionado
  */
-function actualizarBufferCanal() {
+export function actualizarBufferCanal() {
   const canalData = esp32State.canales.find(c => c.canal === senalBuffer.canalSeleccionado)
   if (!canalData) return
 
   if (Array.isArray(canalData.ir) && canalData.ir.length > 0) {
     canalData.ir.forEach(val => senalBuffer.ir.push(val))
-    while (senalBuffer.ir.length > 250) senalBuffer.ir.shift()
+    while (senalBuffer.ir.length > senalBuffer.capacidadMaxima) {
+      senalBuffer.ir.shift()
+    }
   }
 
   if (Array.isArray(canalData.rojo) && canalData.rojo.length > 0) {
     canalData.rojo.forEach(val => senalBuffer.rojo.push(val))
-    while (senalBuffer.rojo.length > 250) senalBuffer.rojo.shift()
+    while (senalBuffer.rojo.length > senalBuffer.capacidadMaxima) {
+      senalBuffer.rojo.shift()
+    }
   }
+}
+
+// RF16: repetir la medición del canal en pantalla: se descarta lo recibido y se vuelve a evaluar la calidad
+export function repetirMedicionCanal() {
+  ventanasCalidad.clear()
+  senalBuffer.ir = []
+  senalBuffer.rojo = []
+}
+
+/**
+ * Cambia el canal observado en el osciloscopio y limpia/recarga el buffer
+ */
+export function setCanalOsciloscopio(canalNum) {
+  senalBuffer.canalSeleccionado = canalNum
+  senalBuffer.ir = []
+  senalBuffer.rojo = []
+  actualizarBufferCanal()
 }
 
 /**
@@ -126,8 +174,10 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
       const t = (now / 1000 + i * (1 / 50)) * (2 * Math.PI * freqHz)
       const ph = t % (2 * Math.PI)
       const ppg = Math.exp(-Math.pow(ph - 1.2, 2) / 0.18) + 0.35 * Math.exp(-Math.pow(ph - 2.3, 2) / 0.12)
-      const valIr = 24500 + c * 300 + 1400 * ppg + (Math.random() - 0.5) * 10
-      const valRed = 21000 + c * 250 + 900 * ppg + (Math.random() - 0.5) * 10
+      // Modelo de absorción óptica del MAX30102 (RF114)
+      const ratioSpO2 = (110.0 - spo2) / 25.0
+      const valIr = 24500 + c * 300 + 1400 * ppg + (Math.random() - 0.5) * 8
+      const valRed = 21000 + c * 250 + (1400 * ppg * ratioSpO2 * ((21000 + c * 250) / (24500 + c * 300))) + (Math.random() - 0.5) * 8
       ir.push(parseFloat(valIr.toFixed(1)))
       rojo.push(parseFloat(valRed.toFixed(1)))
     }

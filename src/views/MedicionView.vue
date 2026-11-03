@@ -3,20 +3,52 @@
     <!-- Encabezado de la vista -->
     <div class="view-header">
       <div>
-        <h1 class="view-title">📡 Medición y Tiempo Real</h1>
+        <h1 class="view-title">Medición y Tiempo Real</h1>
         <p class="view-subtitle">
-          Recepción de datos del microcontrolador ESP32 por WiFi (RF05), autenticación por token (RF54) y visualización multicanal.
+          Recepción de datos del microcontrolador ESP32 por WiFi, autenticación con token y vinculación de canales a cuentas de estudiantes.
         </p>
       </div>
+    </div>
 
-      <div class="header-actions">
-        <button 
-          class="btn" 
-          :class="simuladorActivo ? 'btn-danger' : 'btn-primary'"
-          @click="toggleSimulador"
+    <!-- RF01: Identificador del usuario que realiza la medición -->
+    <!-- Banner de Alerta cuando no se otorga consentimiento (RF04) -->
+    <div v-if="mensajeAlertaConsentimiento" class="alerta-consentimiento-rechazado">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 1.15rem;">⚠️</span>
+        <span>{{ mensajeAlertaConsentimiento }}</span>
+      </div>
+      <button 
+        type="button" 
+        class="btn btn-sm btn-secondary" 
+        style="padding: 0.25rem 0.65rem; font-size: 0.78rem;"
+        @click="abrirConsentimiento"
+      >
+        Revisar Consentimiento
+      </button>
+    </div>
+
+    <UserIdentifier />
+
+    <!-- RF03: Datos del paciente obligatorios y factores que afectan la medición -->
+    <DatosPacienteCard @paciente-actualizado="onPacienteActualizado" @abrir-consentimiento="modalConsentimientoVisible = true" />
+
+    <!-- Vinculación del Paciente Activo a la Medición en Vivo (RF03 / RF19) -->
+    <div v-if="pacienteActivo" class="paciente-vinculado-banner">
+      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <span class="punto-verde">●</span>
+        <span>Paciente en medición: <strong>{{ pacienteActivo.nombre }}</strong> ({{ pacienteActivo.edad }} años)</span>
+      </div>
+      <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; font-size: 0.8rem;">
+        <span class="badge-subtle">Estrés: {{ pacienteActivo.nivelEstres }}</span>
+        <span class="badge-subtle">Medicación: {{ pacienteActivo.medicacion || 'Ninguna' }}</span>
+        <span class="badge-subtle">Actividad: {{ pacienteActivo.actividadPrevia || 'Reposo' }}</span>
+        <span 
+          v-if="consentimientoEstado.vigente" 
+          class="badge-subtle badge-consentimiento-rf59"
+          :title="'Consentimiento RF59 registrado el ' + formatearFechaHora(consentimientoEstado.aceptadoEn)"
         >
-          {{ simuladorActivo ? '⏹️ Detener Emulador WiFi' : '▶️ Iniciar Prueba WiFi (5 canales)' }}
-        </button>
+          ✓ Consentimiento v{{ consentimientoEstado.version }} ({{ formatearFechaHoraCorta(consentimientoEstado.aceptadoEn) }})
+        </span>
       </div>
     </div>
 
@@ -30,6 +62,40 @@
       :tiempoDesdeContacto="esp32State.tiempoTranscurridoSegundos"
     />
 
+    <!-- Componente de Vinculación de Canales por Cuenta (RF12 / RF111) -->
+    <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+
+    <!-- Monitores de Biomarcadores Fisiológicos en Tiempo Real (RF07: BPM, RF114: SpO₂) -->
+    <div class="biomarcadores-grid">
+      <!-- RF07: Monitor y Despliegue del Valor de Frecuencia Cardíaca (BPM) -->
+      <ValorBpmCard
+        :canal="canalSeleccionado"
+        :bpm="canalActivoData?.bpm || 0"
+        :instantBpm="monitorBpm.stats.instantBpm"
+        :promedioBpm="monitorBpm.stats.averageBpm"
+        :minBpm="monitorBpm.stats.minBpm"
+        :maxBpm="monitorBpm.stats.maxBpm"
+        :totalLecturas="monitorBpm.stats.totalLecturas"
+        :estabilidadTexto="monitorBpm.stats.estabilidad"
+        :estabilidadNivel="monitorBpm.stats.estabilidadNivel"
+        :edadPaciente="pacienteActivo?.edad || 25"
+        :actividadPaciente="pacienteActivo?.actividadPrevia || 'reposo'"
+      />
+
+      <!-- RF114: Monitor y Despliegue de la Saturación de Oxígeno (SpO₂) con MAX30102 -->
+      <ValorSpo2Card
+        :canal="canalSeleccionado"
+        :spo2="canalActivoData?.spo2 || 0"
+        :instantSpo2="monitorSpo2.stats.instantSpo2"
+        :promedioSpo2="monitorSpo2.stats.averageSpo2"
+        :minSpo2="monitorSpo2.stats.minSpo2"
+        :maxSpo2="monitorSpo2.stats.maxSpo2"
+        :totalLecturas="monitorSpo2.stats.totalLecturas"
+        :ratioR="monitorSpo2.stats.ratioR"
+        :perfusionIndex="monitorSpo2.stats.indicePerfusion"
+      />
+    </div>
+
     <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
     <OsciloscopioCanvas
       :canal="canalSeleccionado"
@@ -37,25 +103,30 @@
       :muestrasIr="senalBuffer.ir"
       :muestrasRojo="senalBuffer.rojo"
       :frecuenciaHz="esp32State.frecuenciaHz"
+      @repetir="repetirMedicionCanal"
     />
 
-    <!-- Grid de los 5 Canales Fisiológicos Simultáneos (RF08, RF12) -->
-    <div class="section-container">
-      <div class="section-header">
-        <h2 class="section-title">Canales Fisiológicos Simultáneos (ESP32)</h2>
-        <span class="section-hint">Selecciona un canal para inspeccionar su traza en el osciloscopio</span>
-      </div>
+    <!-- RF08: Visualizar hasta 5 canales a la vez, cada uno con BPM y SpO₂ (con soporte de asignación RF12) -->
+    <MultiCanalMonitor
+      :canales="canalesMostrados"
+      :canalSeleccionado="canalSeleccionado"
+      :miCanalAsignado="miCanalAsignado"
+      :obtenerNombreAsignado="obtenerNombreAsignado"
+      @select="seleccionarCanal"
+    />
 
-      <div class="canales-grid">
-        <CanalCard
-          v-for="c in canalesMostrados"
-          :key="c.canal"
-          :canalData="c"
-          :seleccionado="canalSeleccionado === c.canal"
-          @select="seleccionarCanal"
-        />
-      </div>
-    </div>
+    <!-- RF30: guardar la medición del canal seleccionado (solo con datos reales del ESP32, no los de ejemplo) -->
+    <GuardarMedicionCard
+      v-if="canalRealParaGuardar"
+      :bpm="canalRealParaGuardar.bpm || 0"
+      :spo2="canalRealParaGuardar.spo2 || 0"
+      :calidad="canalRealParaGuardar.calidad || 'sin_senal'"
+      :causasCalidad="canalRealParaGuardar.causasCalidad || []"
+      fuente="sensor"
+      :canal="canalSeleccionado"
+      :paciente="pacienteActivo"
+      @solicitar-consentimiento="solicitarConsentimientoConAccion"
+    />
 
     <!-- Panel de Pruebas, Diagnóstico y Firmware -->
     <div class="card test-panel">
@@ -79,7 +150,7 @@
           :class="{ active: tabActiva === 'api' }"
           @click="tabActiva = 'api'"
         >
-          🌐 Documentación de Endpoint Ingesta
+          🌐 Documentación de Ingesta y Canales
         </button>
       </div>
 
@@ -149,40 +220,67 @@ const char* DEVICE_TOKEN  = "{{ tokenPrueba }}";
       <!-- Tab 3: Documentación de Ingesta -->
       <div v-if="tabActiva === 'api'" class="tab-content">
         <p class="tab-description">
-          Especificación del endpoint REST de ingesta de telemetría de alta disponibilidad para Vercel y Vite:
+          Especificación de la arquitectura de vinculación de canales (RF12) y telemetría (RF05):
         </p>
         <table class="api-table">
           <tr>
-            <th>Método & Ruta</th>
-            <td><code>POST /api/esp32/telemetria</code></td>
+            <th>Visualización 5 Canales (RF08)</th>
+            <td>Supervisión simultánea y concurrente de hasta 5 canales fisiológicos del ESP32 con BPM, SpO₂, calidad y mini-traza PPG en tiempo real (vista tarjetas, monitor UCI y tabla comparativa).</td>
           </tr>
           <tr>
-            <th>Cabeceras</th>
-            <td>
-              <code>Content-Type: application/json</code><br />
-              <code>X-ESP32-Token: &lt;token_del_esp32&gt;</code> (RF54)<br />
-              <code>Authorization: Bearer &lt;token_del_esp32&gt;</code>
-            </td>
+            <th>Medición SpO₂ (RF114)</th>
+            <td>Adquisición óptica dual 660 nm (Rojo) y 880-940 nm (IR) con sensor MAX30102 para hasta 5 canales simultáneos, ratio de razones R y curva empírica <code>SpO₂ = 110 - 25·R</code>.</td>
+          </tr>
+          <tr>
+            <th>Vinculación Canales (RF12)</th>
+            <td>Función atómica <code>elegir_canal(p_sesion, p_canal)</code>: Asigna el canal al estudiante que lo selecciona si está libre.</td>
+          </tr>
+          <tr>
+            <th>Gestión Docente (RF111)</th>
+            <td>Función <code>asignar_canal()</code> para liberar/corregir canales y control de rondas consecutivas de 5 estudiantes.</td>
           </tr>
           <tr>
             <th>Seguridad (RF54)</th>
-            <td>Validación criptográfica SHA-256 del token en la tabla <code>dispositivos</code> y comprobación de estado no revocado.</td>
+            <td>Token SHA-256 por microcontrolador, validación de sesiones activas y revocación en tiempo real.</td>
           </tr>
           <tr>
             <th>Consulta en vivo</th>
-            <td><code>GET /api/esp32/telemetria</code> retorna el estado actual de conexión y métricas del último paquete.</td>
+            <td><code>GET /api/esp32/telemetria</code> retorna estado de conexión, canales y métricas fisiológicas.</td>
           </tr>
         </table>
       </div>
     </div>
+
+    <!-- RF17: detección de picos, BPM y HRV -->
+    <DeteccionPicosPanel :paciente="pacienteActivo" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+
+    <!-- RF04: Pantalla emergente de consentimiento informado antes de medir -->
+    <ConsentimientoModal
+      :visible="modalConsentimientoVisible"
+      @aceptado="onConsentimientoAceptado"
+      @rechazado="onConsentimientoRechazado"
+      @cerrar="cerrarConsentimiento"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import UserIdentifier from '../components/UserIdentifier.vue'
+import ConsentimientoModal from '../components/ConsentimientoModal.vue'
+import { crearMonitorEstadisticasBpm } from '../services/bpmService'
+import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
+import DatosPacienteCard from '../components/DatosPacienteCard.vue'
+import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
 import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
+import ValorBpmCard from '../components/ValorBpmCard.vue'
+import ValorSpo2Card from '../components/ValorSpo2Card.vue'
+import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
+import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
+import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
+import VinculacionCanales from '../components/VinculacionCanales.vue'
 import {
   esp32State,
   senalBuffer,
@@ -190,8 +288,58 @@ import {
   iniciarSondeoWiFi,
   detenerSondeoWiFi,
   emitirPaquetePruebaWiFi,
-  toggleSimuladorWiFi
+  toggleSimuladorWiFi,
+  setCanalOsciloscopio,
+  repetirMedicionCanal
 } from '../services/esp32Service'
+import {
+  canalesState,
+  miCanalAsignado
+} from '../services/canalesService'
+
+const pacienteActivo = ref(null)
+const modalConsentimientoVisible = ref(false)
+
+function onPacienteActualizado(datos) {
+  pacienteActivo.value = datos
+}
+
+const accionPendienteConsentimiento = ref(null)
+
+const mensajeAlertaConsentimiento = ref('')
+
+function solicitarConsentimientoConAccion(accion) {
+  mensajeAlertaConsentimiento.value = ''
+  accionPendienteConsentimiento.value = typeof accion === 'function' ? accion : null
+  modalConsentimientoVisible.value = true
+}
+
+function abrirConsentimiento() {
+  modalConsentimientoVisible.value = true
+}
+
+function cerrarConsentimiento() {
+  onConsentimientoRechazado()
+}
+
+function onConsentimientoRechazado() {
+  modalConsentimientoVisible.value = false
+  accionPendienteConsentimiento.value = null
+  mensajeAlertaConsentimiento.value = 'Consentimiento no otorgado. No es posible iniciar la medición ni tomar un canal sin consentimiento informado (RF04).'
+}
+
+function onConsentimientoAceptado() {
+  modalConsentimientoVisible.value = false
+  mensajeAlertaConsentimiento.value = ''
+  if (accionPendienteConsentimiento.value) {
+    const fn = accionPendienteConsentimiento.value
+    accionPendienteConsentimiento.value = null
+    fn()
+  }
+}
+
+const monitorBpm = crearMonitorEstadisticasBpm()
+const monitorSpo2 = crearMonitorEstadisticasSpo2()
 
 const canalSeleccionado = ref(1)
 const tabActiva = ref('simulador')
@@ -208,6 +356,17 @@ const canalesPorDefecto = [
   { canal: 5, activo: true, bpm: 65.0, spo2: 96.8, calidad: 'buena' }
 ]
 
+const canalActivoData = computed(() => {
+  return canalesMostrados.value.find(c => c.canal === canalSeleccionado.value)
+})
+
+// RF30: solo se guarda lo que llega del ESP32 conectado; los canales de ejemplo no se guardan
+const canalRealParaGuardar = computed(() => {
+  if (!esp32State.conectado || !esp32State.canales?.length) return null
+  const c = esp32State.canales.find(x => x.canal === canalSeleccionado.value)
+  return c && c.activo ? c : null
+})
+
 const canalesMostrados = computed(() => {
   if (esp32State.canales && esp32State.canales.length > 0) {
     return esp32State.canales
@@ -215,12 +374,46 @@ const canalesMostrados = computed(() => {
   return canalesPorDefecto
 })
 
-function seleccionarCanal(canal) {
-  canalSeleccionado.value = canal
-  senalBuffer.canalSeleccionado = canal
+function obtenerNombreAsignado(canalNum) {
+  const ch = canalesState.canales.find(c => c.canal === canalNum)
+  if (!ch || !ch.usuario_id) return null
+  return ch.usuario_nombre || ch.usuario_email || 'Estudiante asignado'
 }
 
+function seleccionarCanal(canal) {
+  canalSeleccionado.value = canal
+  setCanalOsciloscopio(canal)
+  const ch = canalesMostrados.value.find(c => c.canal === canal)
+  if (ch) {
+    if (ch.bpm) monitorBpm.registrarLectura(ch.bpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
+    if (ch.spo2) monitorSpo2.registrarLectura(ch.spo2)
+  }
+}
+
+// Si el usuario vincula su canal, auto-enfocamos el osciloscopio en su canal
+watch(() => canalActivoData.value?.bpm, (nuevoBpm) => {
+  if (nuevoBpm) {
+    monitorBpm.registrarLectura(nuevoBpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
+  }
+}, { immediate: true })
+
+watch(() => canalActivoData.value?.spo2, (nuevoSpo2) => {
+  if (nuevoSpo2) {
+    monitorSpo2.registrarLectura(nuevoSpo2)
+  }
+}, { immediate: true })
+
+watch(miCanalAsignado, (nuevoCanal) => {
+  if (nuevoCanal) {
+    seleccionarCanal(nuevoCanal)
+  }
+})
+
 function toggleSimulador() {
+  if (!consentimientoEstado.value.vigente) {
+    solicitarConsentimientoConAccion(() => toggleSimulador())
+    return
+  }
   toggleSimuladorWiFi(tokenPrueba.value)
 }
 
@@ -244,9 +437,15 @@ async function enviarUnicoPaquete() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // RF04: Reiniciar consentimiento en silencio al cargar/recargar (solo emergerá al usar los sensores)
+  await consentimientoService.verificarConsentimientoVigente()
+
   // Iniciar sondeo automático para detectar recepción WiFi en tiempo real
   iniciarSondeoWiFi(1000)
+  if (miCanalAsignado.value) {
+    seleccionarCanal(miCanalAsignado.value)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -308,6 +507,30 @@ onBeforeUnmount(() => {
 .section-hint {
   font-size: 0.8rem;
   color: var(--color-muted);
+}
+
+.mi-canal-indicator {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.biomarcadores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 860px) {
+  .biomarcadores-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 }
 
 .canales-grid {
@@ -481,5 +704,81 @@ onBeforeUnmount(() => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+.paciente-vinculado-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: #166534;
+}
+
+.punto-verde {
+  color: #16a34a;
+  font-size: 0.9rem;
+}
+
+.badge-subtle {
+  background: #ffffff;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.badge-consentimiento-rf59 {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #166534;
+  font-weight: 600;
+}
+.alerta-consentimiento-rechazado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.consentimiento-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.badge-consent-ok {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.badge-consent-alert {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 </style>
