@@ -81,7 +81,7 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   const pSueno = paciente?.sueno || paciente?.suenoHoras || '7 a 8 horas'
   const pCafeina = paciente?.cafeina || 'Ninguna'
   const pMedicacion = paciente?.medicacion || 'Ninguna'
-  const pActividad = paciente?.actividadPrevia || 'Reposo'
+  const pActividad = paciente?.actividadNombre || paciente?.actividadPrevia || 'Reposo basal'
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.5)
@@ -114,9 +114,9 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   doc.text(`${pMedicacion}`, margin + 89, currentY + 14)
 
   doc.setFont('helvetica', 'normal')
-  doc.text('Actividad previa: ', margin + 128, currentY + 14)
+  doc.text('Contexto / Actividad: ', margin + 128, currentY + 14)
   doc.setFont('helvetica', 'bold')
-  doc.text(`${pActividad}`, margin + 152, currentY + 14)
+  doc.text(`${pActividad}`, margin + 154, currentY + 14)
 
   currentY += boxHeight + 7
 

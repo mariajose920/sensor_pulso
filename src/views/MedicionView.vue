@@ -383,8 +383,8 @@
             <strong class="pac-tag-val">{{ pacienteActivo.medicacion || 'Ninguna' }}</strong>
           </div>
           <div class="pac-tag-item">
-            <span class="pac-tag-label">Actividad previa:</span>
-            <strong class="pac-tag-val">{{ pacienteActivo.actividadPrevia || 'Reposo' }}</strong>
+            <span class="pac-tag-label">Contexto:</span>
+            <strong class="pac-tag-val">{{ pacienteActivo.actividadNombre || pacienteActivo.actividadPrevia || 'Reposo basal' }}</strong>
           </div>
           <div v-if="pacienteActivo.cafeina" class="pac-tag-item">
             <span class="pac-tag-label">Cafeína:</span>
@@ -599,7 +599,7 @@
             <span class="tag-item">Sueño: <strong>{{ pacienteActivo.sueno || 'No especificado' }}</strong></span>
             <span class="tag-item">Cafeína: <strong>{{ pacienteActivo.cafeina || 'Ninguna' }}</strong></span>
             <span class="tag-item">Medicación: <strong>{{ pacienteActivo.medicacion || 'Ninguna' }}</strong></span>
-            <span class="tag-item">Actividad: <strong>{{ pacienteActivo.actividadPrevia || 'Reposo' }}</strong></span>
+            <span class="tag-item">Contexto: <strong>{{ pacienteActivo.actividadNombre || pacienteActivo.actividadPrevia || 'Reposo basal' }}</strong></span>
           </div>
         </div>
 
@@ -608,7 +608,7 @@
           <div class="valor-box">
             <div class="valor-titulo">Frecuencia Cardíaca</div>
             <div class="valor-num">{{ resultadosFinales.bpm }} <small>BPM</small></div>
-            <div class="valor-sub">Promedio registrado en reposo</div>
+            <div class="valor-sub">Promedio en {{ pacienteActivo?.actividadNombre || 'reposo basal' }}</div>
           </div>
 
           <div class="valor-box">
