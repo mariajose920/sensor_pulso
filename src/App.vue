@@ -20,8 +20,17 @@
       </nav>
 
       <!-- Estado de sesión (RF02) -->
+            <!-- Estado de sesión (RF02 y RF51) -->
       <template v-if="isAuthenticated">
         <span class="user-chip">👤 {{ currentUserName }} <small>({{ roleLabel }})</small></span>
+        <button 
+          type="button" 
+          class="btn btn-secondary btn-acceso btn-otras-sesiones" 
+          @click="manejarCerrarOtrasSesiones" 
+          title="Cerrar las demás sesiones abiertas en otros navegadores o dispositivos"
+        >
+          Otras Sesiones
+        </button>
         <button type="button" class="btn btn-secondary btn-acceso" @click="logout">Salir</button>
       </template>
       <router-link v-else to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
@@ -55,6 +64,13 @@
         <span>{{ e.corto }}</span>
       </router-link>
     </nav>
+        <!-- Modal global de advertencia por inactividad (RF51) -->
+    <AvisoInactividadModal />
+
+    <!-- Notificación flotante de confirmación de cierre de otras sesiones -->
+    <div v-if="mensajeOtrasSesiones" class="toast-flotante">
+      {{ mensajeOtrasSesiones }}
+    </div>
   </div>
 </template>
 
@@ -64,8 +80,8 @@ import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
 import { useAuth } from './composables/useAuth'
-
-const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout } = useAuth()
+import { ref } from 'vue'
+import AvisoInactividadModal from './components/AvisoInactividadModal.vue'
 
 const enlacesBase = [
   { to: '/', texto: 'Inicio', corto: 'Inicio', icono: 'inicio', exacto: true },
@@ -75,6 +91,17 @@ const enlacesBase = [
   { to: '/aulas', texto: 'Aulas', corto: 'Aulas', icono: 'aulas' },
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
+
+// En la desestructuración de useAuth() agrega cerrarOtrasSesiones:
+const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout, cerrarOtrasSesiones } = useAuth()
+const mensajeOtrasSesiones = ref('')
+const manejarCerrarOtrasSesiones = async () => {
+  const res = await cerrarOtrasSesiones()
+  mensajeOtrasSesiones.value = res.message
+  setTimeout(() => {
+    mensajeOtrasSesiones.value = ''
+  }, 4000)
+}
 
 // RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
 // RF30: el historial de mediciones solo lo ve quien tiene sesión
@@ -237,5 +264,25 @@ main.container {
 
 @media (prefers-reduced-motion: reduce) {
   .navbar, .bottom-nav { transition: none; }
+}
+
+.btn-otras-sesiones {
+  margin-right: 0.35rem;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.65rem;
+}
+
+.toast-flotante {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  font-size: 0.875rem;
+  animation: fadeIn 0.3s ease-out;
 }
 </style>

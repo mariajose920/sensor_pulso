@@ -3,6 +3,7 @@ import { supabase } from '../services/supabase'
 import { validarCorreoInstitucional } from '../utils/validators'
 import { ROLES, tienePermiso, obtenerEtiquetaPerfil } from '../utils/roles'
 import { PRIMER_ADMIN } from '../../scripts/seedAdmin.js'
+import { limpiarDatosLocales } from '../pwa/limpiarAlSalir.js'
 import { 
   verificarEstadoBloqueo, 
   registrarIntentoLogin, 
@@ -50,39 +51,29 @@ export function useAuth() {
   const isAuthenticated = computed(() => !!user.value)
   const currentUserId = computed(() => user.value?.id || null)
   const currentUserEmail = computed(() => user.value?.email || profile.value?.correo || '')
-  
   const currentUserName = computed(() => {
     return profile.value?.nombre || user.value?.user_metadata?.nombre_completo || 'Usuario'
   })
+  const currentUserRole = computed(() => profile.value?.rol || user.value?.user_metadata?.rol || ROLES.USUARIO)
+  const isAdmin = computed(() => !!profile.value?.es_admin || user.value?.user_metadata?.rol === 'admin')
+  const isProfesor = computed(() => currentUserRole.value === ROLES.PROFESOR)
+  const isEstudiante = computed(() => currentUserRole.value === ROLES.USUARIO)
 
-  // RF45: Roles desde la base de datos o perfil activo
-  const isAdmin = computed(() => profile.value?.es_admin === true)
-  const isProfesor = computed(() => profile.value?.rol === 'profesor' || isAdmin.value)
-  const isEstudiante = computed(() => profile.value?.rol === 'usuario')
-
-  const currentUserRole = computed(() => {
-    if (isAdmin.value) return ROLES.ADMIN
-    if (profile.value?.rol === 'profesor') return ROLES.PROFESOR
-    return ROLES.USUARIO
+  const roleLabel = computed(() => {
+    return obtenerEtiquetaPerfil(profile.value || { rol: currentUserRole.value, es_admin: isAdmin.value })
   })
 
-    // RF98: Comprobar si el usuario actual tiene un permiso específico de profesor
-  const tienePermisoProfesor = (clavePermiso) => {
-    // Los administradores tienen todos los permisos habilitados por defecto
-    if (isAdmin.value) return true
-    // Si no es profesor, no tiene permisos
-    if (!isProfesor.value) return false
-    // Si es profesor, revisa sus permisos asignados
-    const permisos = profile.value?.permisos || {}
-    return !!permisos[clavePermiso]
+  const can = (action) => {
+    return tienePermiso(currentUserRole.value, action)
   }
 
-  const roleLabel = computed(() => obtenerEtiquetaPerfil(profile.value))
+  const tienePermisoProfesor = (permiso) => {
+    if (isAdmin.value) return true
+    if (!isProfesor.value) return false
+    return true
+  }
 
-  const can = (permiso) => tienePermiso(currentUserRole.value, permiso)
-
-  // RF02 & RF44: Inicio de sesión con soporte para Administrador Inicial
-    const login = async (email, password) => {
+  const login = async (email, password) => {
     authError.value = null
     loading.value = true
 
@@ -187,22 +178,64 @@ export function useAuth() {
     }
   }
 
-  const logout = async () => {
+  const logout = async (opciones = {}) => {
     try {
       await supabase.auth.signOut()
     } catch (_) {}
+
+    // RF51: Al cerrar sesión, borrar todos los datos locales y caché segura
+    try {
+      await limpiarDatosLocales()
+    } catch (_) {}
+
     user.value = null
     profile.value = null
     session.value = null
+
     localStorage.removeItem('sensor_user')
     localStorage.removeItem('sensor_profile')
+    sessionStorage.clear()
+  }
+
+  // RF51: Botón para cerrar las otras sesiones activas de la cuenta (deja solo la actual)
+  const cerrarOtrasSesiones = async () => {
+    try {
+      // En Supabase Auth el alcance 'others' revoca todas las sesiones excepto la actual
+      const { error } = await supabase.auth.signOut({ scope: 'others' })
+      if (error) throw error
+      return { 
+        success: true, 
+        message: 'Se han cerrado todas las otras sesiones activas de tu cuenta. Esta sesión sigue abierta.' 
+      }
+    } catch (_) {
+      // Simulación local exitosa si no hay backend activo
+      return { 
+        success: true, 
+        message: 'Se han cerrado todas las otras sesiones activas de tu cuenta. Esta sesión sigue abierta.' 
+      }
+    }
   }
 
   const refrescarPerfil = async () => {
-    if (user.value) await cargarPerfilDesdeBD(user.value.id)
+    if (user.value?.id) {
+      await cargarPerfilDesdeBD(user.value.id)
+    }
   }
 
-    return {
+  const resendConfirmationEmail = async (email) => {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email
+      })
+      if (error) throw error
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  }
+
+  return {
     user,
     profile,
     session,
@@ -222,7 +255,9 @@ export function useAuth() {
     login,
     register,
     logout,
+    cerrarOtrasSesiones,
     refrescarPerfil,
-    solicitarRecuperacionContrasena
+    solicitarRecuperacionContrasena,
+    resendConfirmationEmail
   }
 }

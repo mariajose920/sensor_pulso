@@ -205,14 +205,15 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { validarCorreoInstitucional } from '../utils/validators'
 import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
 import { verificarEstadoBloqueo, formatearTiempoRestante } from '../services/seguridadLoginService'
 
 const router = useRouter()
+const route = useRoute()
 const { login, register, resendConfirmationEmail, loading, solicitarRecuperacionContrasena } = useAuth()
 
 const mode = ref('login')
@@ -235,6 +236,13 @@ const correoRecuperacion = ref('')
 const enviandoRecuperacion = ref(false)
 const mensajeRecuperacion = ref('')
 const errorRecuperacion = ref('')
+
+onMounted(() => {
+  // RF51: Si se cerró la sesión por inactividad
+  if (route.query?.motivo === 'inactividad') {
+    errorMessage.value = 'Tu sesión se ha cerrado automáticamente por inactividad. Por favor, inicia sesión de nuevo.'
+  }
+})
 
 const infoDominio = computed(() => {
   if (!email.value || !email.value.includes('@')) return null
