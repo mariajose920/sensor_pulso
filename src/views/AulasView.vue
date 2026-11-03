@@ -30,13 +30,8 @@
 
       <!-- VISTA PROFESOR / ADMIN -->
       <div v-if="isProfesor" class="section-block">
-        <div class="section-title-row">
-          <h2 class="section-title">
-            {{ isAdmin ? 'Todas las Aulas del Sistema (Vista Administrador)' : 'Mis Aulas Asignadas' }}
-          </h2>
-          <span class="badge badge-info">{{ listaAulas.length }} aula(s)</span>
-        </div>
-
+        <h2 class="section-title">Aulas que Administras</h2>
+        
         <div v-if="cargando" class="loading-state">
           Cargando aulas...
         </div>
@@ -50,7 +45,9 @@
           <div v-for="aula in listaAulas" :key="aula.id" class="aula-card card">
             <div class="aula-header">
               <h3 class="aula-title">{{ aula.nombre }}</h3>
-              <span class="badge badge-profesor">Activa</span>
+              <span class="badge" :class="aula.codigo_activo ? 'badge-profesor' : 'badge-desactivado'">
+                {{ aula.codigo_activo ? '🟢 Código Activo' : '🔴 Código Desactivado' }}
+              </span>
             </div>
 
             <p class="aula-desc">{{ aula.descripcion || 'Sin descripción adicional.' }}</p>
@@ -59,13 +56,39 @@
               Docente: <strong>{{ aula.profesor_nombre || 'Docente asignado' }}</strong>
             </div>
 
-            <!-- Código único del aula -->
+            <!-- Código único del aula y Controles de Gestión RF100 -->
             <div class="codigo-box">
-              <span class="codigo-label">Código de acceso:</span>
-              <div class="codigo-display">
-                <code>{{ aula.codigo }}</code>
-                <button @click="copiarCodigo(aula.codigo)" class="btn-copy" title="Copiar código">
-                  📋 Copiar
+              <div class="codigo-top-row">
+                <span class="codigo-label">Código de acceso:</span>
+                <div class="codigo-display">
+                  <code :class="{ 'codigo-tachado': !aula.codigo_activo }">{{ aula.codigo }}</code>
+                  <button @click="copiarCodigo(aula.codigo)" class="btn-copy" title="Copiar código">
+                    📋 Copiar
+                  </button>
+                </div>
+              </div>
+
+              <!-- Botones de administración de código (RF100) -->
+              <div class="codigo-actions-row">
+                <button 
+                  @click="cambiarEstadoCodigo(aula)" 
+                  class="btn-code-action"
+                  :class="aula.codigo_activo ? 'btn-warn-action' : 'btn-success-action'"
+                >
+                  {{ aula.codigo_activo ? 'Desactivar Código' : 'Activar Código' }}
+                </button>
+                <button 
+                  @click="confirmarRegenerarCodigo(aula)" 
+                  class="btn-code-action"
+                  title="Generar un código nuevo e invalidar el anterior"
+                >
+                  🔄 Regenerar
+                </button>
+                <button 
+                  @click="abrirModalInvitar(aula)" 
+                  class="btn-code-action btn-invite"
+                >
+                  ✉️ Invitar Estudiante
                 </button>
               </div>
             </div>
@@ -79,7 +102,6 @@
                 </button>
               </div>
 
-              <!-- Lista de cursos dentro del aula -->
               <div v-if="getCursos(aula.id).length === 0" class="cursos-vacio">
                 Sin cursos definidos. Presiona "+ Nuevo Curso" para agrupar estudiantes.
               </div>
@@ -113,12 +135,12 @@
         </div>
       </div>
 
-      <!-- VISTA ESTUDIANTE -->
+      <!-- VISTA ESTUDIANTE (RF100) -->
       <div v-else class="section-block">
         <div class="unirse-card card mb-4">
-          <h2 class="section-title">Unirse a un Aula</h2>
+          <h2 class="section-title">Unirse a un Aula Virtual</h2>
           <p class="section-desc">
-            Ingresa el código proporcionado por tu profesor para incorporarte al aula de clases.
+            Ingresa el código alfanumérico proporcionado por tu profesor o recibido en tu correo institucional.
           </p>
           <div class="join-box">
             <input 
@@ -128,8 +150,15 @@
               placeholder="Ej: K8M3X9P2" 
               style="max-width: 280px; text-transform: uppercase;"
               maxlength="8"
+              @keyup.enter="unirseConCodigo"
             />
-            <button class="btn btn-primary">Unirme</button>
+            <button 
+              @click="unirseConCodigo" 
+              class="btn btn-primary"
+              :disabled="uniendoAula || !codigoIngreso.trim()"
+            >
+              {{ uniendoAula ? 'Uniéndome...' : 'Unirme al Aula' }}
+            </button>
           </div>
         </div>
 
@@ -139,8 +168,14 @@
         </div>
         <div v-else class="aulas-grid">
           <div v-for="aula in listaAulas" :key="aula.id" class="aula-card card">
-            <h3 class="aula-title">{{ aula.nombre }}</h3>
-            <p class="aula-desc">{{ aula.descripcion }}</p>
+            <div class="aula-header">
+              <h3 class="aula-title">{{ aula.nombre }}</h3>
+              <span class="badge badge-profesor">Inscrito</span>
+            </div>
+            <p class="aula-desc">{{ aula.descripcion || 'Sin descripción adicional.' }}</p>
+            <div class="aula-footer">
+              <span class="profesor-tag">Profesor: <strong>{{ aula.profesor_nombre || 'Docente' }}</strong></span>
+            </div>
           </div>
         </div>
       </div>
@@ -176,6 +211,37 @@
           <div class="modal-actions">
             <button type="button" @click="modalCrearAulaAbierto = false" class="btn btn-secondary">Cancelar</button>
             <button type="submit" class="btn btn-primary" :disabled="guardando">Crear Aula</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL INVITAR ESTUDIANTE POR CORREO (RF100) -->
+    <div v-if="modalInvitarAbierto" class="modal-backdrop" @click.self="modalInvitarAbierto = false">
+      <div class="modal-card">
+        <h3 class="modal-title">✉️ Invitar Estudiante al Aula</h3>
+        <p class="modal-subtitle">
+          Aula: <strong>{{ aulaSeleccionada?.nombre }}</strong> (Código: <code>{{ aulaSeleccionada?.codigo }}</code>)
+        </p>
+
+        <form @submit.prevent="enviarInvitacion">
+          <div class="form-group">
+            <label class="form-label">Correo Institucional del Estudiante (@alu.unach.cl) *</label>
+            <input 
+              v-model="correoInvitacion" 
+              type="email" 
+              class="form-input" 
+              placeholder="estudiante@alu.unach.cl" 
+              required 
+            />
+            <small class="help-text">Se enviará el código de acceso directamente a la casilla del estudiante.</small>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary">Cancelar</button>
+            <button type="submit" class="btn btn-primary" :disabled="enviandoInvitacion">
+              {{ enviandoInvitacion ? 'Enviando...' : 'Enviar Invitación' }}
+            </button>
           </div>
         </form>
       </div>
@@ -250,6 +316,10 @@ import {
   obtenerAulas, 
   crearAula, 
   generarCodigoAula, 
+  unirseAulaPorCodigo,
+  alternarEstadoCodigoAula,
+  regenerarCodigoAulaDocente,
+  enviarInvitacionCorreo,
   obtenerCursosAula, 
   obtenerEstudiantesAula, 
   crearCurso, 
@@ -258,48 +328,54 @@ import {
   actualizarEstudiantesCurso 
 } from '../services/aulasService'
 
-const { currentUserId, currentUserName, isProfesor, isAdmin, tienePermisoProfesor } = useAuth()
+const { currentUserId, currentUserName, currentUserEmail, isProfesor, isAdmin, tienePermisoProfesor } = useAuth()
 
 const listaAulas = ref([])
 const cursosPorAula = ref({})
 const cargando = ref(false)
 const guardando = ref(false)
+const uniendoAula = ref(false)
 const codigoIngreso = ref('')
 const feedbackMensaje = ref('')
 const feedbackExito = ref(true)
 
-// Modal Crear Aula
+// Modal Crear Aula (RF99)
 const modalCrearAulaAbierto = ref(false)
 const codigoPrevisualizado = ref('')
 const formAula = ref({ nombre: '', descripcion: '' })
 
-// Modal Crear/Renombrar Curso (RF101)
+// Modal Invitar por Correo (RF100)
+const modalInvitarAbierto = ref(false)
+const correoInvitacion = ref('')
+const enviandoInvitacion = ref(false)
+
+// Modales Cursos (RF101)
 const modalCursoAbierto = ref(false)
-const modoCurso = ref('crear') // 'crear' o 'renombrar'
+const modoCurso = ref('crear')
 const aulaSeleccionada = ref(null)
 const cursoSeleccionado = ref(null)
 const nombreCursoInput = ref('')
 
-// Modal Asignar Estudiantes (RF101)
 const modalEstudiantesAbierto = ref(false)
 const estudiantesAula = ref([])
 const estudiantesSeleccionados = ref([])
 
-const getCursos = (aulaId) => cursosPorAula.value[aulaId] || []
-
-const cargarListaAulas = async () => {
+const cargarDatos = async () => {
   cargando.value = true
   const res = await obtenerAulas({
     usuarioId: currentUserId.value,
+    usuarioCorreo: currentUserEmail.value,
     esAdmin: isAdmin.value,
     esProfesor: isProfesor.value
   })
   cargando.value = false
+
   if (res.success) {
     listaAulas.value = res.data
-    // Cargar cursos de cada aula
-    for (const a of res.data) {
-      await cargarCursosDeAula(a.id)
+    if (isProfesor.value) {
+      for (const aula of res.data) {
+        await cargarCursosDeAula(aula.id)
+      }
     }
   }
 }
@@ -311,10 +387,109 @@ const cargarCursosDeAula = async (aulaId) => {
   }
 }
 
-// Aulas
+const getCursos = (aulaId) => {
+  return cursosPorAula.value[aulaId] || []
+}
+
+// RF100: El estudiante se une con el código ingresado a mano
+const unirseConCodigo = async () => {
+  if (!codigoIngreso.value.trim()) return
+  uniendoAula.value = true
+  feedbackMensaje.value = ''
+
+  const res = await unirseAulaPorCodigo({
+    codigo: codigoIngreso.value,
+    usuarioId: currentUserId.value,
+    usuarioNombre: currentUserName.value,
+    usuarioCorreo: currentUserEmail.value
+  })
+
+  uniendoAula.value = false
+
+  if (res.success) {
+    feedbackExito.value = true
+    feedbackMensaje.value = res.message
+    codigoIngreso.value = ''
+    await cargarDatos()
+  } else {
+    feedbackExito.value = false
+    feedbackMensaje.value = res.error
+  }
+}
+
+// RF100: El profesor desactiva o activa el código
+const cambiarEstadoCodigo = async (aula) => {
+  const res = await alternarEstadoCodigoAula({
+    aulaId: aula.id,
+    profesorId: currentUserId.value,
+    esAdmin: isAdmin.value
+  })
+
+  if (res.success) {
+    aula.codigo_activo = res.codigo_activo
+    feedbackExito.value = true
+    feedbackMensaje.value = res.message
+  } else {
+    feedbackExito.value = false
+    feedbackMensaje.value = res.error
+  }
+}
+
+// RF100: El profesor regenera el código
+const confirmarRegenerarCodigo = async (aula) => {
+  if (!confirm(`¿Regenerar el código del aula "${aula.nombre}"? El código anterior dejará de servir inmediatamente.`)) {
+    return
+  }
+
+  const res = await regenerarCodigoAulaDocente({
+    aulaId: aula.id,
+    profesorId: currentUserId.value,
+    esAdmin: isAdmin.value
+  })
+
+  if (res.success) {
+    aula.codigo = res.nuevoCodigo
+    aula.codigo_activo = true
+    feedbackExito.value = true
+    feedbackMensaje.value = res.message
+  } else {
+    feedbackExito.value = false
+    feedbackMensaje.value = res.error
+  }
+}
+
+// RF100: Enviar invitación por correo
+const abrirModalInvitar = (aula) => {
+  aulaSeleccionada.value = aula
+  correoInvitacion.value = ''
+  modalInvitarAbierto.value = true
+}
+
+const enviarInvitacion = async () => {
+  if (!correoInvitacion.value) return
+  enviandoInvitacion.value = true
+  const res = await enviarInvitacionCorreo({
+    aulaId: aulaSeleccionada.value.id,
+    correoEstudiante: correoInvitacion.value,
+    profesorId: currentUserId.value,
+    esAdmin: isAdmin.value
+  })
+  enviandoInvitacion.value = false
+
+  if (res.success) {
+    feedbackExito.value = true
+    feedbackMensaje.value = res.message
+    modalInvitarAbierto.value = false
+  } else {
+    feedbackExito.value = false
+    feedbackMensaje.value = res.error
+  }
+}
+
+// RF99: Crear Aula
 const abrirModalCrearAula = () => {
-  formAula.value = { nombre: '', descripcion: '' }
   codigoPrevisualizado.value = generarCodigoAula()
+  formAula.value = { nombre: '', descripcion: '' }
   modalCrearAulaAbierto.value = true
 }
 
@@ -328,31 +503,19 @@ const guardarNuevaAula = async () => {
     tienePermiso: tienePermisoProfesor('crear_aulas')
   })
   guardando.value = false
+
   if (res.success) {
-    feedbackExito.value = true
-    feedbackMensaje.value = `¡Aula "${res.data.nombre}" creada con éxito! Código: ${res.data.codigo}`
     modalCrearAulaAbierto.value = false
-    await cargarListaAulas()
+    feedbackExito.value = true
+    feedbackMensaje.value = `Aula creada exitosamente con código: ${res.data.codigo}`
+    await cargarDatos()
   } else {
     feedbackExito.value = false
     feedbackMensaje.value = res.error
   }
 }
 
-const copiarCodigo = async (codigo) => {
-  try {
-    await navigator.clipboard.writeText(codigo)
-    feedbackExito.value = true
-    feedbackMensaje.value = `Código ${codigo} copiado al portapapeles.`
-  } catch (_) {
-    feedbackMensaje.value = `Código: ${codigo}`
-  }
-}
-
-// ==========================================
-// RF101: MÉTODOS DE CURSOS
-// ==========================================
-
+// RF101: Cursos
 const abrirModalNuevoCurso = (aula) => {
   aulaSeleccionada.value = aula
   modoCurso.value = 'crear'
@@ -369,10 +532,7 @@ const abrirModalRenombrarCurso = (aula, curso) => {
 }
 
 const guardarCurso = async () => {
-  if (!aulaSeleccionada.value) return
   guardando.value = true
-  feedbackMensaje.value = ''
-
   let res
   if (modoCurso.value === 'crear') {
     res = await crearCurso({
@@ -390,15 +550,12 @@ const guardarCurso = async () => {
       esAdmin: isAdmin.value
     })
   }
-
   guardando.value = false
 
   if (res.success) {
-    feedbackExito.value = true
-    feedbackMensaje.value = modoCurso.value === 'crear'
-      ? `Curso "${nombreCursoInput.value}" creado exitosamente.`
-      : `Curso renombrado correctamente.`
     modalCursoAbierto.value = false
+    feedbackExito.value = true
+    feedbackMensaje.value = modoCurso.value === 'crear' ? 'Curso creado exitosamente.' : 'Curso renombrado exitosamente.'
     await cargarCursosDeAula(aulaSeleccionada.value.id)
   } else {
     feedbackExito.value = false
@@ -407,10 +564,7 @@ const guardarCurso = async () => {
 }
 
 const confirmarEliminarCurso = async (aula, curso) => {
-  const confirmacion = window.confirm(
-    `¿Seguro que deseas eliminar el curso "${curso.nombre}"?\n\nLos estudiantes asignados permanecerán en el aula normalmente.`
-  )
-  if (!confirmacion) return
+  if (!confirm(`¿Eliminar el curso "${curso.nombre}"? Los estudiantes permanecerán en el aula.`)) return
 
   const res = await eliminarCurso({
     cursoId: curso.id,
@@ -421,7 +575,7 @@ const confirmarEliminarCurso = async (aula, curso) => {
 
   if (res.success) {
     feedbackExito.value = true
-    feedbackMensaje.value = `Curso "${curso.nombre}" eliminado del aula.`
+    feedbackMensaje.value = `El curso "${curso.nombre}" fue eliminado. Los estudiantes siguen matriculados en el aula.`
     await cargarCursosDeAula(aula.id)
   } else {
     feedbackExito.value = false
@@ -429,36 +583,31 @@ const confirmarEliminarCurso = async (aula, curso) => {
   }
 }
 
-// Asignación de Estudiantes al Curso
 const abrirModalEstudiantes = async (aula, curso) => {
   aulaSeleccionada.value = aula
   cursoSeleccionado.value = curso
+  modalEstudiantesAbierto.value = true
   estudiantesSeleccionados.value = [...(curso.estudiantes_ids || [])]
 
-  // Cargar estudiantes de esta aula
   const res = await obtenerEstudiantesAula(aula.id)
   if (res.success) {
     estudiantesAula.value = res.data
   }
-  modalEstudiantesAbierto.value = true
 }
 
 const guardarAsignacionEstudiantes = async () => {
-  if (!cursoSeleccionado.value || !aulaSeleccionada.value) return
   guardando.value = true
-
   const res = await actualizarEstudiantesCurso({
     cursoId: cursoSeleccionado.value.id,
     aulaId: aulaSeleccionada.value.id,
     estudiantesIds: estudiantesSeleccionados.value
   })
-
   guardando.value = false
 
   if (res.success) {
-    feedbackExito.value = true
-    feedbackMensaje.value = `Estudiantes asignados al curso "${cursoSeleccionado.value.nombre}".`
     modalEstudiantesAbierto.value = false
+    feedbackExito.value = true
+    feedbackMensaje.value = `Asignación guardada (${estudiantesSeleccionados.value.length} estudiantes en ${cursoSeleccionado.value.nombre}).`
     await cargarCursosDeAula(aulaSeleccionada.value.id)
   } else {
     feedbackExito.value = false
@@ -466,8 +615,15 @@ const guardarAsignacionEstudiantes = async () => {
   }
 }
 
+const copiarCodigo = (codigo) => {
+  navigator.clipboard.writeText(codigo)
+  feedbackExito.value = true
+  feedbackMensaje.value = `Código ${codigo} copiado al portapapeles.`
+  setTimeout(() => { feedbackMensaje.value = '' }, 3000)
+}
+
 onMounted(() => {
-  cargarListaAulas()
+  cargarDatos()
 })
 </script>
 
@@ -482,8 +638,6 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-  gap: 1rem;
 }
 
 .header-desc {
@@ -495,29 +649,9 @@ onMounted(() => {
   margin-top: 1rem;
 }
 
-.section-title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.section-title {
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-
-.badge-info {
-  background: #e0f2fe;
-  color: #0369a1;
-  font-size: 0.8rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 9999px;
-}
-
 .aulas-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   gap: 1.25rem;
   margin-top: 1rem;
 }
@@ -526,16 +660,9 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   padding: 1.25rem;
-  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-}
-
-.aula-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 0.5rem;
+  background: var(--color-surface);
+  border-radius: 0.5rem;
 }
 
 .aula-title {
@@ -547,7 +674,7 @@ onMounted(() => {
 .aula-desc {
   font-size: 0.875rem;
   color: var(--color-muted);
-  margin-bottom: 0.75rem;
+  margin: 0.5rem 0;
 }
 
 .profesor-tag {
@@ -556,54 +683,102 @@ onMounted(() => {
   margin-bottom: 0.75rem;
 }
 
+.badge-desactivado {
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+/* Código del aula y acciones RF100 */
 .codigo-box {
   background: #f8fafc;
-  border: 1px solid var(--color-border);
+  border: 1px dashed #cbd5e1;
+  padding: 0.85rem;
   border-radius: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 1rem;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.codigo-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
 .codigo-label {
-  display: block;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--color-muted);
-  margin-bottom: 0.2rem;
 }
 
 .codigo-display {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
 }
 
 .codigo-display code {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
+  background: #e2e8f0;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.codigo-tachado {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.codigo-actions-row {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.btn-code-action {
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid #cbd5e1;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-warn-action {
+  color: #b45309;
+}
+
+.btn-success-action {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.btn-invite {
   color: var(--color-primary);
+  font-weight: 600;
 }
 
 .btn-copy {
   background: none;
   border: none;
-  font-size: 0.8rem;
-  font-weight: 600;
   color: var(--color-primary);
+  font-size: 0.8rem;
   cursor: pointer;
+  font-weight: 600;
 }
 
-.btn-copy:hover {
-  text-decoration: underline;
-}
-
-/* SECCIÓN DE CURSOS (RF101) */
+/* Cursos RF101 */
 .cursos-section {
-  background: #f8fafc;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  margin-bottom: 1rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.75rem;
+  margin-top: 0.5rem;
   flex: 1;
 }
 
@@ -611,20 +786,20 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
   margin-bottom: 0.5rem;
+  font-size: 0.85rem;
 }
 
 .btn-mini {
   font-size: 0.8rem;
-  padding: 0;
+  font-weight: 600;
 }
 
 .cursos-vacio {
   font-size: 0.8rem;
   color: var(--color-muted);
-  padding: 0.5rem 0;
-  text-align: center;
+  font-style: italic;
+  padding: 0.25rem 0;
 }
 
 .cursos-list {
@@ -633,135 +808,75 @@ onMounted(() => {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .curso-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: #f8fafc;
+  padding: 0.4rem 0.6rem;
   border-radius: 0.35rem;
-  padding: 0.45rem 0.6rem;
-  font-size: 0.85rem;
+  border: 1px solid #f1f5f9;
 }
 
 .curso-info {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .curso-nombre {
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
 .badge-estudiantes {
-  background: #f1f5f9;
-  color: #475569;
+  background: #e0f2fe;
+  color: #0369a1;
   font-size: 0.75rem;
-  padding: 0.15rem 0.45rem;
-  border-radius: 9999px;
-  width: fit-content;
 }
 
 .curso-actions {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .btn-icon {
   background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
-  padding: 0.2rem 0.4rem;
-  font-size: 0.8rem;
+  border: none;
   cursor: pointer;
-  background: #ffffff;
-}
-
-.btn-icon:hover {
-  background: #f1f5f9;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
 }
 
 .aula-footer {
-  font-size: 0.75rem;
-  color: var(--color-muted);
+  margin-top: 1rem;
   border-top: 1px solid var(--color-border);
   padding-top: 0.5rem;
+}
+
+.cupo-text {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+/* Vista Estudiante RF100 */
+.unirse-card {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  padding: 1.25rem;
 }
 
 .join-box {
   display: flex;
   gap: 0.75rem;
-  margin-top: 0.75rem;
+  margin-top: 1rem;
 }
 
-.loading-state, .empty-state {
-  text-align: center;
-  padding: 2.5rem;
-  color: var(--color-muted);
-  background: #f8fafc;
-  border-radius: 0.5rem;
-}
-
-.codigo-preview {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: #f8fafc;
-  border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.75rem;
-}
-
-.codigo-preview code {
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  color: var(--color-primary);
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.estudiantes-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 250px;
-  overflow-y: auto;
-  margin: 1rem 0;
-}
-
-.estudiante-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.4rem;
-  background: #f8fafc;
-  cursor: pointer;
-}
-
-.estudiante-item input {
-  margin: 0;
-}
-
-.estudiante-item p {
-  font-size: 0.8rem;
-  color: var(--color-muted);
-  margin: 0;
-}
-
-/* Modal */
+/* Modales */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -789,9 +904,9 @@ onMounted(() => {
 }
 
 .modal-subtitle {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--color-muted);
-  margin-bottom: 1.25rem;
+  margin-bottom: 1rem;
 }
 
 .modal-actions {
@@ -801,7 +916,29 @@ onMounted(() => {
   margin-top: 1.5rem;
 }
 
-.mb-2 {
-  margin-bottom: 0.5rem;
+.estudiantes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 250px;
+  overflow-y: auto;
+  margin: 1rem 0;
+}
+
+.estudiante-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  background: #f8fafc;
+  border-radius: 0.35rem;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.estudiante-item p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-muted);
 }
 </style>
