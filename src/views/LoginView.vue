@@ -32,13 +32,29 @@
         </p>
       </div>
 
-      <!-- Alertas -->
-      <div v-if="errorMessage" class="alert alert-error">
+      <!-- Alerta de Bloqueo Temporal con Contador Regresivo en Vivo (RF50) -->
+      <div v-if="cuentaBloqueada" class="alert alert-error bloqueo-banner">
+        <div class="bloqueo-icono">🔒</div>
+        <div>
+          <strong>Acceso Bloqueado Temporalmente</strong>
+          <p class="mt-1">
+            Por seguridad ante múltiples intentos fallidos, debes esperar: 
+            <span class="timer-badge">{{ tiempoRestanteTexto }}</span>
+          </p>
+          <small class="text-muted-xs">
+            El bloqueo terminará automáticamente una vez cumplido el tiempo.
+          </small>
+        </div>
+      </div>
+
+      <!-- Alertas Generales -->
+      <div v-if="errorMessage && !cuentaBloqueada" class="alert alert-error">
         {{ errorMessage }}
       </div>
       <div v-if="successMessage" class="alert alert-success">
         {{ successMessage }}
       </div>
+
       <div v-if="needsEmailConfirmation" class="alert alert-info">
         <p><strong>Confirmación pendiente:</strong> Hemos enviado un enlace de activación a tu correo institucional.</p>
         <p style="margin-top: 0.5rem; font-size: 0.85rem;">
@@ -49,7 +65,7 @@
         </p>
       </div>
 
-      <!-- Formulario -->
+      <!-- Formulario de Autenticación -->
       <form @submit.prevent="handleSubmit">
         <div v-if="mode === 'register'" class="form-group">
           <label class="form-label" for="nombre">Nombre Completo</label>
@@ -71,6 +87,7 @@
             type="email" 
             class="form-input" 
             placeholder="ejemplo@alu.unach.cl o @unach.cl"
+            @blur="verificarBloqueoInput"
             required
           />
           <div v-if="infoDominio" class="domain-badge">
@@ -93,6 +110,13 @@
             placeholder="••••••••"
             required
           />
+
+          <!-- Opción de Recuperación de Contraseña (RF50) -->
+          <div v-if="mode === 'login'" class="recuperar-link-box">
+            <button type="button" @click="abrirModalRecuperacion" class="btn-link text-sm">
+              ¿Olvidaste tu contraseña?
+            </button>
+          </div>
 
           <!-- Medidor de seguridad de contraseña (solo en registro) -->
           <div v-if="mode === 'register' && password" class="password-meter">
@@ -126,25 +150,71 @@
         <button 
           type="submit" 
           class="btn btn-primary w-full"
-          :disabled="loading || (mode === 'register' && !fuerzaPassword.valida)"
+          :disabled="loading || (mode === 'login' && cuentaBloqueada) || (mode === 'register' && !fuerzaPassword.valida)"
         >
-          {{ loading ? 'Procesando...' : (mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta') }}
+          {{ loading ? 'Procesando...' : (mode === 'login' ? (cuentaBloqueada ? 'Cuenta Bloqueada' : 'Iniciar Sesión') : 'Crear Cuenta') }}
         </button>
       </form>
+    </div>
+
+    <!-- MODAL DE RECUPERACIÓN DE CONTRASEÑA (RF50) -->
+    <div v-if="modalRecuperacionAbierto" class="modal-backdrop" @click.self="cerrarModalRecuperacion">
+      <div class="modal-card">
+        <h3 class="modal-title">🔑 Recuperar Contraseña</h3>
+        <p class="modal-subtitle">
+          Ingresa tu correo institucional y te enviaremos un enlace de un solo uso para restablecer tu acceso.
+        </p>
+
+        <div v-if="mensajeRecuperacion" class="alert alert-success">
+          {{ mensajeRecuperacion }}
+        </div>
+        <div v-if="errorRecuperacion" class="alert alert-error">
+          {{ errorRecuperacion }}
+        </div>
+
+        <form v-if="!mensajeRecuperacion" @submit.prevent="ejecutarRecuperacion">
+          <div class="form-group">
+            <label class="form-label">Correo Institucional UNACH</label>
+            <input 
+              v-model="correoRecuperacion" 
+              type="email" 
+              class="form-input" 
+              placeholder="usuario@alu.unach.cl o docente@unach.cl" 
+              required
+            />
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" @click="cerrarModalRecuperacion" class="btn btn-secondary" :disabled="enviandoRecuperacion">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-primary" :disabled="enviandoRecuperacion">
+              {{ enviandoRecuperacion ? 'Enviando...' : 'Enviar Enlace' }}
+            </button>
+          </div>
+        </form>
+
+        <div v-else class="modal-actions">
+          <button type="button" @click="cerrarModalRecuperacion" class="btn btn-primary">
+            Entendido
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { validarCorreoInstitucional } from '../utils/validators'
 import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
+import { verificarEstadoBloqueo, formatearTiempoRestante } from '../services/seguridadLoginService'
 
 const router = useRouter()
 const route = useRoute()
-const { login, register, resendConfirmationEmail, loading } = useAuth()
+const { login, register, resendConfirmationEmail, loading, solicitarRecuperacionContrasena } = useAuth()
 
 const mode = ref('login')
 const nombre = ref('')
@@ -155,10 +225,22 @@ const successMessage = ref('')
 const needsEmailConfirmation = ref(false)
 const resending = ref(false)
 
+// Estado del bloqueo temporal (RF50)
+const cuentaBloqueada = ref(false)
+const segundosRestantes = ref(0)
+const timerBloqueo = ref(null)
+
+// Modal de recuperación de contraseña (RF50)
+const modalRecuperacionAbierto = ref(false)
+const correoRecuperacion = ref('')
+const enviandoRecuperacion = ref(false)
+const mensajeRecuperacion = ref('')
+const errorRecuperacion = ref('')
+
 onMounted(() => {
   // RF51: Si se cerró la sesión por inactividad
   if (route.query?.motivo === 'inactividad') {
-    errorMessage.value = 'Tu sesión se ha cerrado por inactividad. Por favor, inicia sesión de nuevo.'
+    errorMessage.value = 'Tu sesión se ha cerrado automáticamente por inactividad. Por favor, inicia sesión de nuevo.'
   }
 })
 
@@ -169,6 +251,43 @@ const infoDominio = computed(() => {
 
 const fuerzaPassword = computed(() => {
   return evaluarFuerzaContrasena(password.value)
+})
+
+const tiempoRestanteTexto = computed(() => {
+  return formatearTiempoRestante(segundosRestantes.value)
+})
+
+const iniciarTemporizadorBloqueo = (segundos) => {
+  if (timerBloqueo.value) clearInterval(timerBloqueo.value)
+  segundosRestantes.value = segundos
+  cuentaBloqueada.value = true
+
+  timerBloqueo.value = setInterval(() => {
+    if (segundosRestantes.value > 1) {
+      segundosRestantes.value--
+    } else {
+      segundosRestantes.value = 0
+      cuentaBloqueada.value = false
+      clearInterval(timerBloqueo.value)
+      timerBloqueo.value = null
+      errorMessage.value = ''
+    }
+  }, 1000)
+}
+
+const verificarBloqueoInput = async () => {
+  if (!email.value || mode.value !== 'login') return
+  const estado = await verificarEstadoBloqueo(email.value)
+  if (estado.bloqueado) {
+    iniciarTemporizadorBloqueo(estado.segundosRestantes)
+  } else if (!timerBloqueo.value) {
+    cuentaBloqueada.value = false
+    segundosRestantes.value = 0
+  }
+}
+
+watch(email, (nuevo) => {
+  if (nuevo) verificarBloqueoInput()
 })
 
 const handleSubmit = async () => {
@@ -185,15 +304,19 @@ const handleSubmit = async () => {
   if (mode.value === 'login') {
     const res = await login(email.value, password.value)
     if (res.success) {
+      if (timerBloqueo.value) clearInterval(timerBloqueo.value)
       router.push('/medicion')
     } else {
       errorMessage.value = res.error
+      if (res.bloqueado && res.segundosRestantes > 0) {
+        iniciarTemporizadorBloqueo(res.segundosRestantes)
+      }
       if (res.error?.includes('confirmar tu correo')) {
         needsEmailConfirmation.value = true
       }
     }
   } else {
-    // Validar contraseña robusta antes de registrar
+    // Registro
     if (!fuerzaPassword.value.valida) {
       errorMessage.value = 'Por favor cumple con todos los requisitos de seguridad de la contraseña.'
       return
@@ -222,6 +345,38 @@ const handleResendEmail = async () => {
     errorMessage.value = res.error
   }
 }
+
+// Métodos del modal de recuperación (RF50)
+const abrirModalRecuperacion = () => {
+  correoRecuperacion.value = email.value || ''
+  mensajeRecuperacion.value = ''
+  errorRecuperacion.value = ''
+  modalRecuperacionAbierto.value = true
+}
+
+const cerrarModalRecuperacion = () => {
+  modalRecuperacionAbierto.value = false
+}
+
+const ejecutarRecuperacion = async () => {
+  if (!correoRecuperacion.value) return
+  enviandoRecuperacion.value = true
+  errorRecuperacion.value = ''
+  mensajeRecuperacion.value = ''
+
+  const res = await solicitarRecuperacionContrasena(correoRecuperacion.value)
+  enviandoRecuperacion.value = false
+
+  if (res.success) {
+    mensajeRecuperacion.value = res.message
+  } else {
+    errorRecuperacion.value = res.error
+  }
+}
+
+onUnmounted(() => {
+  if (timerBloqueo.value) clearInterval(timerBloqueo.value)
+})
 </script>
 
 <style scoped>
@@ -282,6 +437,46 @@ const handleResendEmail = async () => {
   font-weight: 500;
 }
 
+/* Banner de Bloqueo RF50 */
+.bloqueo-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.bloqueo-icono {
+  font-size: 1.75rem;
+}
+
+.timer-badge {
+  display: inline-block;
+  background: #7f1d1d;
+  color: #fff;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.text-muted-xs {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.85;
+  margin-top: 0.35rem;
+}
+
+.recuperar-link-box {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.35rem;
+}
+
+.text-sm {
+  font-size: 0.825rem;
+}
+
 .password-meter {
   margin-top: 0.65rem;
   background: #f8fafc;
@@ -338,5 +533,46 @@ const handleResendEmail = async () => {
 .w-full {
   width: 100%;
   margin-top: 0.5rem;
+}
+
+/* Modal de Recuperación RF50 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.modal-card {
+  background: var(--color-surface);
+  border-radius: 0.75rem;
+  max-width: 440px;
+  width: 100%;
+  padding: 1.75rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.modal-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 </style>
