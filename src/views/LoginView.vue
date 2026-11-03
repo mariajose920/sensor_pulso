@@ -136,13 +136,14 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { validarCorreoInstitucional } from '../utils/validators'
 import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
 
 const router = useRouter()
+const route = useRoute()
 const { login, register, resendConfirmationEmail, loading } = useAuth()
 
 const mode = ref('login')
@@ -153,6 +154,13 @@ const errorMessage = ref('')
 const successMessage = ref('')
 const needsEmailConfirmation = ref(false)
 const resending = ref(false)
+
+onMounted(() => {
+  // RF51: Si se cerró la sesión por inactividad
+  if (route.query?.motivo === 'inactividad') {
+    errorMessage.value = 'Tu sesión se ha cerrado por inactividad. Por favor, inicia sesión de nuevo.'
+  }
+})
 
 const infoDominio = computed(() => {
   if (!email.value || !email.value.includes('@')) return null
@@ -180,7 +188,7 @@ const handleSubmit = async () => {
       router.push('/medicion')
     } else {
       errorMessage.value = res.error
-      if (res.error.includes('confirmar tu correo')) {
+      if (res.error?.includes('confirmar tu correo')) {
         needsEmailConfirmation.value = true
       }
     }
