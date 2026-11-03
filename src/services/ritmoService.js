@@ -167,22 +167,24 @@ export function clasificarRitmo({
       }
     }
 
-    // Consumo de cafeína / estimulantes
-    if (paciente.consumoCafeina && !paciente.consumoCafeina.toLowerCase().includes('ninguna')) {
+    // Consumo de cafeína / estimulantes (acepta consumoCafeina o cafeina)
+    const cafeinaVal = paciente.consumoCafeina || paciente.cafeina
+    if (cafeinaVal && !String(cafeinaVal).toLowerCase().includes('ninguna')) {
       if (categoriaClave === 'taquicardia' || categoriaClave === 'irregular') {
-        factores.push(`Consumo reciente de estimulantes (${paciente.consumoCafeina}): La cafeína bloquea los receptores de adenosina y sensibiliza los receptores adrenérgicos, incrementando la frecuencia cardíaca basal.`)
+        factores.push(`Consumo reciente de estimulantes (${cafeinaVal}): La cafeína bloquea los receptores de adenosina y sensibiliza los receptores adrenérgicos, incrementando la frecuencia cardíaca basal.`)
       }
     }
 
     // Medicación
-    if (paciente.medicacion && !paciente.medicacion.toLowerCase().includes('ninguna')) {
+    if (paciente.medicacion && !String(paciente.medicacion).toLowerCase().includes('ninguna')) {
       factores.push(`Medicación declarada (${paciente.medicacion}): Fármacos antihipertensivos, betabloqueantes o broncodilatadores influyen directamente en la frecuencia basal y la variabilidad.`)
     }
 
-    // Horas de sueño
-    if (paciente.horasSueno && (paciente.horasSueno.includes('Menos de 6') || paciente.horasSueno.includes('privación'))) {
+    // Horas de sueño (acepta horasSueno o sueno)
+    const suenoVal = paciente.horasSueno || paciente.sueno
+    if (suenoVal && (String(suenoVal).includes('Menos de 6') || String(suenoVal).includes('privación') || String(suenoVal).includes('menos_5') || String(suenoVal).includes('5_6'))) {
       if (categoriaClave === 'taquicardia' || categoriaClave === 'irregular') {
-        factores.push(`Privación de sueño (${paciente.horasSueno}): Disminuye el tono vagal restaurador nocturno e incrementa el tono simpático basal diurno.`)
+        factores.push(`Privación de sueño (${suenoVal}): Disminuye el tono vagal restaurador nocturno e incrementa el tono simpático basal diurno.`)
       }
     }
 

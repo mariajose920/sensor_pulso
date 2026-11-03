@@ -319,6 +319,15 @@ export const pacienteService = {
   /**
    * Limpia los datos del paciente guardados localmente
    */
+  obtenerUltimaDeclaracion() {
+    try {
+      const guardado = localStorage.getItem(LOCAL_STORAGE_KEY)
+      return guardado ? JSON.parse(guardado) : null
+    } catch (e) {
+      return null
+    }
+  },
+
   limpiarDeclaracionLocal() {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY)

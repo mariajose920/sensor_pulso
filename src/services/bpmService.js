@@ -99,6 +99,8 @@ export function crearMonitorEstadisticasBpm() {
     maxBpm: null,
     ibiMs: 0,
     totalLecturas: 0,
+    sdnn: 0,
+    rmssd: 0,
     estabilidad: 'Esperando señal...',
     estabilidadNivel: 'normal', // 'alta' | 'moderada' | 'baja'
     dentroDeRango: true,
@@ -139,6 +141,20 @@ export function crearMonitorEstadisticasBpm() {
     const evaluacion = evaluarRangoBpm(stats.currentBpm, rango)
     stats.dentroDeRango = evaluacion.dentroDeRango
     stats.estadoRitmo = evaluacion.estado
+
+    // Cálculo dinámico de HRV real (SDNN y RMSSD en ms a partir de intervalos R-R)
+    if (historial.length >= 2) {
+      const rrIntervals = historial.map(b => (60000 / b))
+      const meanRR = rrIntervals.reduce((a, b) => a + b, 0) / rrIntervals.length
+      const varRR = rrIntervals.reduce((acc, v) => acc + Math.pow(v - meanRR, 2), 0) / rrIntervals.length
+      stats.sdnn = Math.round(Math.sqrt(varRR))
+
+      let sumDiffSq = 0
+      for (let i = 0; i < rrIntervals.length - 1; i++) {
+        sumDiffSq += Math.pow(rrIntervals[i + 1] - rrIntervals[i], 2)
+      }
+      stats.rmssd = Math.round(Math.sqrt(sumDiffSq / (rrIntervals.length - 1)))
+    }
 
     // Evaluación de estabilidad de la frecuencia (desviación típica en la ventana)
     if (historial.length >= 5) {
