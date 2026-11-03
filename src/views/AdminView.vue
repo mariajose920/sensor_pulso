@@ -8,8 +8,8 @@
             Gestión global del sistema, cuentas de usuario y asignación de roles.
           </p>
         </div>
-        <button @click="cargarUsuarios" class="btn btn-secondary btn-sm" :disabled="cargandoLista">
-          {{ cargandoLista ? 'Actualizando...' : '🔄 Recargar Lista' }}
+        <button @click="recargarTodo" class="btn btn-secondary btn-sm" :disabled="cargandoLista || cargandoAuditoria">
+          {{ cargandoLista ? 'Actualizando...' : '🔄 Recargar Todo' }}
         </button>
       </div>
 
@@ -85,6 +85,71 @@
         </div>
       </div>
 
+      <!-- SECCIÓN: Registro de Auditoría de Cambios de Rol (RF53) -->
+      <div class="admin-section mt-4">
+        <div class="section-top">
+          <div>
+            <h2 class="section-title">📋 Registro de Auditoría de Cambios de Rol</h2>
+            <p class="section-desc">
+              Trazabilidad inmutable de asignaciones y modificaciones de roles y administradores (RF53).
+            </p>
+          </div>
+          <button @click="cargarAuditoria" class="btn btn-secondary btn-sm" :disabled="cargandoAuditoria">
+            {{ cargandoAuditoria ? 'Cargando...' : '🔄 Actualizar Registro' }}
+          </button>
+        </div>
+
+        <div v-if="cargandoAuditoria" class="loading-state">
+          Cargando registro de auditoría...
+        </div>
+
+        <div v-else-if="historialAuditoria.length === 0" class="empty-state">
+          No hay registros de cambios de rol registrados aún.
+        </div>
+
+        <div v-else class="table-responsive">
+          <table class="users-table auditoria-table">
+            <thead>
+              <tr>
+                <th>Fecha y Hora</th>
+                <th>Administrador Responsable</th>
+                <th>Usuario Modificado</th>
+                <th>Rol Académico</th>
+                <th>Privilegio Administrador</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in historialAuditoria" :key="item.id">
+                <td>
+                  <span class="fecha-badge">{{ formatearFechaHora(item.ocurrio_en) }}</span>
+                </td>
+                <td>
+                  <strong>{{ item.actor_nombre }}</strong>
+                  <div class="sub-correo"><code>{{ item.actor_correo }}</code></div>
+                </td>
+                <td>
+                  <strong>{{ item.usuario_nombre }}</strong>
+                  <div class="sub-correo"><code>{{ item.usuario_correo }}</code></div>
+                </td>
+                <td>
+                  <span class="badge" :class="claseBadgeRol(item.rol_antes)">{{ etiquetaRol(item.rol_antes) }}</span>
+                  <span class="flecha-transicion"> ➔ </span>
+                  <span class="badge" :class="claseBadgeRol(item.rol_despues)">{{ etiquetaRol(item.rol_despues) }}</span>
+                </td>
+                <td>
+                  <span v-if="item.admin_antes !== item.admin_despues" class="badge" :class="item.admin_despues ? 'badge-admin-alta' : 'badge-admin-baja'">
+                    {{ item.admin_despues ? '⭐ Otorgado Admin' : '❌ Revocado Admin' }}
+                  </span>
+                  <span v-else class="text-sin-cambio">
+                    {{ item.admin_despues ? '✓ Se mantuvo Admin' : '— Sin privilegio admin' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad (RF19) -->
       <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
 
@@ -110,7 +175,7 @@
       </div>
     </div>
 
-    <!-- MODAL DE CONFIRMACIÓN DE CAMBIO DE ROL (RF45) -->
+    <!-- MODAL DE CONFIRMACIÓN DE CAMBIO DE ROL (RF45 / RF53) -->
     <div v-if="modalAbierto" class="modal-backdrop" @click.self="cerrarModal">
       <div class="modal-card">
         <h3 class="modal-title">Confirmar Cambio de Rol</h3>
@@ -138,15 +203,16 @@
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" v-model="formEsAdmin" />
-              <span>Otorgar privilegios de <strong>Administrador</strong></span>
+              <span>Privilegios de Administrador del Sistema</span>
             </label>
             <small class="help-text">
-              Permite que la cuenta sea Administrador y Profesor simultáneamente.
+              Permite gestionar usuarios, ver auditorías y acceder a todas las configuraciones.
             </small>
           </div>
 
-          <div v-if="advertenciaUnicoAdmin" class="alert alert-error">
-            ⚠️ Atención: No puedes retirar los privilegios de administrador a esta cuenta porque es el único administrador registrado en la plataforma.
+          <!-- Alerta de seguridad si intenta revocar al único administrador -->
+          <div v-if="advertenciaUnicoAdmin" class="alert alert-error mt-4" style="margin-bottom: 0;">
+            ⚠️ <strong>Acción no permitida:</strong> No se puede retirar el rol de administrador porque es el único administrador activo del sistema.
           </div>
 
           <div class="modal-actions">
@@ -158,19 +224,19 @@
               class="btn btn-primary" 
               :disabled="guardandoRol || advertenciaUnicoAdmin"
             >
-              {{ guardandoRol ? 'Guardando...' : 'Confirmar y Guardar' }}
+              {{ guardandoRol ? 'Guardando...' : 'Guardar y Auditar Cambio' }}
             </button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- MODAL DE PERMISOS PERSONALIZADOS POR PROFESOR (RF98) -->
+    <!-- MODAL DE PERMISOS GRANULARES DE PROFESOR (RF98) -->
     <div v-if="modalPermisosAbierto" class="modal-backdrop" @click.self="cerrarModalPermisos">
       <div class="modal-card">
-        <h3 class="modal-title">🔑 Permisos de Profesor</h3>
+        <h3 class="modal-title">Permisos Granulares de Profesor</h3>
         <p class="modal-subtitle">
-          Configuración de accesos individuales para <strong>{{ profesorSeleccionado?.nombre }}</strong> (<code>{{ profesorSeleccionado?.correo }}</code>).
+          Profesor: <strong>{{ profesorSeleccionado?.nombre || profesorSeleccionado?.correo }}</strong>
         </p>
 
         <div v-if="cargandoPermisos" class="loading-state">
@@ -182,16 +248,16 @@
             <label class="permiso-item">
               <input type="checkbox" v-model="permisosForm.crear_aulas" />
               <div>
-                <strong>Crear aulas y cursos</strong>
-                <p>Permite habilitar nuevas aulas virtuales y códigos para estudiantes.</p>
+                <strong>Crear aulas virtuales</strong>
+                <p>Permite registrar nuevas aulas y generar códigos de acceso.</p>
               </div>
             </label>
 
             <label class="permiso-item">
               <input type="checkbox" v-model="permisosForm.publicar_galeria" />
               <div>
-                <strong>Publicar en la galería</strong>
-                <p>Autoriza la publicación de mediciones en la biblioteca pública.</p>
+                <strong>Publicar señales en galería docente</strong>
+                <p>Permite compartir registros PPG para uso didáctico general.</p>
               </div>
             </label>
 
@@ -238,11 +304,18 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import RangosPanel from '../components/RangosPanel.vue'
-import { verificarOCrearPrimerAdmin, obtenerCuentas, actualizarRolCuenta } from '../services/adminService'
+import { 
+  verificarOCrearPrimerAdmin, 
+  obtenerCuentas, 
+  actualizarRolCuenta,
+  obtenerHistorialCambiosRol,
+  obtenerPermisosProfesor, 
+  guardarPermisosProfesor, 
+  PERMISOS_DEFAULT 
+} from '../services/adminService'
 import { obtenerEtiquetaPerfil } from '../utils/roles'
-import { obtenerPermisosProfesor, guardarPermisosProfesor, PERMISOS_DEFAULT } from '../services/adminService'
 
-const { currentUserId, refrescarPerfil } = useAuth()
+const { currentUserId, currentUserEmail, currentUserName, isAdmin, refrescarPerfil } = useAuth()
 
 const cuentas = ref([])
 const filtroBusqueda = ref('')
@@ -251,12 +324,16 @@ const cargandoInit = ref(false)
 const feedbackMensaje = ref('')
 const feedbackExito = ref(true)
 
-// Modal de edición de roles (RF45)
+// Modal de edición de roles (RF45 / RF53)
 const modalAbierto = ref(false)
 const usuarioSeleccionado = ref(null)
 const formRol = ref('usuario')
 const formEsAdmin = ref(false)
 const guardandoRol = ref(false)
+
+// Auditoría de cambios de rol (RF53)
+const historialAuditoria = ref([])
+const cargandoAuditoria = ref(false)
 
 // Modal de edición de permisos de profesor (RF98)
 const modalPermisosAbierto = ref(false)
@@ -291,10 +368,37 @@ const etiquetaCuenta = (cuenta) => {
   return obtenerEtiquetaPerfil(cuenta)
 }
 
+const etiquetaRol = (rol) => {
+  if (rol === 'profesor') return 'Profesor'
+  return 'Estudiante'
+}
+
 const claseBadge = (cuenta) => {
   if (cuenta.es_admin) return 'badge-admin'
   if (cuenta.rol === 'profesor') return 'badge-profesor'
   return 'badge-usuario'
+}
+
+const claseBadgeRol = (rol) => {
+  if (rol === 'profesor') return 'badge-profesor'
+  return 'badge-usuario'
+}
+
+const formatearFechaHora = (isoStr) => {
+  if (!isoStr) return '—'
+  try {
+    const fecha = new Date(isoStr)
+    return fecha.toLocaleString('es-CL', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+  } catch (_) {
+    return isoStr
+  }
 }
 
 const cargarUsuarios = async () => {
@@ -307,6 +411,19 @@ const cargarUsuarios = async () => {
     feedbackExito.value = false
     feedbackMensaje.value = res.error
   }
+}
+
+const cargarAuditoria = async () => {
+  cargandoAuditoria.value = true
+  const res = await obtenerHistorialCambiosRol()
+  cargandoAuditoria.value = false
+  if (res.success) {
+    historialAuditoria.value = res.data
+  }
+}
+
+const recargarTodo = async () => {
+  await Promise.all([cargarUsuarios(), cargarAuditoria()])
 }
 
 const abrirModalCambio = (cuenta) => {
@@ -326,19 +443,24 @@ const confirmarCambioRol = async () => {
   guardandoRol.value = true
   feedbackMensaje.value = ''
 
+  // RF53: Pasamos datos del actor (administrador que ejecuta la acción)
   const res = await actualizarRolCuenta({
     id: usuarioSeleccionado.value.id,
     nuevoRol: formRol.value,
-    nuevoEsAdmin: formEsAdmin.value
+    nuevoEsAdmin: formEsAdmin.value,
+    actorId: currentUserId.value,
+    actorEsAdmin: isAdmin.value,
+    actorNombre: currentUserName.value,
+    actorCorreo: currentUserEmail.value
   })
 
   guardandoRol.value = false
 
   if (res.success) {
     feedbackExito.value = true
-    feedbackMensaje.value = `El rol de ${usuarioSeleccionado.value.correo} fue actualizado exitosamente.`
+    feedbackMensaje.value = `El rol de ${usuarioSeleccionado.value.correo} fue actualizado y auditado exitosamente.`
     cerrarModal()
-    await cargarUsuarios()
+    await Promise.all([cargarUsuarios(), cargarAuditoria()])
     if (usuarioSeleccionado.value.id === currentUserId.value) {
       await refrescarPerfil()
     }
@@ -400,7 +522,7 @@ const ejecutarInicializacion = async () => {
 }
 
 onMounted(() => {
-  cargarUsuarios()
+  recargarTodo()
 })
 </script>
 
@@ -475,6 +597,47 @@ onMounted(() => {
   color: var(--color-primary);
   margin-left: 0.35rem;
   font-weight: 600;
+}
+
+.sub-correo {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-top: 0.15rem;
+}
+
+.fecha-badge {
+  font-size: 0.8rem;
+  font-family: monospace;
+  background: #f1f5f9;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.flecha-transicion {
+  color: var(--color-muted);
+  font-weight: bold;
+  margin: 0 0.25rem;
+}
+
+.badge-admin-alta {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+  border: 1px solid #fde68a;
+}
+
+.badge-admin-baja {
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 600;
+  border: 1px solid #fecaca;
+}
+
+.text-sin-cambio {
+  font-size: 0.8rem;
+  color: var(--color-muted);
 }
 
 .loading-state, .empty-state {
