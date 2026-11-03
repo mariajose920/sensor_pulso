@@ -48,6 +48,7 @@
 import { computed, ref, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { guardarMedicion } from '../services/medicionesService'
+import { normalizarActividadId } from '../services/actividadesService'
 import { MENSAJES_GUARDADO } from '../utils/medicion'
 import { explicarCalidad, puedeGuardarComoValida } from '../utils/explicacionCalidad'
 

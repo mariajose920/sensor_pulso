@@ -68,7 +68,7 @@
           <span class="value">{{ etiquetaCafeina(paciente.cafeina) }}</span>
         </div>
         <div class="paciente-item">
-          <span class="label">Actividad previa:</span>
+          <span class="label">Contexto / Actividad:</span>
           <span class="value">{{ etiquetaActividad(paciente.actividadPrevia) }}</span>
         </div>
         <div class="paciente-item">
@@ -270,7 +270,7 @@
           <!-- Actividad previa -->
           <div class="form-group">
             <label class="form-label" for="actividadPrevia">
-              Actividad física previa (últimos 30-60 min)
+              Actividad o Contexto de la Medición
             </label>
             <select 
               id="actividadPrevia"
@@ -281,7 +281,7 @@
                 {{ opt.label }}
               </option>
             </select>
-            <small class="form-text">Determina los rangos fisiológicos esperados.</small>
+            <small class="form-text">Asocia el contexto físico (reposo, movimiento o post-ejercicio) a la medición para calibrar los rangos esperados.</small>
           </div>
 
           <!-- Medicación Asistida (RF03) -->
