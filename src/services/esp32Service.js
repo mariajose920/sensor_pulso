@@ -119,6 +119,17 @@ export function repetirMedicionCanal() {
   senalBuffer.rojo = []
 }
 
+// Finalizar la medición: la señal en pantalla se congela con lo último recibido
+export function finalizarMedicionCanal() {
+  senalBuffer.congelado = true
+}
+
+// Nueva medición del canal: se descarta lo anterior y la señal vuelve a graficarse en vivo
+export function iniciarNuevaMedicionCanal() {
+  repetirMedicionCanal()
+  senalBuffer.congelado = false
+}
+
 /**
  * Cambia el canal observado en el osciloscopio y limpia/recarga el buffer
  */

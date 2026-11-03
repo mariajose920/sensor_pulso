@@ -4,6 +4,8 @@ import MedicionView from '../views/MedicionView.vue'
 import ComparacionView from '../views/ComparacionView.vue'
 import AulasView from '../views/AulasView.vue'
 import AprendizajeView from '../views/AprendizajeView.vue'
+import LeccionView from '../views/LeccionView.vue'
+import SimuladorView from '../views/SimuladorView.vue'
 import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
 import AdminView from '../views/AdminView.vue'
@@ -51,8 +53,20 @@ const routes = [
     component: AprendizajeView
   },
   {
+    // RF41: el simulador vive dentro del apartado de aprendizaje; va antes de la lección para que no se tome como slug
+    path: '/aprendizaje/simulador',
+    name: 'Simulador',
+    component: SimuladorView
+  },
+  {
+    // RF38: una lección del apartado de aprendizaje
+    path: '/aprendizaje/:slug',
+    name: 'Leccion',
+    component: LeccionView
+  },
+  {
     path: '/simulador',
-    redirect: '/aprendizaje'
+    redirect: '/aprendizaje/simulador'
   },
   {
     path: '/login',

@@ -126,6 +126,8 @@
       :canal="canalSeleccionado"
       :paciente="pacienteActivo"
       @solicitar-consentimiento="solicitarConsentimientoConAccion"
+      @finalizada="finalizarMedicion"
+      @nueva="nuevaMedicion"
     />
 
     <!-- Panel de Pruebas, Diagnóstico y Firmware -->
@@ -290,7 +292,9 @@ import {
   emitirPaquetePruebaWiFi,
   toggleSimuladorWiFi,
   setCanalOsciloscopio,
-  repetirMedicionCanal
+  repetirMedicionCanal,
+  finalizarMedicionCanal,
+  iniciarNuevaMedicionCanal
 } from '../services/esp32Service'
 import {
   canalesState,
@@ -380,7 +384,23 @@ function obtenerNombreAsignado(canalNum) {
   return ch.usuario_nombre || ch.usuario_email || 'Estudiante asignado'
 }
 
+// Medición finalizada: se congelan la señal y las estadísticas hasta empezar una nueva
+const medicionFinalizada = ref(false)
+
+function finalizarMedicion() {
+  medicionFinalizada.value = true
+  finalizarMedicionCanal()
+}
+
+function nuevaMedicion() {
+  medicionFinalizada.value = false
+  monitorBpm.reiniciar()
+  monitorSpo2.reset()
+  iniciarNuevaMedicionCanal()
+}
+
 function seleccionarCanal(canal) {
+  if (medicionFinalizada.value) nuevaMedicion()
   canalSeleccionado.value = canal
   setCanalOsciloscopio(canal)
   const ch = canalesMostrados.value.find(c => c.canal === canal)
@@ -392,13 +412,13 @@ function seleccionarCanal(canal) {
 
 // Si el usuario vincula su canal, auto-enfocamos el osciloscopio en su canal
 watch(() => canalActivoData.value?.bpm, (nuevoBpm) => {
-  if (nuevoBpm) {
+  if (nuevoBpm && !medicionFinalizada.value) {
     monitorBpm.registrarLectura(nuevoBpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
   }
 }, { immediate: true })
 
 watch(() => canalActivoData.value?.spo2, (nuevoSpo2) => {
-  if (nuevoSpo2) {
+  if (nuevoSpo2 && !medicionFinalizada.value) {
     monitorSpo2.registrarLectura(nuevoSpo2)
   }
 }, { immediate: true })

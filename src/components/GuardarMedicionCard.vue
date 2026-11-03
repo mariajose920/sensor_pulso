@@ -1,6 +1,18 @@
 <template>
   <div class="card guardar-medicion" style="margin-bottom: 1rem; padding: 0.75rem 1.25rem;">
-    <div class="guardar-fila">
+    <!-- Medición finalizada: resumen de lo decidido y salida para empezar otra -->
+    <div v-if="finalizada" class="guardar-fila" data-testid="medicion-finalizada">
+      <div class="guardar-texto">
+        <strong>Medición finalizada</strong>
+        <span class="guardar-resumen">
+          {{ guardadaAlFinalizar ? 'Se guardó en tu historial.' : 'No se guardó.' }}
+          <router-link v-if="guardadaAlFinalizar" to="/historial">Ver historial</router-link>
+        </span>
+      </div>
+      <button type="button" class="btn btn-primary guardar-boton" @click="nuevaMedicion">Nueva medición</button>
+    </div>
+
+    <div v-else class="guardar-fila">
       <div class="guardar-texto">
         <strong>Guardar esta medición en tu historial</strong>
         <span class="guardar-resumen">
@@ -12,24 +24,87 @@
         </span>
       </div>
 
-      <button
-        type="button"
-        class="btn btn-primary guardar-boton"
-        :disabled="!puedeIntentar || guardando"
-        @click="guardar"
-      >
-        {{ guardando ? 'Guardando…' : yaGuardada ? 'Guardada ✔' : 'Guardar medición' }}
-      </button>
+      <div class="guardar-botones">
+        <button
+          type="button"
+          class="btn btn-secondary guardar-boton"
+          data-testid="finalizar-medicion"
+          :disabled="guardando"
+          @click="abrirFinalizar"
+        >
+          Finalizar medición
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary guardar-boton"
+          :disabled="!puedeIntentar || guardando"
+          @click="guardar"
+        >
+          {{ guardando ? 'Guardando…' : yaGuardada ? 'Guardada ✔' : 'Guardar medición' }}
+        </button>
+      </div>
     </div>
 
-    <p v-if="!isAuthenticated" class="guardar-aviso">
+    <!-- Al finalizar se pregunta si se guarda -->
+    <div v-if="confirmando" class="modal-backdrop" @click.self="cancelarFinalizar">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="finalizar-titulo" data-testid="dialogo-finalizar">
+        <h3 id="finalizar-titulo" class="modal-title">
+          {{ yaGuardada ? 'Finalizar la medición' : '¿Quieres guardar la medición?' }}
+        </h3>
+        <p class="modal-resumen">
+          <template v-if="tieneMedicion">
+            {{ bpm }} BPM<template v-if="spo2 > 0"> · {{ spo2 }} % SpO₂</template><template v-if="canal"> · Canal {{ canal }}</template>
+          </template>
+          <template v-else>Todavía no hay una medición con BPM.</template>
+        </p>
+        <p v-if="yaGuardada" class="modal-nota">Esta medición ya está guardada en tu historial.</p>
+        <p v-else-if="!isAuthenticated" class="modal-nota">
+          Para guardarla necesitas <router-link to="/login">iniciar sesión</router-link>.
+        </p>
+        <p v-else-if="!tieneMedicion" class="modal-nota">{{ MENSAJES_GUARDADO.sin_datos }}</p>
+        <p v-else-if="!guardable" class="modal-nota guardar-error" role="alert">{{ MENSAJES_GUARDADO.calidad_mala }}</p>
+
+        <p v-if="resultado && !resultado.ok" class="modal-nota guardar-error" role="alert">
+          {{ resultado.mensaje }}
+          <button
+            v-if="resultado.motivo === 'consentimiento'"
+            type="button"
+            class="btn btn-secondary guardar-enlace"
+            @click="emit('solicitar-consentimiento', guardar)"
+          >
+            Aceptar consentimiento
+          </button>
+        </p>
+
+        <div class="modal-actions">
+          <button
+            v-if="!yaGuardada"
+            type="button"
+            class="btn btn-primary"
+            data-testid="finalizar-guardar"
+            :disabled="!puedeIntentar || guardando"
+            @click="guardarYFinalizar"
+          >
+            {{ guardando ? 'Guardando…' : 'Sí, guardar' }}
+          </button>
+          <button type="button" class="btn btn-secondary" data-testid="finalizar-no-guardar" :disabled="guardando" @click="terminar(yaGuardada)">
+            {{ yaGuardada ? 'Finalizar' : 'No guardar' }}
+          </button>
+          <button type="button" class="btn btn-secondary" :disabled="guardando" @click="cancelarFinalizar">
+            Seguir midiendo
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <p v-if="!finalizada && !isAuthenticated" class="guardar-aviso">
       Para guardar necesitas <router-link to="/login">iniciar sesión</router-link>.
     </p>
-    <p v-else-if="!guardable && tieneMedicion" class="guardar-aviso guardar-error" role="alert">
+    <p v-else-if="!finalizada && !guardable && tieneMedicion" class="guardar-aviso guardar-error" role="alert">
       {{ MENSAJES_GUARDADO.calidad_mala }}
     </p>
 
-    <p v-if="resultado" class="guardar-aviso" :class="{ 'guardar-error': !resultado.ok }" :role="resultado.ok ? 'status' : 'alert'">
+    <p v-if="resultado && !confirmando" class="guardar-aviso" :class="{ 'guardar-error': !resultado.ok }" :role="resultado.ok ? 'status' : 'alert'">
       {{ resultado.mensaje }}
       <router-link v-if="resultado.ok" to="/historial">Ver historial</router-link>
       <button
@@ -65,10 +140,13 @@ const props = defineProps({
   canal: { type: Number, default: null },
   paciente: { type: Object, default: null }          // declaración activa (RF03): id y edad
 })
-const emit = defineEmits(['solicitar-consentimiento', 'guardada'])
+const emit = defineEmits(['solicitar-consentimiento', 'guardada', 'finalizada', 'nueva'])
 
 const { isAuthenticated } = useAuth()
 
+const confirmando = ref(false)
+const finalizada = ref(false)
+const guardadaAlFinalizar = ref(false)
 const guardando = ref(false)
 const yaGuardada = ref(false)
 const resultado = ref(null)
@@ -94,10 +172,45 @@ watch(() => props.bpm > 0, (hay) => {
 }, { immediate: true })
 
 watch(() => props.canal, () => {
+  finalizada.value = false
+  confirmando.value = false
   yaGuardada.value = false
   resultado.value = null
   idCliente.value = null
 })
+
+// Finalizar: pregunta si se guarda; la medición termina al guardar o al elegir no guardar
+function abrirFinalizar() {
+  resultado.value = null
+  confirmando.value = true
+}
+
+function cancelarFinalizar() {
+  if (guardando.value) return
+  confirmando.value = false
+}
+
+function terminar(guardada) {
+  confirmando.value = false
+  finalizada.value = true
+  guardadaAlFinalizar.value = guardada
+  emit('finalizada', { guardada })
+}
+
+async function guardarYFinalizar() {
+  await guardar()
+  if (yaGuardada.value) terminar(true)
+}
+
+function nuevaMedicion() {
+  finalizada.value = false
+  guardadaAlFinalizar.value = false
+  yaGuardada.value = false
+  resultado.value = null
+  idCliente.value = null
+  inicio.value = props.bpm > 0 ? new Date() : null
+  emit('nueva')
+}
 
 async function guardar() {
   if (guardando.value || !puedeIntentar.value) return
@@ -138,6 +251,30 @@ async function guardar() {
 .guardar-texto { display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.9rem; }
 .guardar-resumen { color: var(--color-muted); font-size: 0.82rem; }
 .guardar-boton { font-size: 0.85rem; padding: 0.4rem 1rem; }
+.guardar-botones { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+.modal-card {
+  background: var(--color-surface);
+  border-radius: 0.75rem;
+  max-width: 460px;
+  width: 100%;
+  padding: 1.5rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+.modal-title { font-size: 1.15rem; font-weight: 700; margin: 0 0 0.5rem; }
+.modal-resumen { font-weight: 600; margin: 0 0 0.5rem; }
+.modal-nota { margin: 0.5rem 0; font-size: 0.85rem; color: var(--color-muted); }
+.modal-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; margin-top: 1rem; }
+.modal-actions .btn { min-height: var(--alto-tactil); }
 .guardar-aviso { margin: 0.5rem 0 0; font-size: 0.82rem; color: var(--color-muted); }
 .guardar-error { color: var(--color-danger); font-weight: 600; }
 .guardar-enlace { font-size: 0.78rem; padding: 0.2rem 0.6rem; margin-left: 0.5rem; }
