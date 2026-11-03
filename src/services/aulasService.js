@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { validarCorreoInstitucional } from '../utils/validators'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -16,6 +17,7 @@ const STORAGE_AULAS = 'sensor_pulso_aulas_locales'
 const STORAGE_AULA_ESTUDIANTES = 'sensor_pulso_aula_estudiantes_locales'
 const STORAGE_CURSOS = 'sensor_pulso_cursos_locales'
 const STORAGE_CURSO_ESTUDIANTES = 'sensor_pulso_curso_estudiantes_locales'
+const STORAGE_INVITACIONES = 'sensor_pulso_invitaciones_aulas_locales'
 
 function cargarDeStorage(key, porDefecto) {
   if (typeof window === 'undefined' || !window.localStorage) return porDefecto
@@ -72,17 +74,20 @@ let cursosLocales = cargarDeStorage(STORAGE_CURSOS, [
   { id: 'curso-02', aula_id: 'aula-001', nombre: 'Sección 2 - Práctica con Sensores', creado_en: '2026-10-29T10:30:00Z' }
 ])
 
-// Estudiantes asignados a cada curso (un estudiante puede estar en varios cursos)
+// Estudiantes asignados a cada curso
 let cursoEstudiantesLocales = cargarDeStorage(STORAGE_CURSO_ESTUDIANTES, [
   { curso_id: 'curso-01', aula_id: 'aula-001', usuario_id: '00000000-0000-0000-0000-000000000003' },
   { curso_id: 'curso-01', aula_id: 'aula-001', usuario_id: '00000000-0000-0000-0000-000000000004' },
   { curso_id: 'curso-02', aula_id: 'aula-001', usuario_id: '00000000-0000-0000-0000-000000000003' }
 ])
 
+// Invitaciones por correo (RF100)
+let invitacionesLocales = cargarDeStorage(STORAGE_INVITACIONES, [])
+
 /**
  * Obtener aulas
  */
-export async function obtenerAulas({ usuarioId, esAdmin, esProfesor }) {
+export async function obtenerAulas({ usuarioId, usuarioCorreo, esAdmin, esProfesor }) {
   try {
     let query = supabase.from('aulas').select('*').order('creado_en', { ascending: false })
     if (!esAdmin && esProfesor) {
@@ -99,7 +104,12 @@ export async function obtenerAulas({ usuarioId, esAdmin, esProfesor }) {
   } else if (esProfesor) {
     return { success: true, data: aulasLocales.filter(a => a.profesor_id === usuarioId) }
   } else {
-    const misAulasIds = aulaEstudiantesLocales.filter(i => i.usuario_id === usuarioId && i.estado === 'activo').map(i => i.aula_id)
+    const misAulasIds = aulaEstudiantesLocales
+      .filter(i => (
+        (usuarioId && i.usuario_id === usuarioId) ||
+        (usuarioCorreo && i.correo && i.correo.toLowerCase() === usuarioCorreo.toLowerCase())
+      ) && i.estado === 'activo')
+      .map(i => i.aula_id)
     return { success: true, data: aulasLocales.filter(a => misAulasIds.includes(a.id)) }
   }
 }
@@ -150,12 +160,198 @@ export async function crearAula({ nombre, descripcion, profesorId, profesorNombr
 }
 
 // ==========================================
-// RF101: GESTIÓN DE CURSOS DENTRO DEL AULA
+// RF100: CÓDIGO DE AULA, INVITACIÓN Y UNIÓN
 // ==========================================
 
 /**
- * RF101: Obtener los cursos de un aula con su conteo de estudiantes
+ * RF100: El estudiante ingresa el código a mano para unirse al aula.
+ * Criterios de aceptación:
+ * - Con código válido el estudiante entra al aula.
+ * - Un código desactivado o regenerado deja de servir.
  */
+export async function unirseAulaPorCodigo({ codigo, usuarioId, usuarioNombre, usuarioCorreo }) {
+  if (!codigo || !codigo.trim()) {
+    return { success: false, error: 'Por favor ingresa un código de aula.' }
+  }
+
+  const codigoNormalizado = codigo.trim().toUpperCase()
+
+  // 1. Priorizar búsqueda en las aulas locales activas del navegador
+  const aula = aulasLocales.find(a => a.codigo === codigoNormalizado)
+
+  if (aula) {
+    // Criterio de aceptación: Un código desactivado deja de servir
+    if (!aula.codigo_activo) {
+      return { 
+        success: false, 
+        error: 'Este código de aula ha sido desactivado temporalmente por el profesor.' 
+      }
+    }
+
+    // Verificar si ya está inscrito (por ID o por Correo)
+    const yaInscrito = aulaEstudiantesLocales.some(
+      e => e.aula_id === aula.id && (
+        (usuarioId && e.usuario_id === usuarioId) ||
+        (usuarioCorreo && e.correo && e.correo.toLowerCase() === usuarioCorreo.toLowerCase())
+      ) && e.estado === 'activo'
+    )
+    if (yaInscrito) {
+      return { success: false, error: 'Ya te encuentras inscrito en esta aula.' }
+    }
+
+    // Verificar límite de capacidad
+    const inscritosActuales = aulaEstudiantesLocales.filter(e => e.aula_id === aula.id && e.estado === 'activo').length
+    if (inscritosActuales >= (aula.max_estudiantes || 100)) {
+      return { success: false, error: 'El aula ha alcanzado su capacidad máxima de estudiantes.' }
+    }
+
+    // Inscribir estudiante
+    const nuevoEstudiante = {
+      aula_id: aula.id,
+      usuario_id: usuarioId,
+      nombre: usuarioNombre || 'Estudiante',
+      correo: usuarioCorreo || '',
+      estado: 'activo',
+      inscrito_en: new Date().toISOString()
+    }
+
+    aulaEstudiantesLocales.push(nuevoEstudiante)
+    guardarEnStorage(STORAGE_AULA_ESTUDIANTES, aulaEstudiantesLocales)
+
+    // Sincronizar en BD si es posible
+    try {
+      await supabase.rpc('unirse_a_aula', { p_codigo: codigoNormalizado })
+    } catch (_) {}
+
+    return { 
+      success: true, 
+      message: `¡Te has incorporado exitosamente a "${aula.nombre}"!`, 
+      aula 
+    }
+  }
+
+  // 2. Si no estaba en memoria local, intentar con Supabase RPC
+  try {
+    const { data, error } = await supabase.rpc('unirse_a_aula', { p_codigo: codigoNormalizado })
+    if (!error && data) {
+      return { success: true, message: '¡Te has unido exitosamente al aula!' }
+    }
+  } catch (_) {}
+
+  return { 
+    success: false, 
+    error: 'El código ingresado no existe o fue regenerado por el profesor. Verifica con tu docente.' 
+  }
+}
+
+/**
+ * RF100: El profesor activa o desactiva el código de acceso del aula
+ */
+export async function alternarEstadoCodigoAula({ aulaId, profesorId, esAdmin }) {
+  const aula = aulasLocales.find(a => a.id === aulaId)
+  if (!aula) return { success: false, error: 'Aula no encontrada.' }
+  if (!esAdmin && aula.profesor_id !== profesorId) {
+    return { success: false, error: 'No tienes autorización sobre esta aula.' }
+  }
+
+  const nuevoEstado = !aula.codigo_activo
+  try {
+    await supabase.from('aulas').update({ codigo_activo: nuevoEstado }).eq('id', aulaId)
+  } catch (_) {}
+
+  aula.codigo_activo = nuevoEstado
+  guardarEnStorage(STORAGE_AULAS, aulasLocales)
+
+  return { 
+    success: true, 
+    codigo_activo: nuevoEstado,
+    message: nuevoEstado ? 'Código activado. Los estudiantes pueden unirse.' : 'Código desactivado. Nuevos ingresos bloqueados.'
+  }
+}
+
+/**
+ * RF100: El profesor regenera el código del aula (el código anterior deja de servir inmediatamente)
+ */
+export async function regenerarCodigoAulaDocente({ aulaId, profesorId, esAdmin }) {
+  const aula = aulasLocales.find(a => a.id === aulaId)
+  if (!aula) return { success: false, error: 'Aula no encontrada.' }
+  if (!esAdmin && aula.profesor_id !== profesorId) {
+    return { success: false, error: 'No tienes autorización sobre esta aula.' }
+  }
+
+  let nuevoCodigo = generarCodigoAula()
+  let intentos = 0
+  while (aulasLocales.some(a => a.codigo === nuevoCodigo) && intentos < 10) {
+    nuevoCodigo = generarCodigoAula()
+    intentos++
+  }
+
+  try {
+    await supabase.rpc('regenerar_codigo_aula', { p_aula: aulaId })
+  } catch (_) {
+    try {
+      await supabase.from('aulas').update({ codigo: nuevoCodigo, codigo_activo: true }).eq('id', aulaId)
+    } catch (_) {}
+  }
+
+  aula.codigo = nuevoCodigo
+  aula.codigo_activo = true
+  guardarEnStorage(STORAGE_AULAS, aulasLocales)
+
+  return { 
+    success: true, 
+    nuevoCodigo,
+    message: `Código regenerado exitosamente: ${nuevoCodigo}. El código previo ha quedado invalidado.`
+  }
+}
+
+/**
+ * RF100: Enviar invitación con el código al correo del estudiante (@alu.unach.cl)
+ */
+export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, esAdmin }) {
+  const aula = aulasLocales.find(a => a.id === aulaId)
+  if (!aula) return { success: false, error: 'Aula no encontrada.' }
+  if (!esAdmin && aula.profesor_id !== profesorId) {
+    return { success: false, error: 'No tienes permiso para gestionar invitaciones en esta aula.' }
+  }
+
+  const validacion = validarCorreoInstitucional(correoEstudiante)
+  if (!validacion.valido || validacion.rol !== 'usuario') {
+    return { success: false, error: 'Debes ingresar un correo institucional de estudiante válido (@alu.unach.cl).' }
+  }
+
+  const correoLimpio = correoEstudiante.trim().toLowerCase()
+
+  // Guardar invitación
+  const nuevaInvitacion = {
+    id: `inv-${Date.now()}`,
+    aula_id: aulaId,
+    aula_nombre: aula.nombre,
+    codigo_aula: aula.codigo,
+    correo: correoLimpio,
+    enviada_en: new Date().toISOString()
+  }
+
+  try {
+    await supabase.from('invitaciones_aula').insert({
+      aula_id: aulaId,
+      correo: correoLimpio
+    })
+  } catch (_) {}
+
+  invitacionesLocales.unshift(nuevaInvitacion)
+  guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+
+  return {
+    success: true,
+    message: `Invitación enviada a ${correoLimpio} con el código de acceso ${aula.codigo}.`
+  }
+}
+
+// ==========================================
+// RF101: GESTIÓN DE CURSOS DENTRO DEL AULA
+// ==========================================
+
 export async function obtenerCursosAula(aulaId) {
   try {
     const { data, error } = await supabase
@@ -165,16 +361,17 @@ export async function obtenerCursosAula(aulaId) {
       .order('creado_en', { ascending: true })
 
     if (!error && data) {
-      const mapeados = data.map(c => ({
-        ...c,
-        cantidad_estudiantes: c.curso_estudiantes?.length || 0,
-        estudiantes_ids: (c.curso_estudiantes || []).map(e => e.usuario_id)
-      }))
-      return { success: true, data: mapeados }
+      return { 
+        success: true, 
+        data: data.map(c => ({
+          ...c,
+          cantidad_estudiantes: c.curso_estudiantes?.length || 0,
+          estudiantes_ids: (c.curso_estudiantes || []).map(e => e.usuario_id)
+        }))
+      }
     }
   } catch (_) {}
 
-  // Fallback local
   const cursos = cursosLocales.filter(c => c.aula_id === aulaId).map(c => {
     const asignados = cursoEstudiantesLocales.filter(ce => ce.curso_id === c.id)
     return {
@@ -186,9 +383,6 @@ export async function obtenerCursosAula(aulaId) {
   return { success: true, data: cursos }
 }
 
-/**
- * RF101: Obtener los estudiantes inscritos en el aula
- */
 export async function obtenerEstudiantesAula(aulaId) {
   try {
     const { data, error } = await supabase
@@ -209,27 +403,22 @@ export async function obtenerEstudiantesAula(aulaId) {
     }
   } catch (_) {}
 
-  const estudiantes = aulaEstudiantesLocales.filter(e => e.aula_id === aulaId && e.estado === 'activo')
-  return { success: true, data: estudiantes }
+  return { 
+    success: true, 
+    data: aulaEstudiantesLocales.filter(e => e.aula_id === aulaId && e.estado === 'activo') 
+  }
 }
 
-/**
- * RF101: Crear un curso dentro del aula
- */
 export async function crearCurso({ aulaId, nombre, profesorId, esAdmin }) {
-  if (!nombre || !nombre.trim()) {
-    return { success: false, error: 'El nombre del curso es obligatorio.' }
-  }
+  if (!nombre || !nombre.trim()) return { success: false, error: 'El nombre del curso es obligatorio.' }
 
-  // Criterio de aceptación: Solo el dueño del aula o admin puede crear cursos
   const aula = aulasLocales.find(a => a.id === aulaId)
   if (aula && !esAdmin && aula.profesor_id !== profesorId) {
     return { success: false, error: 'No tienes autorización para gestionar cursos en esta aula.' }
   }
 
   const nombreLimpio = nombre.trim()
-  const duplicado = cursosLocales.some(c => c.aula_id === aulaId && c.nombre.toLowerCase() === nombreLimpio.toLowerCase())
-  if (duplicado) {
+  if (cursosLocales.some(c => c.aula_id === aulaId && c.nombre.toLowerCase() === nombreLimpio.toLowerCase())) {
     return { success: false, error: 'Ya existe un curso con este nombre dentro del aula.' }
   }
 
@@ -243,10 +432,7 @@ export async function crearCurso({ aulaId, nombre, profesorId, esAdmin }) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('cursos')
-      .insert({ aula_id: aulaId, nombre: nombreLimpio })
-      .select()
+    const { data, error } = await supabase.from('cursos').insert({ aula_id: aulaId, nombre: nombreLimpio }).select()
     if (!error && data) nuevoCurso.id = data[0].id
   } catch (_) {}
 
@@ -255,14 +441,8 @@ export async function crearCurso({ aulaId, nombre, profesorId, esAdmin }) {
   return { success: true, data: nuevoCurso }
 }
 
-/**
- * RF101: Renombrar un curso existente
- */
 export async function renombrarCurso({ cursoId, nuevoNombre, aulaId, profesorId, esAdmin }) {
-  if (!nuevoNombre || !nuevoNombre.trim()) {
-    return { success: false, error: 'El nuevo nombre no puede estar vacío.' }
-  }
-
+  if (!nuevoNombre || !nuevoNombre.trim()) return { success: false, error: 'El nombre no puede estar vacío.' }
   const aula = aulasLocales.find(a => a.id === aulaId)
   if (aula && !esAdmin && aula.profesor_id !== profesorId) {
     return { success: false, error: 'No tienes permiso para modificar este curso.' }
@@ -281,12 +461,10 @@ export async function renombrarCurso({ cursoId, nuevoNombre, aulaId, profesorId,
   return { success: true }
 }
 
-/**
- * RF101: Eliminar un curso (los estudiantes permanecen en el aula)
- */
 export async function eliminarCurso({ cursoId, aulaId, profesorId, esAdmin }) {
   const aula = aulasLocales.find(a => a.id === aulaId)
-  if (aula && !esAdmin && aula.profesor_id !== profesorId) {
+  if (!aula) return { success: true }
+  if (!esAdmin && aula.profesor_id !== profesorId) {
     return { success: false, error: 'No tienes permiso para eliminar este curso.' }
   }
 
@@ -294,36 +472,27 @@ export async function eliminarCurso({ cursoId, aulaId, profesorId, esAdmin }) {
     await supabase.from('cursos').delete().eq('id', cursoId)
   } catch (_) {}
 
-  // Eliminar asignaciones del curso pero conservar a los estudiantes en el aula
   cursoEstudiantesLocales = cursoEstudiantesLocales.filter(ce => ce.curso_id !== cursoId)
   cursosLocales = cursosLocales.filter(c => c.id !== cursoId)
 
   guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
   guardarEnStorage(STORAGE_CURSOS, cursosLocales)
-
   return { success: true }
 }
 
-/**
- * RF101: Asignar o retirar estudiantes de un curso
- */
 export async function actualizarEstudiantesCurso({ cursoId, aulaId, estudiantesIds }) {
   try {
-    // En BD: eliminar asignaciones anteriores y reinsertar seleccionados
     await supabase.from('curso_estudiantes').delete().eq('curso_id', cursoId)
     if (estudiantesIds.length > 0) {
-      const inserts = estudiantesIds.map(uid => ({ curso_id: cursoId, aula_id: aulaId, usuario_id: uid }))
-      await supabase.from('curso_estudiantes').insert(inserts)
+      await supabase.from('curso_estudiantes').insert(estudiantesIds.map(uid => ({ curso_id: cursoId, aula_id: aulaId, usuario_id: uid })))
     }
   } catch (_) {}
 
-  // Actualizar en memoria local y persistir
   cursoEstudiantesLocales = cursoEstudiantesLocales.filter(ce => ce.curso_id !== cursoId)
   estudiantesIds.forEach(uid => {
     cursoEstudiantesLocales.push({ curso_id: cursoId, aula_id: aulaId, usuario_id: uid })
   })
 
   guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
-
   return { success: true }
 }
