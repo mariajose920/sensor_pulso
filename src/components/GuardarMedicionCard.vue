@@ -48,6 +48,7 @@
 import { computed, ref, watch } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { guardarMedicion } from '../services/medicionesService'
+import { sesionActivaId } from '../services/sesionMedicionService'
 import { normalizarActividadId } from '../services/actividadesService'
 import { MENSAJES_GUARDADO } from '../utils/medicion'
 import { explicarCalidad, puedeGuardarComoValida } from '../utils/explicacionCalidad'
@@ -64,6 +65,7 @@ const props = defineProps({
   causasCalidad: { type: Array, default: () => [] },
   fuente: { type: String, default: 'sensor' },       // sensor | simulador
   canal: { type: Number, default: null },
+  sesionId: { type: String, default: null },
   paciente: { type: Object, default: null }          // declaración activa (RF03): id y edad
 })
 const emit = defineEmits(['solicitar-consentimiento', 'guardada'])
@@ -110,6 +112,7 @@ async function guardar() {
       idCliente: idCliente.value || undefined,
       fuente: props.fuente,
       canal: props.canal,
+      sesionId: props.sesionId || sesionActivaId.value || undefined,
       bpm: props.bpm,
       spo2: props.spo2 || null,
       rmssd: props.rmssd,

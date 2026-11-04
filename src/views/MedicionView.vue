@@ -393,6 +393,9 @@
         </div>
       </div>
 
+      <!-- Control y Gestión de Sesión de Medición en Vivo (RF09, RF10, RF11, RF111) -->
+      <SesionMedicionControl />
+
       <!-- Barra de Estado WiFi del ESP32 (RF05, RF54) -->
       <Esp32WifiStatus
         :conectado="esp32State.conectado"
@@ -600,6 +603,9 @@
             <span class="tag-item">Cafeína: <strong>{{ pacienteActivo.cafeina || 'Ninguna' }}</strong></span>
             <span class="tag-item">Medicación: <strong>{{ pacienteActivo.medicacion || 'Ninguna' }}</strong></span>
             <span class="tag-item">Contexto: <strong>{{ pacienteActivo.actividadNombre || pacienteActivo.actividadPrevia || 'Reposo basal' }}</strong></span>
+            <span v-if="sesionState.sesionActiva" class="tag-item" style="border-color: #bbf7d0; background: #f0fdf4;">
+              Sesión: <strong style="color: #15803d;">#{{ sesionState.sesionActiva.id.substring(0, 8) }} (Ronda {{ sesionState.sesionActiva.ronda }})</strong>
+            </span>
           </div>
         </div>
 
@@ -722,6 +728,8 @@ import CanalCard from '../components/CanalCard.vue'
 import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
+import SesionMedicionControl from '../components/SesionMedicionControl.vue'
+import { sesionState } from '../services/sesionMedicionService'
 
 import { crearMonitorEstadisticasBpm } from '../services/bpmService'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
@@ -1054,6 +1062,7 @@ function finalizarMedicionYVerResultados() {
 function guardarInformePdf() {
   descargarInformeClinicoPdf({
     paciente: pacienteActivo.value,
+    sesion: sesionState.sesionActiva,
     resultados: {
       bpm: resultadosFinales.bpm,
       spo2: resultadosFinales.spo2,
