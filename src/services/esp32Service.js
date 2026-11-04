@@ -152,7 +152,7 @@ export function detenerSondeoWiFi() {
  * Envía un paquete de prueba directamente al endpoint /api/esp32/telemetria
  * Simula el comportamiento del ESP32 enviando datos por WiFi (RF05)
  */
-export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_rf05') {
+export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_rf05', customCanal1 = null) {
   const now = Date.now()
   const canales = []
 
@@ -162,8 +162,12 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
 
   for (let c = 0; c < 5; c++) {
     const jitter = Math.sin((now + c * 300) / 4000) * 1.5
-    const bpm = parseFloat((bpmBases[c] + jitter).toFixed(1))
-    const spo2 = parseFloat((spo2Bases[c] + Math.cos((now + c * 500) / 6000) * 0.3).toFixed(1))
+    let bpm = parseFloat((bpmBases[c] + jitter).toFixed(1))
+    let spo2 = parseFloat((spo2Bases[c] + Math.cos((now + c * 500) / 6000) * 0.3).toFixed(1))
+    if (c === 0 && customCanal1) {
+      if (typeof customCanal1.bpm === 'number') bpm = customCanal1.bpm
+      if (typeof customCanal1.spo2 === 'number') spo2 = customCanal1.spo2
+    }
 
     const freqHz = bpm / 60.0
     const phaseStep = (2 * Math.PI * freqHz) / 50.0
