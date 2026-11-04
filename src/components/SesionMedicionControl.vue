@@ -12,7 +12,12 @@
           </div>
           <div>
             <div class="sesion-badge-row">
-              <span class="badge badge-activa">RF09 · Sesión Activa</span>
+              <!-- RF11: Indicador del estado de conexión canónico -->
+              <EstadoConexionBadge 
+                :estado="sesionState.sesionActiva ? sesionState.sesionActiva.estado : 'inactiva'" 
+                tamano="sm" 
+                :motivo="sesionState.sesionActiva?.motivo_fin" 
+              />
               <span class="badge badge-ronda">Ronda {{ sesionState.sesionActiva.ronda }} de 5</span>
               <span class="badge badge-sub">En Vivo (RF11)</span>
             </div>
@@ -294,6 +299,7 @@ import {
   forzarSimulacionSensorDesconectado
 } from '../services/vigilanteConexionService.js'
 import AlertaDesconexionModal from './AlertaDesconexionModal.vue'
+import EstadoConexionBadge from './EstadoConexionBadge.vue'
 
 const formDispositivo = ref('ESP32-Biomedico-01')
 const formRonda = ref(1)
