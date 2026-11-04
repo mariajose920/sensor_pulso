@@ -33,6 +33,47 @@ export const MOTIVOS_FIN = {
   TIEMPO_LIMITE: 'tiempo_limite'
 }
 
+export const ETIQUETAS_ESTADO_CONEXION = {
+  activa: 'Conexión Activa',
+  perdida: 'Conexión Perdida',
+  finalizada: 'Finalizada',
+  inactiva: 'En Espera'
+}
+
+export const COLORES_ESTADO_CONEXION = {
+  activa: {
+    texto: '#166534',
+    bg: '#dcfce7',
+    borde: '#86efac',
+    punto: '#16a34a'
+  },
+  perdida: {
+    texto: '#991b1b',
+    bg: '#fee2e2',
+    borde: '#fca5a5',
+    punto: '#dc2626'
+  },
+  finalizada: {
+    texto: '#475569',
+    bg: '#f1f5f9',
+    borde: '#cbd5e1',
+    punto: '#64748b'
+  },
+  inactiva: {
+    texto: '#0369a1',
+    bg: '#e0f2fe',
+    borde: '#7dd3fc',
+    punto: '#0284c7'
+  }
+}
+
+export const DESCRIPCIONES_ESTADO_CONEXION = {
+  activa: 'Enlace bidireccional estable con microcontrolador y sensor óptico MAX30102.',
+  perdida: 'Interrupción de telemetría WiFi o señal óptica. Intentando reconectar...',
+  finalizada: 'Sesión concluida. No se reciben más paquetes de bioseñales.',
+  inactiva: 'Sesión no iniciada. En espera de inicio oficial (RF09).'
+}
+
 /**
  * Genera un identificador UUID v4 estándar.
  */
@@ -101,6 +142,42 @@ export const duracionCronometroTexto = computed(() => {
 export const sesionActivaId = computed(() => {
   return sesionState.sesionActiva?.id || null
 })
+
+export const estadoConexionActual = computed(() => {
+  if (!sesionState.sesionActiva) return ESTADOS_CONEXION.INACTIVA
+  return sesionState.sesionActiva.estado || ESTADOS_CONEXION.INACTIVA
+})
+
+export const esConexionActiva = computed(() => estadoConexionActual.value === ESTADOS_CONEXION.ACTIVA)
+export const esConexionPerdida = computed(() => estadoConexionActual.value === ESTADOS_CONEXION.PERDIDA)
+export const esConexionFinalizada = computed(() => estadoConexionActual.value === ESTADOS_CONEXION.FINALIZADA)
+
+/**
+ * Cambia el estado de conexión de la sesión activa (RF11)
+ * @param {'activa' | 'perdida' | 'finalizada'} nuevoEstado
+ * @param {string} [motivo=null]
+ */
+export async function cambiarEstadoConexion(nuevoEstado, motivo = null) {
+  if (!sesionState.sesionActiva) return { ok: false, mensaje: 'No hay sesión activa.' }
+  
+  sesionState.sesionActiva.estado = nuevoEstado
+  if (motivo) sesionState.sesionActiva.motivo_fin = motivo
+
+  try {
+    const updateObj = { estado: nuevoEstado }
+    if (motivo) updateObj.motivo_fin = motivo
+    if (nuevoEstado === ESTADOS_CONEXION.FINALIZADA) updateObj.fin = new Date().toISOString()
+    
+    await supabase
+      .from('sesiones_medicion')
+      .update(updateObj)
+      .eq('id', sesionState.sesionActiva.id)
+  } catch (err) {
+    console.warn('[RF11] Fallback local estado conexión:', err?.message)
+  }
+
+  return { ok: true, estado: nuevoEstado }
+}
 
 /**
  * Inicia el cronómetro en memoria sincronizado con el timestamp de inicio
@@ -362,8 +439,10 @@ export async function iniciarSesion(opciones = {}) {
  * @param {string} [params.sesionId=null]
  * @returns {Promise<{ok: boolean, sesion: Object}>}
  */
-export async function finalizarSesion({ motivo = MOTIVOS_FIN.USUARIO, sesionId = null } = {}) {
-  const targetId = sesionId || sesionState.sesionActiva?.id
+export async function finalizarSesion(opciones = {}) {
+  const opts = typeof opciones === 'string' ? { motivo: opciones } : (opciones || {})
+  const motivo = opts.motivo || MOTIVOS_FIN.USUARIO
+  const targetId = opts.sesionId || sesionState.sesionActiva?.id
   if (!targetId || !sesionState.sesionActiva) {
     return { ok: false, mensaje: 'No hay ninguna sesión de medición activa para finalizar.' }
   }

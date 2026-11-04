@@ -579,7 +579,8 @@
             Especificación de la arquitectura de vinculación de canales (RF12) y telemetría (RF05):
           </p>
           <table class="api-table">
-            <tr>
+            <tbody>
+              <tr>
               <th>Visualización 5 Canales (RF08)</th>
               <td>Supervisión simultánea de hasta 5 canales fisiológicos del ESP32 con BPM, SpO₂ y calidad en tiempo real.</td>
             </tr>
@@ -591,6 +592,7 @@
               <th>Vinculación Canales (RF12)</th>
               <td>Función atómica <code>elegir_canal(p_sesion, p_canal)</code>: Asigna el canal al estudiante que lo selecciona.</td>
             </tr>
+            </tbody>
           </table>
         </div>
       </div>

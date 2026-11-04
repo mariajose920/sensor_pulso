@@ -156,6 +156,8 @@ export function resumirParaHistorial(m) {
     fuente: m.fuente,
     canal: m.canal,
     sesionId: m.sesion_id || null,
+    estadoConexion: m.estado_conexion || 'finalizada',
+    motivoFin: m.motivo_fin || null,
     actividad: m.actividad?.nombre || null,
     bpm: m.bpm_promedio !== null && m.bpm_promedio !== undefined ? Number(m.bpm_promedio) : null,
     spo2: m.spo2_promedio !== null && m.spo2_promedio !== undefined ? Number(m.spo2_promedio) : null,

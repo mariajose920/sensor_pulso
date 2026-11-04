@@ -111,6 +111,7 @@
             <div class="fila-estado">
               <span v-if="m.ritmo" class="chip chip-ritmo">Ritmo: {{ ETIQUETAS_RITMO[m.ritmo] }}</span>
               <CalidadSenalBadge v-if="m.calidad" :nivel="m.calidad" />
+              <EstadoConexionBadge :estado="m.estadoConexion || 'finalizada'" tamano="sm" :motivo="m.motivoFin" />
               <span v-if="m.dentroDeRango === true" class="chip chip-dentro">Dentro del rango</span>
               <span v-else-if="m.dentroDeRango === false" class="chip chip-fuera">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px;">
@@ -250,6 +251,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
+import EstadoConexionBadge from '../components/EstadoConexionBadge.vue'
 import { useAuth } from '../composables/useAuth'
 import { listarHistorial, sincronizarPendientes, contarPendientes } from '../services/medicionesService'
 import { listarHistorialAlertas, obtenerMetadatosAlerta } from '../services/alertasService'
