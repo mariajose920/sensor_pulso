@@ -1,7 +1,7 @@
 import { ref, reactive } from 'vue'
-import { supabase } from './supabase'
-import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
-import { actualizarBuffersMultiCanal } from './multiCanalService'
+import { supabase } from './supabase.js'
+import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal.js'
+import { actualizarBuffersMultiCanal } from './multiCanalService.js'
 
 // Estado reactivo global de la telemetría del ESP32
 export const esp32State = reactive({
