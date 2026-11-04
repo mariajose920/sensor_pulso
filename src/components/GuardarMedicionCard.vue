@@ -50,6 +50,7 @@ import { useAuth } from '../composables/useAuth'
 import { guardarMedicion } from '../services/medicionesService'
 import { sesionActivaId } from '../services/sesionMedicionService'
 import { normalizarActividadId } from '../services/actividadesService'
+import { evaluarComparacionRango } from '../utils/comparacionRangos'
 import { MENSAJES_GUARDADO } from '../utils/medicion'
 import { explicarCalidad, puedeGuardarComoValida } from '../utils/explicacionCalidad'
 
@@ -66,7 +67,8 @@ const props = defineProps({
   fuente: { type: String, default: 'sensor' },       // sensor | simulador
   canal: { type: Number, default: null },
   sesionId: { type: String, default: null },
-  paciente: { type: Object, default: null }          // declaración activa (RF03): id y edad
+  paciente: { type: Object, default: null },          // declaración activa (RF03): id y edad
+  dentroDeRango: { type: Boolean, default: null }    // RF20: dentro o fuera de rango
 })
 const emit = defineEmits(['solicitar-consentimiento', 'guardada'])
 
@@ -108,6 +110,16 @@ async function guardar() {
   resultado.value = null
   try {
     const aviso = explicarCalidad(props.calidad, props.causasCalidad)
+    let dentroDeRangoFinal = props.dentroDeRango
+    if (dentroDeRangoFinal === null && props.bpm > 0) {
+      const ev = evaluarComparacionRango({
+        bpm: props.bpm,
+        spo2: props.spo2 > 0 ? props.spo2 : null,
+        edad: props.paciente?.edad || 25,
+        actividad: props.paciente?.actividadNombre || props.paciente?.actividadPrevia || 'reposo'
+      })
+      dentroDeRangoFinal = ev.dentroDeRango
+    }
     const respuesta = await guardarMedicion({
       idCliente: idCliente.value || undefined,
       fuente: props.fuente,
@@ -123,6 +135,7 @@ async function guardar() {
       causaCalidad: aviso?.causaGuardable || null,
       declaracionId: props.paciente?.id || null,
       edad: props.paciente?.edad || null,
+      dentroDeRango: dentroDeRangoFinal,
       inicio: inicio.value,
       fin: new Date()
     })

@@ -21,7 +21,7 @@
             :class="{ active: tieneLecturaValida }"
             :style="animacionCorazonStyle"
           >
-            ❤️
+            
           </div>
           <span v-if="tieneLecturaValida" class="pulse-wave-ring"></span>
         </div>
@@ -48,7 +48,7 @@
             class="range-pill"
             :class="dentroDeRango ? 'in-range' : 'out-of-range'"
           >
-            {{ dentroDeRango ? '✓ Dentro de rango' : '⚠️ Fuera de rango' }}
+            {{ dentroDeRango ? 'Dentro de rango' : 'Fuera de rango' }}
           </span>
         </div>
       </div>

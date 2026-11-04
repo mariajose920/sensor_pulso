@@ -113,6 +113,7 @@ export function construirMedicion(e = {}) {
     explicacion_ritmo: e.explicacionRitmo || null,
     calidad,
     causa_calidad: e.causaCalidad || null,
+    dentro_de_rango: typeof e.dentroDeRango === 'boolean' ? e.dentroDeRango : (typeof e.dentro_de_rango === 'boolean' ? e.dentro_de_rango : null),
     estado_conexion: 'finalizada'
   }
   if (e.idCliente) fila.id_cliente = e.idCliente

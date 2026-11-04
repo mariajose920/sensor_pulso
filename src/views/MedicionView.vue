@@ -440,6 +440,13 @@
         />
       </div>
 
+      <!-- Comparación Cuantitativa y Visual con el Rango Fisiológico (RF20) -->
+      <ComparadorRangoCard
+        :bpm="canalActivoData?.bpm || monitorBpm.stats.instantBpm || 0"
+        :spo2="canalActivoData?.spo2 || monitorSpo2.stats.instantSpo2 || 0"
+        :paciente="pacienteActivo"
+      />
+
       <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
       <OsciloscopioCanvas
         :canal="canalSeleccionado"
@@ -636,6 +643,13 @@
           </div>
         </div>
 
+        <!-- Comparación Cuantitativa y Visual de Resultados con el Rango Fisiológico (RF20) -->
+        <ComparadorRangoCard
+          :bpm="resultadosFinales.bpm"
+          :spo2="resultadosFinales.spo2"
+          :paciente="pacienteActivo"
+        />
+
         <!-- Tarjeta de Clasificación del Ritmo Cardíaco (RF18 AHA / Mayo Clinic) -->
         <div 
           v-if="clasificacionRitmo" 
@@ -728,6 +742,8 @@ import CanalCard from '../components/CanalCard.vue'
 import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
+import ComparadorRangoCard from '../components/ComparadorRangoCard.vue'
+import { evaluarComparacionRango } from '../utils/comparacionRangos.js'
 import SesionMedicionControl from '../components/SesionMedicionControl.vue'
 import { sesionState } from '../services/sesionMedicionService'
 
@@ -757,6 +773,7 @@ import {
 // 1. STEPPER Y FLUJO DEL ASISTENTE (RF13: 5 PASOS)
 // ============================================================================
 const pasoActual = ref(1)
+if (typeof window !== 'undefined') window.__setMedicionPaso = (n) => { pasoActual.value = n }
 
 const pasosInfo = [
   { numero: 1, nombre: 'Consentimiento', descCorta: 'Ética y Ley 19.628' },
@@ -1044,6 +1061,15 @@ function finalizarMedicionYVerResultados() {
   resultadosFinales.sdnn = monitorBpm.stats.sdnn > 0 ? monitorBpm.stats.sdnn : 38
   resultadosFinales.rmssd = monitorBpm.stats.rmssd > 0 ? monitorBpm.stats.rmssd : 32
 
+  // Calcular comparación con rango fisiológico (RF20)
+  const evalRangoFinal = evaluarComparacionRango({
+    bpm: resultadosFinales.bpm,
+    spo2: resultadosFinales.spo2,
+    edad: pacienteActivo.value?.edad || 25,
+    actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo'
+  })
+  resultadosFinales.dentroDeRango = evalRangoFinal.dentroDeRango
+
   // Calcular clasificación clínica RF18
   clasificacionRitmo.value = clasificarRitmo({
     bpm: resultadosFinales.bpm,
@@ -1060,7 +1086,15 @@ function finalizarMedicionYVerResultados() {
 }
 
 function guardarInformePdf() {
+  const evalComp = evaluarComparacionRango({
+    bpm: resultadosFinales.bpm,
+    spo2: resultadosFinales.spo2,
+    edad: pacienteActivo.value?.edad || 25,
+    actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo'
+  })
+
   descargarInformeClinicoPdf({
+    comparacion: evalComp,
     paciente: pacienteActivo.value,
     sesion: sesionState.sesionActiva,
     resultados: {

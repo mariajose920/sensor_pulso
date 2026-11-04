@@ -98,6 +98,53 @@
       </ul>
     </div>
 
+    <!-- Herramienta de Prueba y Comparación Interactiva de Rangos  -->
+    <div class="interactive-tester-box">
+      <div class="tester-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+        </svg>
+        <span>Herramienta de Prueba y Comparación con Rangos</span>
+      </div>
+      <p class="tester-desc">
+        Permite simular e ingresar valores para comprobar en tiempo real si un participante se encontraría dentro o fuera del rango fisiológico según su edad y actividad.
+      </p>
+
+      <div class="tester-controls-grid">
+        <div class="test-field">
+          <label class="test-lbl">Actividad:</label>
+          <select v-model="simuladorActividad" class="form-select test-input">
+            <option v-for="a in actividades" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+          </select>
+        </div>
+        <div class="test-field">
+          <label class="test-lbl">Edad (Años):</label>
+          <input v-model.number="simuladorEdad" type="number" class="form-input test-input" min="18" max="100" />
+        </div>
+        <div class="test-field">
+          <label class="test-lbl">BPM a Evaluar:</label>
+          <input v-model.number="simuladorBpm" type="number" class="form-input test-input font-mono" min="20" max="250" />
+        </div>
+        <div class="test-field">
+          <label class="test-lbl">SpO₂ (%) a Evaluar:</label>
+          <input v-model.number="simuladorSpo2" type="number" class="form-input test-input font-mono" min="50" max="100" />
+        </div>
+      </div>
+
+      <!-- Resultado de la Comparación -->
+      <div v-if="resultadoSimulacion" class="simulador-res-banner" :class="resultadoSimulacion.dentroDeRango ? 'res-in' : 'res-out'">
+        <div class="sim-res-header">
+          <span class="sim-pill" :class="resultadoSimulacion.dentroDeRango ? 'pill-in' : 'pill-out'">
+            {{ resultadoSimulacion.dentroDeRango ? 'Dentro de Rango' : 'Fuera de Rango' }}
+          </span>
+          <span class="sim-res-rango font-mono">
+            Rango activo: {{ resultadoSimulacion.rangoAplicado.bpm_min }}–{{ resultadoSimulacion.rangoAplicado.bpm_max }} BPM · SpO₂ ≥{{ resultadoSimulacion.rangoAplicado.spo2_min }}%
+          </span>
+        </div>
+        <p class="sim-res-desc">{{ resultadoSimulacion.resumenClinico }}</p>
+      </div>
+    </div>
+
     <!-- Modal de edición -->
     <div v-if="modal" class="modal-backdrop" @click.self="cerrarModal">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="rangos-modal-titulo">
@@ -164,7 +211,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import {
   listarActividades, listarRangos, listarRangosPersonales, guardarRangoPersonal, eliminarRangoPersonal,
   crearRango, actualizarRango, cambiarVigencia, proponerCambioRango, listarPropuestasRango,
-  resolverPropuestaRango, validarRango
+  resolverPropuestaRango, validarRango, rangoParaActividadYEdad, evaluarComparacionRango
 } from '../services/rangosService'
 
 const props = defineProps({
@@ -178,6 +225,34 @@ const esAdmin = computed(() => props.modo === 'admin')
 const actividades = ref([])
 const globales = ref([])
 const personales = ref([])
+// ============================================================================
+// SIMULADOR Y COMPARADOR INTERACTIVO DE RANGOS 
+// ============================================================================
+const simuladorActividad = ref(1)
+const simuladorEdad = ref(25)
+const simuladorBpm = ref(72)
+const simuladorSpo2 = ref(98)
+
+const rangoSimulacion = computed(() => {
+  return rangoParaActividadYEdad({
+    globales: globales.value,
+    personales: personales.value,
+    actividadId: simuladorActividad.value,
+    edad: simuladorEdad.value
+  })
+})
+
+const resultadoSimulacion = computed(() => {
+  const act = actividades.value.find(a => a.id === simuladorActividad.value)
+  return evaluarComparacionRango({
+    bpm: simuladorBpm.value,
+    spo2: simuladorSpo2.value,
+    rango: rangoSimulacion.value,
+    edad: simuladorEdad.value,
+    actividad: act?.nombre || 'reposo'
+  })
+})
+
 const propuestas = ref([])
 const filtroActividad = ref('')
 const cargando = ref(false)
@@ -354,4 +429,88 @@ watch(() => [props.modo, props.puedeEditar, props.usuarioId], cargar)
   .acciones-top .form-select { flex: 1; }
   .celda-acciones { justify-content: flex-start; }
 }
+
+/* Simulador de Pruebas RF20 */
+.interactive-tester-box {
+  margin-top: 1.75rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.65rem;
+  padding: 1.15rem 1.25rem;
+}
+.tester-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 0.35rem;
+}
+.tester-desc {
+  font-size: 0.82rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+}
+.tester-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+.test-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.test-lbl {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+.test-input {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.65rem;
+}
+.simulador-res-banner {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+}
+.simulador-res-banner.res-in {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+.simulador-res-banner.res-out {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #9f1239;
+}
+.sim-res-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.sim-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.pill-in { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+.pill-out { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+.sim-res-rango {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.sim-res-desc {
+  font-size: 0.82rem;
+  margin: 0.35rem 0 0 0;
+  opacity: 0.95;
+}
+
 </style>
