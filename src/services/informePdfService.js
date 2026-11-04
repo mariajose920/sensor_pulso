@@ -14,7 +14,7 @@ import { jsPDF } from 'jspdf'
  * @param {Object} params.resultados - Signos vitales (BPM, SpO2, Estabilidad, PI)
  * @param {Object} params.clasificacion - Diagnóstico médico AHA (RF18)
  */
-export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion }) {
+export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion, sesion = null }) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -55,6 +55,12 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   doc.setFontSize(12)
   doc.setTextColor(15, 23, 42) // #0f172a
   doc.text('INFORME DE EVALUACIÓN CLÍNICA Y RITMO CARDÍACO', margin, 36)
+  if (sesion && sesion.id) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.setTextColor(2, 132, 199)
+    doc.text(`Sesión: #${sesion.id.substring(0, 8)} (Ronda ${sesion.ronda || 1})`, pageWidth - margin, 36, { align: 'right' })
+  }
 
   doc.setDrawColor(226, 232, 240) // #e2e8f0
   doc.line(margin, 39, pageWidth - margin, 39)

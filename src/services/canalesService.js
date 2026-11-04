@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
 
 // Usuario de sesión simulado / por defecto para pruebas si no hay Supabase Auth activo
 export const usuarioActual = reactive({
