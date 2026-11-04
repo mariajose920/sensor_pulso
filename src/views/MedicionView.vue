@@ -440,6 +440,18 @@
         />
       </div>
 
+            <!-- RF21: Alerta Fuera de Rango: Visual, Sonora y con Registro en el Historial -->
+      <AlertaFueraRangoBanner
+        :alerta-activa="alertaFueraRangoActiva"
+        :tipo="alertaFueraRangoTipo"
+        :valor="alertaFueraRangoValor"
+        :limite="alertaFueraRangoLimite"
+        :diferencia="alertaFueraRangoDiferencia"
+        :diagnostico="alertaFueraRangoDiagnostico"
+        :medicion-id="sesionActivaId"
+        :usuario-id="currentUserId"
+      />
+
       <!-- Comparación Cuantitativa y Visual con el Rango Fisiológico (RF20) -->
       <ComparadorRangoCard
         :bpm="canalActivoData?.bpm || monitorBpm.stats.instantBpm || 0"
@@ -481,7 +493,7 @@
             :class="{ active: tabActiva === 'firmware' }"
             @click="tabActiva = 'firmware'"
           >
-            💾 Código de Firmware ESP32
+            Código de Firmware ESP32
           </button>
           <button 
             class="tab-btn" 
@@ -512,14 +524,29 @@
 
             <div class="action-buttons">
               <button class="btn btn-secondary" @click="enviarUnicoPaquete" :disabled="enviandoManual">
-                {{ enviandoManual ? 'Enviando...' : '📤 Enviar 1 Paquete de Prueba' }}
+                {{ enviandoManual ? 'Enviando...' : 'Enviar 1 Paquete de Prueba' }}
               </button>
               <button 
                 class="btn" 
                 :class="simuladorActivo ? 'btn-danger' : 'btn-success'"
                 @click="toggleSimulador"
               >
-                {{ simuladorActivo ? '⏹️ Detener Emisión Continua' : '⚡ Transmisión Continua (1 Hz)' }}
+                {{ simuladorActivo ? 'Detener Emisión Continua' : 'Transmisión Continua (1 Hz)' }}
+              </button>
+            </div>
+            <div class="simulation-presets-row" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+              <span class="preset-label" style="font-size: 0.8rem; color: var(--color-muted); font-weight: 600;">Pruebas de Alerta (RF21):</span>
+              <button type="button" class="btn btn-sm btn-outline-danger" @click="enviarPaquetePersonalizado(128, 98)" title="Simula taquicardia para activar alerta">
+                Taquicardia (128 BPM)
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-warning" @click="enviarPaquetePersonalizado(48, 98)" title="Simula bradicardia para activar alerta">
+                Bradicardia (48 BPM)
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-danger" @click="enviarPaquetePersonalizado(76, 88)" title="Simula desaturación de oxígeno para activar alerta">
+                Desaturación (88% SpO₂)
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-success" @click="enviarPaquetePersonalizado(72, 98)" title="Simula parámetros normales">
+                Normal (72 BPM / 98%)
               </button>
             </div>
           </div>
@@ -743,6 +770,9 @@ import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
 import ComparadorRangoCard from '../components/ComparadorRangoCard.vue'
+import AlertaFueraRangoBanner from '../components/AlertaFueraRangoBanner.vue'
+import { useAuth } from '../composables/useAuth'
+import { sesionActivaId } from '../services/sesionMedicionService'
 import { evaluarComparacionRango } from '../utils/comparacionRangos.js'
 import SesionMedicionControl from '../components/SesionMedicionControl.vue'
 import { sesionState } from '../services/sesionMedicionService'
@@ -772,6 +802,97 @@ import {
 // ============================================================================
 // 1. STEPPER Y FLUJO DEL ASISTENTE (RF13: 5 PASOS)
 // ============================================================================
+const { currentUserId } = useAuth()
+
+// ============================================================================
+// EVALUACIÓN REACTIVA DE RANGOS Y GESTIÓN DE ALERTAS (RF20 y RF21)
+// ============================================================================
+const bpmActualEnVivo = computed(() => {
+  return canalActivoData.value?.bpm || monitorBpm.stats.instantBpm || 0
+})
+
+const spo2ActualEnVivo = computed(() => {
+  return canalActivoData.value?.spo2 || monitorSpo2.stats.instantSpo2 || 0
+})
+
+const evaluacionRangoEnVivo = computed(() => {
+  const bpm = bpmActualEnVivo.value
+  const spo2 = spo2ActualEnVivo.value
+  if (!bpm && !spo2) return null
+  return evaluarComparacionRango({
+    bpm,
+    spo2: spo2 > 0 ? spo2 : null,
+    edad: pacienteActivo.value?.edad || 25,
+    actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo'
+  })
+})
+
+const alertaFueraRangoActiva = computed(() => {
+  return pasoActual.value === 4 && evaluacionRangoEnVivo.value?.dentroDeRango === false
+})
+
+const alertaFueraRangoTipo = computed(() => {
+  const ev = evaluacionRangoEnVivo.value
+  if (!ev) return 'bpm_alto'
+  if (ev.spo2 && !ev.spo2.dentro && ev.spo2.estado === 'bajo') return 'spo2_bajo'
+  if (ev.bpm && !ev.bpm.dentro) {
+    return ev.bpm.estado === 'alto' ? 'bpm_alto' : 'bpm_bajo'
+  }
+  return 'bpm_alto'
+})
+
+const alertaFueraRangoValor = computed(() => {
+  const ev = evaluacionRangoEnVivo.value
+  if (!ev) return null
+  if (alertaFueraRangoTipo.value === 'spo2_bajo') return ev.spo2?.valor
+  return ev.bpm?.valor
+})
+
+const alertaFueraRangoLimite = computed(() => {
+  const ev = evaluacionRangoEnVivo.value
+  if (!ev) return null
+  if (alertaFueraRangoTipo.value === 'spo2_bajo') return ev.spo2?.min
+  return alertaFueraRangoTipo.value === 'bpm_alto' ? ev.bpm?.max : ev.bpm?.min
+})
+
+const alertaFueraRangoDiferencia = computed(() => {
+  const ev = evaluacionRangoEnVivo.value
+  if (!ev) return 0
+  if (alertaFueraRangoTipo.value === 'spo2_bajo') return ev.spo2?.diferencia || 0
+  return ev.bpm?.diferencia || 0
+})
+
+const alertaFueraRangoDiagnostico = computed(() => {
+  const ev = evaluacionRangoEnVivo.value
+  if (!ev) return ''
+  if (alertaFueraRangoTipo.value === 'spo2_bajo') return ev.spo2?.diagnostico || ''
+  return ev.bpm?.diagnostico || ''
+})
+
+async function enviarPaquetePersonalizado(bpm, spo2) {
+  if (!consentimientoEstado.value.vigente) {
+    solicitarConsentimientoConAccion(() => enviarPaquetePersonalizado(bpm, spo2))
+    return
+  }
+  enviandoManual.value = true
+  try {
+    const res = await emitirPaquetePruebaWiFi(tokenPrueba.value, { bpm, spo2 })
+    ultimoResultadoEnvio.value = {
+      ok: true,
+      mensaje: `Paquete simulado emitido (Canal 1: ${bpm} BPM, ${spo2}% SpO₂)`,
+      timestamp: new Date().toLocaleTimeString()
+    }
+  } catch (err) {
+    ultimoResultadoEnvio.value = {
+      ok: false,
+      error: `Error al enviar paquete: ${err.message}`,
+      timestamp: new Date().toLocaleTimeString()
+    }
+  } finally {
+    enviandoManual.value = false
+  }
+}
+
 const pasoActual = ref(1)
 if (typeof window !== 'undefined') window.__setMedicionPaso = (n) => { pasoActual.value = n }
 
