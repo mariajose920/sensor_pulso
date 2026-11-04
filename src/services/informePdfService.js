@@ -6,6 +6,7 @@
  * ============================================================================
  */
 import { jsPDF } from 'jspdf'
+import { evaluarComparacionRango } from '../utils/comparacionRangos.js'
 
 /**
  * Genera el documento PDF y lo descarga de forma directa en el computador.
@@ -14,7 +15,7 @@ import { jsPDF } from 'jspdf'
  * @param {Object} params.resultados - Signos vitales (BPM, SpO2, Estabilidad, PI)
  * @param {Object} params.clasificacion - Diagnóstico médico AHA (RF18)
  */
-export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion }) {
+export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion, comparacion = null }) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -232,6 +233,58 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
 
   const finalBoxHeight = insideY - ritmoCardY + 2
   doc.roundedRect(margin, ritmoCardY, contentWidth, finalBoxHeight, 2, 2, 'S')
+
+  currentY = ritmoCardY + finalBoxHeight + 6
+
+  // =========================================================================
+  // 4. COMPARACIÓN CON RANGOS FISIOLÓGICOS DE REFERENCIA (RF20)
+  // =========================================================================
+  const comp = comparacion || evaluarComparacionRango({
+    bpm: resultados?.bpm || 72,
+    spo2: resultados?.spo2 || 98,
+    edad: paciente?.edad || 25,
+    actividad: paciente?.actividadNombre || paciente?.actividadPrevia || 'reposo'
+  })
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9.5)
+  const esDentro = comp.dentroDeRango === true
+  doc.setTextColor(esDentro ? 22 : 185, esDentro ? 101 : 28, esDentro ? 52 : 28)
+  doc.text('4. COMPARACIÓN CON RANGOS FISIOLÓGICOS DE REFERENCIA', margin, currentY)
+  currentY += 4
+
+  const compBoxY = currentY
+  doc.setFillColor(esDentro ? 240 : 254, esDentro ? 253 : 242, esDentro ? 244 : 242)
+  doc.setDrawColor(esDentro ? 134 : 252, esDentro ? 239 : 165, esDentro ? 172 : 165)
+  doc.setLineWidth(0.5)
+
+  let compInsideY = currentY + 5.5
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(esDentro ? 21 : 185, esDentro ? 128 : 28, esDentro ? 61 : 28)
+  const tagEstado = esDentro ? '● ESTADO: DENTRO DE RANGO FISIOLÓGICO' : '● ESTADO: FUERA DE RANGO FISIOLÓGICO'
+  doc.text(tagEstado, margin + 4, compInsideY)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(71, 85, 105)
+  doc.text(`Contexto evaluado: ${pActividad} (${pEdad})`, pageWidth - margin - 4, compInsideY, { align: 'right' })
+  compInsideY += 5.5
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8.5)
+  doc.setTextColor(15, 23, 42)
+  const detBpm = `Frecuencia Cardíaca: ${resultados?.bpm || 72} BPM (Rango: ${comp.rangoAplicado.bpm_min} - ${comp.rangoAplicado.bpm_max} BPM) · ${comp.bpm.diagnostico}`
+  doc.text(detBpm, margin + 4, compInsideY)
+  compInsideY += 4.5
+
+  const detSpo2 = `Saturación de Oxígeno: ${resultados?.spo2 || 98}% SpO₂ (Límite: ≥${comp.rangoAplicado.spo2_min}%) · ${comp.spo2.diagnostico}`
+  doc.text(detSpo2, margin + 4, compInsideY)
+  compInsideY += 4.5
+
+  const compHeight = compInsideY - compBoxY + 1.5
+  doc.roundedRect(margin, compBoxY, contentWidth, compHeight, 2, 2, 'FD')
 
   // =========================================================================
   // PIE DE PÁGINA
