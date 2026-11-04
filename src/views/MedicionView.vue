@@ -394,7 +394,7 @@
       </div>
 
       <!-- Control y Gestión de Sesión de Medición en Vivo (RF09, RF10, RF11, RF111) -->
-      <SesionMedicionControl />
+      <SesionMedicionControl @ver-resultados="finalizarMedicionYVerResultados" />
 
       <!-- Barra de Estado WiFi del ESP32 (RF05, RF54) -->
       <Esp32WifiStatus

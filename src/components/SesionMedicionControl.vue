@@ -33,6 +33,22 @@
         </div>
       </div>
 
+      <!-- Alertas de Vigilancia en Tiempo Real (RF10, RF11) -->
+      <div v-if="vigilanteState.estadoAlerta === 'perdida'" class="alert-status-banner banner-perdida anim-fade">
+        <span class="warning-icon">⚠️</span>
+        <div style="flex: 1;">
+          <strong>Pérdida de señal WiFi con el ESP32 (RF11):</strong>
+          <span> La medición se finalizará automáticamente en <strong>{{ vigilanteState.segundosGraciaRestantes }}s</strong> si no se restablece la comunicación (RF10).</span>
+        </div>
+      </div>
+      <div v-else-if="vigilanteState.estadoAlerta === 'advertencia'" class="alert-status-banner banner-sensor anim-fade">
+        <span class="warning-icon">🔌</span>
+        <div style="flex: 1;">
+          <strong>Sensor óptico sin lectura biológica:</strong>
+          <span> Se detectó dedo retirado o sensor desconectado. Si persiste, se cerrará la sesión (RF10).</span>
+        </div>
+      </div>
+
       <!-- Metadatos de la Sesión Oficial -->
       <div class="sesion-meta-grid">
         <div class="meta-item">
@@ -96,6 +112,26 @@
         </div>
 
         <div class="botones-fila">
+          <!-- Simulaciones de Diagnóstico y Pruebas RF10 -->
+          <div class="test-rf10-row">
+            <button 
+              type="button" 
+              class="btn-test-rf10" 
+              @click="forzarSimulacionPerdidaWiFi"
+              title="Simula pérdida de señal WiFi durante más de 10s para probar el cierre automático (RF10)"
+            >
+              ⚡ Test Pérdida WiFi
+            </button>
+            <button 
+              type="button" 
+              class="btn-test-rf10" 
+              @click="forzarSimulacionSensorDesconectado"
+              title="Simula desconexión física del sensor MAX30102 o dedo retirado por más de 8s (RF10)"
+            >
+              🔌 Test Desconexión Sensor
+            </button>
+          </div>
+
           <button 
             type="button" 
             class="btn btn-secondary btn-sm btn-ronda" 
@@ -120,7 +156,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
             </svg>
-            <span>Finalizar Sesión (RF10)</span>
+            <span>Finalizar Sesión</span>
           </button>
         </div>
       </div>
@@ -206,7 +242,7 @@
       </div>
     </div>
 
-    <!-- Modal de Confirmación para Finalizar Sesión (RF10) -->
+    <!-- Modal de Confirmación para Finalizar Manualmente -->
     <div v-if="modalFinalizarVisible" class="modal-backdrop">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-fin-titulo">
         <div class="modal-header">
@@ -232,6 +268,12 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal de Alerta por Pérdida de Comunicación o Desconexión del Sensor (RF10) -->
+    <AlertaDesconexionModal 
+      @nueva-sesion="onIniciarSesion" 
+      @ver-resultados="emit('ver-resultados')" 
+    />
   </div>
 </template>
 
@@ -246,6 +288,12 @@ import {
   avanzarRondaSesion,
   MOTIVOS_FIN
 } from '../services/sesionMedicionService.js'
+import {
+  vigilanteState,
+  forzarSimulacionPerdidaWiFi,
+  forzarSimulacionSensorDesconectado
+} from '../services/vigilanteConexionService.js'
+import AlertaDesconexionModal from './AlertaDesconexionModal.vue'
 
 const formDispositivo = ref('ESP32-Biomedico-01')
 const formRonda = ref(1)
@@ -255,7 +303,7 @@ const mensajeExito = ref('')
 const avanzandoRonda = ref(false)
 const modalFinalizarVisible = ref(false)
 
-const emit = defineEmits(['sesion-iniciada', 'sesion-finalizada'])
+const emit = defineEmits(['sesion-iniciada', 'sesion-finalizada', 'ver-resultados'])
 
 const horaInicioTexto = computed(() => {
   if (!sesionState.sesionActiva?.inicio) return '--:--:--'
@@ -341,7 +389,7 @@ async function ejecutarFinalizar() {
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
-  padding-bottom: 1rem;
+  padding-bottom: 0.85rem;
   border-bottom: 1px solid #dcfce7;
 }
 
@@ -423,6 +471,34 @@ async function ejecutarFinalizar() {
   font-size: 1.15rem;
   font-weight: 700;
   color: #0f172a;
+}
+
+/* Alertas de Conexión en Tiempo Real (RF10, RF11) */
+.alert-status-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.banner-perdida {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.banner-sensor {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.warning-icon {
+  font-size: 1.15rem;
+  flex-shrink: 0;
 }
 
 /* Cronómetro Digital */
@@ -557,6 +633,31 @@ async function ejecutarFinalizar() {
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
+}
+
+/* Botones de prueba RF10 */
+.test-rf10-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-test-rf10 {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 4px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
+  color: #475569;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-test-rf10:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #b91c1c;
 }
 
 /* ========================================================================= */
@@ -723,6 +824,10 @@ async function ejecutarFinalizar() {
   .btn-iniciar {
     width: 100%;
     justify-content: center;
+  }
+  .botones-fila {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>
