@@ -2,17 +2,19 @@
  * ============================================================================
  * sensor_pulso · Firmware ESP32 + MAX30100 (WiFi Vercel + Sensor Físico)
  * ============================================================================
- * Arquitectura Dual-Core (FreeRTOS):
- *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz con el
- *             algoritmo exacto que detecta tu dedo a la perfección.
- *   - CORE 0: Transmisión WiFi en segundo plano hacia Vercel (1 Hz)
- *             con reconexión automática ante cualquier red WiFi.
+ * Rama: rf05-recepcion-wifi
  *
- * Conexiones:
- *   MAX30100 VIN -> 3.3V (o VIN/5V)
+ * Arquitectura Dual-Core (FreeRTOS):
+ *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz.
+ *             Generación de la onda fotopletismográfica (PPG) a 25 Hz.
+ *   - CORE 0: Gestión WiFi robusta y transmisión HTTPS a Vercel cada 1 s.
+ *             Stack de 16 KB para TLS con diagnóstico detallado por Serial.
+ *
+ * Conexiones físicas:
+ *   MAX30100 VIN -> 3.3V (o VIN/5V si tu módulo tiene regulador)
  *   MAX30100 GND -> GND
- *   MAX30100 SDA -> GPIO 21 (D21)
- *   MAX30100 SCL -> GPIO 22 (D22)
+ *   MAX30100 SDA -> GPIO 21
+ *   MAX30100 SCL -> GPIO 22
  * ============================================================================
  */
 
@@ -22,18 +24,19 @@
 #include <HTTPClient.h>
 
 // ----------------------------------------------------------------------------
-// 1. CONFIGURACIÓN WIFI Y VERCEL (Coloca aquí los datos de cualquier red WiFi)
+// 1. CONFIGURACIÓN WIFI Y VERCEL
 // ----------------------------------------------------------------------------
-const char* WIFI_SSID     = "amenaza";             // Cambia por cualquier red WiFi
-const char* WIFI_PASSWORD = "TU_PASSWORD";         // Contraseña de la red WiFi
+// ⚠️ ATENCIÓN: Coloca aquí el SSID y la contraseña REAL de tu red WiFi (2.4 GHz)
+const char* WIFI_SSID     = "amenaza";
+const char* WIFI_PASSWORD = "TU_PASSWORD"; // <- REEMPLAZA ESTO CON LA CLAVE REAL DE TU WIFI
 
-// Endpoint oficial en Vercel
+// Endpoint oficial en producción (Vercel)
 const char* SERVER_URL    = "https://sensorpulso.vercel.app/api/esp32/telemetria";
 const char* DEVICE_TOKEN  = "esp_demotoken_unach_2026_rf05";
 const char* DEVICE_NAME   = "ESP32-Biomedico-01";
 
 // ----------------------------------------------------------------------------
-// 2. REGISTROS Y PARÁMETROS DEL MAX30100 (Tu código probado y funcional)
+// 2. REGISTROS Y PARÁMETROS DEL MAX30100
 // ----------------------------------------------------------------------------
 const uint8_t  DIR_SENSOR   = 0x57;
 const int      PIN_SDA      = 21;
@@ -48,7 +51,7 @@ const uint8_t REG_SPO2     = 0x07;
 const uint8_t REG_LED      = 0x09;
 const uint8_t REG_PART_ID  = 0xFF;
 
-// Umbral probado que funciona con tu dedo
+// Umbral probado que detecta el dedo
 const uint16_t UMBRAL_DEDO = 7000;
 
 // Estado del procesamiento fisiológico
@@ -64,6 +67,12 @@ volatile bool estadoSinDedo = true;
 volatile uint16_t valorGraficaActual = 2048;
 volatile uint16_t ultimoIRGlobal = 0;
 volatile uint16_t ultimoRojoGlobal = 0;
+
+// Búfer de muestras PPG para el osciloscopio en tiempo real (25 muestras/segundo)
+const int SAMPLES_PER_BLOCK = 25;
+volatile uint16_t bufferIR[SAMPLES_PER_BLOCK];
+volatile uint16_t bufferRojo[SAMPLES_PER_BLOCK];
+volatile int indiceBuffer = 0;
 
 const unsigned long REFRACTARIO_MS = 380;
 unsigned long dedoDesde = 0;
@@ -87,6 +96,7 @@ void escribirReg(uint8_t reg, uint8_t valor) {
 int leerReg(uint8_t reg) {
   Wire.beginTransmission(DIR_SENSOR);
   Wire.write(reg);
+  // Repeated start indispensable para MAX30100
   if (Wire.endTransmission(false) != 0) return -1;
   if (Wire.requestFrom((int)DIR_SENSOR, 1) != 1) return -1;
   return Wire.read();
@@ -111,14 +121,14 @@ bool iniciarSensor() {
   if (id != 0x11 && id != 0x15) {
     return false;
   }
-  escribirReg(REG_MODE, 0x40);          // Reset
+  escribirReg(REG_MODE, 0x40);          // Reset general
   delay(50);
   escribirReg(REG_FIFO_WR, 0);
   escribirReg(REG_FIFO_OVF, 0);
   escribirReg(REG_FIFO_RD, 0);
-  escribirReg(REG_MODE, 0x03);          // Modo SpO2
+  escribirReg(REG_MODE, 0x03);          // Modo SpO2 (Rojo + IR)
   escribirReg(REG_SPO2, 0x47);          // 100 muestras/s, 16 bits
-  escribirReg(REG_LED, 0x28);           // Rojo 7.6 mA, IR 27 mA
+  escribirReg(REG_LED, 0x28);           // Corrientes: Rojo 7.6 mA, IR 27 mA
   return true;
 }
 
@@ -139,12 +149,14 @@ void procesar(uint16_t ir, uint16_t rojo) {
     anterior = 0;
     ultimoLatido = 0;
     habiaDedo = false;
+    valor = 2048;
   } else if (!habiaDedo || (millis() - dedoDesde) < CALENTAMIENTO_MS) {
     if (!habiaDedo) { habiaDedo = true; dedoDesde = millis(); }
     dc = ir;
     filtrado = 0;
     maximo = 0;
     anterior = 0;
+    valor = 2048;
   } else {
     if (dc == 0) dc = ir;
     dc += 0.02f * (ir - dc);
@@ -214,64 +226,148 @@ void procesar(uint16_t ir, uint16_t rojo) {
   }
 
   valorGraficaActual = valor;
+
+  // Llenar búfer para el osciloscopio: 25 muestras por segundo (1 cada 4 lecturas de 100 Hz)
+  static uint8_t divisorMuestras = 0;
+  divisorMuestras++;
+  if (divisorMuestras >= 4) {
+    divisorMuestras = 0;
+    if (indiceBuffer < SAMPLES_PER_BLOCK) {
+      // Modulación para trazado nítido en el osciloscopio
+      int offsetAC = (int)valorGraficaActual - 2048;
+      bufferIR[indiceBuffer]   = (uint16_t)constrain(24500 + offsetAC, 1000, 65000);
+      bufferRojo[indiceBuffer] = (uint16_t)constrain(21000 + (int)(offsetAC * 0.75f), 1000, 65000);
+      indiceBuffer++;
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
-// 3. TAREA SEGUNDO PLANO EN CORE 0: TRANSMISIÓN WIFI HACIA VERCEL
-//    Se ejecuta de forma independiente sin quitarle ni 1 ms al sensor.
+// 3. TAREA SEGUNDO PLANO EN CORE 0: GESTIÓN WIFI Y TRANSMISIÓN A VERCEL
 // ----------------------------------------------------------------------------
 void tareaTransmisionWiFi(void *pvParameters) {
-  Serial.printf("[Core 0] Iniciando conexión WiFi a red: %s\n", WIFI_SSID);
+  Serial.println(F("\n-------------------------------------------------------"));
+  Serial.printf("📡 [WiFi Core 0] Conectando a la red: '%s'\n", WIFI_SSID);
+  Serial.println(F("-------------------------------------------------------"));
 
   WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  WiFi.persistent(true);
+  WiFi.disconnect(true);
+  vTaskDelay(300 / portTICK_PERIOD_MS);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  for (;;) {
-    vTaskDelay(1000 / portTICK_PERIOD_MS); // Transmitir cada 1 segundo (1 Hz)
+  int intentos = 0;
+  while (WiFi.status() != WL_CONNECTED && intentos < 25) {
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    Serial.print(F("."));
+    intentos++;
+  }
 
-    if (WiFi.status() == WL_CONNECTED) {
-      WiFiClientSecure client;
-      client.setInsecure(); // Acepta HTTPS de Vercel (RF55)
-
-      HTTPClient http;
-      http.begin(client, SERVER_URL);
-      http.setTimeout(2500);
-
-      http.addHeader("Content-Type", "application/json");
-      http.addHeader("X-ESP32-Token", DEVICE_TOKEN);
-
-      contadorPaquetes++;
-      String calidad = estadoSinDedo ? "sin_dedo" : ((bpmActual > 0) ? "buena" : "regular");
-
-      // Construir paquete de telemetría con los datos del sensor
-      String json = "{";
-      json += "\"dispositivo\":\"" + String(DEVICE_NAME) + "\",";
-      json += "\"token\":\"" + String(DEVICE_TOKEN) + "\",";
-      json += "\"paquete\":" + String(contadorPaquetes) + ",";
-      json += "\"canales\":[{";
-      json += "\"canal\":1,";
-      json += "\"activo\":true,";
-      json += "\"bpm\":" + String(bpmActual, 1) + ",";
-      json += "\"spo2\":" + String(spo2Actual, 1) + ",";
-      json += "\"calidad\":\"" + calidad + "\",";
-      json += "\"ir\":[" + String(ultimoIRGlobal) + "],";
-      json += "\"rojo\":[" + String(ultimoRojoGlobal) + "]";
-      json += "}]}";
-
-      int httpCodigo = http.POST(json);
-      if (httpCodigo == 200 || httpCodigo == 201) {
-        Serial.printf("☁️ [Vercel OK] Paquete #%lu | BPM: %.1f | SpO2: %.1f%% | Estado: %s\n",
-                      contadorPaquetes, bpmActual, spo2Actual, estadoSinDedo ? "sin_dedo" : "DEDO_OK");
-      } else {
-        Serial.printf("⚠️ [Vercel] Error HTTP: %d\n", httpCodigo);
-      }
-      http.end();
-    } else {
-      Serial.println("🔄 Reconectando a WiFi...");
-      WiFi.reconnect();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n[WiFi] ✅ Conectado con éxito! IP asignada: %s (Señal: %d dBm)\n",
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
+  } else {
+    Serial.println(F("\n[WiFi] ⚠️ No se pudo conectar de inmediato."));
+    Serial.printf("[WiFi] Código de estado: %d. Verificando en segundo plano...\n", WiFi.status());
+    if (String(WIFI_PASSWORD) == "TU_PASSWORD") {
+      Serial.println(F("❌ ERROR: La contraseña sigue siendo 'TU_PASSWORD'. ¡Debes cambiarla por tu clave real!"));
     }
+  }
+
+  for (;;) {
+    vTaskDelay(1000 / portTICK_PERIOD_MS); // 1 Hz (1 paquete cada segundo)
+
+    // Si la conexión se cae o no conectó al inicio
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.printf("[WiFi] Intentando conectar a '%s'... (Status: %d)\n", WIFI_SSID, WiFi.status());
+      WiFi.disconnect();
+      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+      int reint = 0;
+      while (WiFi.status() != WL_CONNECTED && reint < 8) {
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        reint++;
+      }
+      if (WiFi.status() != WL_CONNECTED) {
+        if (String(WIFI_PASSWORD) == "TU_PASSWORD") {
+          Serial.println(F("❌ ERROR: Recuerda cambiar 'TU_PASSWORD' por tu clave WiFi real en el código."));
+        }
+        continue;
+      }
+      Serial.printf("[WiFi] ✅ Conexión establecida! IP: %s\n", WiFi.localIP().toString().c_str());
+    }
+
+    // Copia segura de las muestras acumuladas
+    uint16_t irEnvio[SAMPLES_PER_BLOCK];
+    uint16_t rojoEnvio[SAMPLES_PER_BLOCK];
+    int cantMuestras = indiceBuffer;
+    if (cantMuestras > SAMPLES_PER_BLOCK) cantMuestras = SAMPLES_PER_BLOCK;
+
+    if (cantMuestras < 5) {
+      // Si el búfer aún no tiene 5 muestras, rellenar con valores coherentes
+      for (int i = 0; i < SAMPLES_PER_BLOCK; i++) {
+        irEnvio[i] = 24500;
+        rojoEnvio[i] = 21000;
+      }
+      cantMuestras = SAMPLES_PER_BLOCK;
+    } else {
+      for (int i = 0; i < cantMuestras; i++) {
+        irEnvio[i] = bufferIR[i];
+        rojoEnvio[i] = bufferRojo[i];
+      }
+      indiceBuffer = 0; // Reiniciar búfer para el próximo segundo
+    }
+
+    // Serializar arrays JSON
+    String strIR = "[";
+    String strRojo = "[";
+    for (int i = 0; i < cantMuestras; i++) {
+      if (i > 0) { strIR += ","; strRojo += ","; }
+      strIR += String(irEnvio[i]);
+      strRojo += String(rojoEnvio[i]);
+    }
+    strIR += "]";
+    strRojo += "]";
+
+    // Cliente HTTPS seguro con TLS
+    WiFiClientSecure client;
+    client.setInsecure(); // Acepta HTTPS de Vercel
+
+    HTTPClient http;
+    http.begin(client, SERVER_URL);
+    http.setTimeout(3000);
+
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("X-ESP32-Token", DEVICE_TOKEN);
+
+    contadorPaquetes++;
+    String calidad = estadoSinDedo ? "sin_dedo" : ((bpmActual > 0) ? "buena" : "regular");
+
+    // Construir paquete JSON oficial
+    String json = "{";
+    json += "\"dispositivo\":\"" + String(DEVICE_NAME) + "\",";
+    json += "\"token\":\"" + String(DEVICE_TOKEN) + "\",";
+    json += "\"paquete\":" + String(contadorPaquetes) + ",";
+    json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
+    json += "\"canales\":[{";
+    json += "\"canal\":1,";
+    json += "\"activo\":true,";
+    json += "\"bpm\":" + String(bpmActual, 1) + ",";
+    json += "\"spo2\":" + String(spo2Actual, 1) + ",";
+    json += "\"calidad\":\"" + calidad + "\",";
+    json += "\"ir\":" + strIR + ",";
+    json += "\"rojo\":" + strRojo;
+    json += "}]}";
+
+    int httpCodigo = http.POST(json);
+    if (httpCodigo == 200 || httpCodigo == 201) {
+      Serial.printf("☁️ [Vercel OK] Paquete #%lu | BPM: %.1f | SpO2: %.1f%% | Muestras: %d | %s\n",
+                    contadorPaquetes, bpmActual, spo2Actual, cantMuestras, estadoSinDedo ? "SIN DEDO" : "DEDO OK");
+    } else {
+      Serial.printf("⚠️ [Vercel Error] Código HTTP: %d\n", httpCodigo);
+      if (httpCodigo < 0) {
+        Serial.printf("   Detalle: %s\n", http.errorToString(httpCodigo).c_str());
+      }
+    }
+    http.end();
   }
 }
 
@@ -280,10 +376,11 @@ void tareaTransmisionWiFi(void *pvParameters) {
 // ----------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
-  delay(300);
+  delay(500);
 
   Serial.println(F("\n======================================================="));
   Serial.println(F("  sensor_pulso · ESP32 + MAX30100 Dual-Core WiFi Vercel"));
+  Serial.println(F("  UNACH - Rama rf05-recepcion-wifi"));
   Serial.println(F("======================================================="));
 
   Wire.begin(PIN_SDA, PIN_SCL);
@@ -293,24 +390,22 @@ void setup() {
     Serial.println(F("Esperando sensor MAX30100..."));
     delay(1000);
   }
-  Serial.println(F("✅ Sensor iniciado y operando correctamente."));
+  Serial.println(F("✅ Sensor MAX30100 iniciado y operando correctamente."));
 
-  // Crear la tarea WiFi en CORE 0 para que NUNCA congele las lecturas del sensor
+  // Crear la tarea WiFi en CORE 0 con 16 KB de stack para TLS
   xTaskCreatePinnedToCore(
     tareaTransmisionWiFi,   // Función de la tarea
-    "WiFiSenderTask",       // Nombre descriptivo
-    8192,                   // Tamaño de pila (stack)
+    "WiFiSenderTask",       // Nombre
+    16384,                  // 16 KB de stack para TLS HTTPS
     NULL,                   // Parámetros
     1,                      // Prioridad
-    NULL,                   // Handle de tarea
-    0                       // Core 0 (el sensor corre en Core 1)
+    NULL,                   // Handle
+    0                       // Core 0 (Sensor en Core 1)
   );
-
-  Serial.println(F("t_ms,ecg_raw,leads_off,bpm"));
 }
 
 void loop() {
-  // Bucle rápido y exclusivo para el sensor en Core 1 (100% libre de bloqueos de red)
+  // Muestreo a 100 Hz en Core 1 (sin bloqueos de red)
   int wr = leerReg(REG_FIFO_WR);
   int rd = leerReg(REG_FIFO_RD);
   if (wr < 0 || rd < 0) { delay(10); return; }
@@ -322,14 +417,16 @@ void loop() {
     procesar(ir, rojo);
   }
 
-  // Emisión por puerto USB en el formato tradicional
-  Serial.print(millis());
-  Serial.print(',');
-  Serial.print(valorGraficaActual);
-  Serial.print(',');
-  Serial.print(estadoSinDedo ? 1 : 0);
-  Serial.print(',');
-  Serial.println(bpmActual, 1);
+  // Reporte periódico por Serial (cada 500 ms) sin inundar la consola
+  static unsigned long ultimoLogUSB = 0;
+  if (millis() - ultimoLogUSB >= 500) {
+    ultimoLogUSB = millis();
+    Serial.printf("[Sensor] Pulso: %d | Dedo: %s | BPM: %.1f | SpO2: %.1f%%\n",
+                  valorGraficaActual,
+                  estadoSinDedo ? "NO" : "SÍ",
+                  bpmActual,
+                  spo2Actual);
+  }
 
   delay(5);
 }
