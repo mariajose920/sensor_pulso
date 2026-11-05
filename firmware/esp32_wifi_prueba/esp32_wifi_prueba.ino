@@ -1,326 +1,335 @@
 /*
  * ============================================================================
- * sensor_pulso · Firmware ESP32 por WiFi con Datos de Prueba (RF05, RF54)
+ * sensor_pulso · Firmware ESP32 + MAX30100 (WiFi Vercel + Sensor Físico)
  * ============================================================================
- * Proyecto: sensor_pulso (UNACH)
- * Requerimiento: RF05 - Recibir los datos del ESP32 por WiFi (firmware con datos de prueba).
- * Requerimiento: RF54 - Autenticación con token propio por dispositivo.
- * 
- * Descripción:
- *   Este firmware conecta el ESP32 a la red WiFi institucional o local y transmite
- *   en tiempo real los datos fisiológicos (BPM, SpO2 y bloques de onda PPG en IR/Rojo)
- *   hacia el endpoint de ingesta de la plataforma (/api/esp32/telemetria).
- * 
- *   Incluye un generador sintetizador de ondas fotopletismográficas (PPG) de alta
- *   fidelidad fisiológica para hasta 5 canales simultáneos (con muesca dícrota,
- *   pico sistólico y variabilidad natural), permitiendo validar el sistema completo
- *   incluso sin los sensores físicos conectados ("datos de prueba").
- *   
- *   Opcionalmente, si se conecta un sensor MAX30102 por I2C (SDA=GPIO21, SCL=GPIO22),
- *   puede habilitarse la lectura real en el canal 1 mediante el define USE_MAX30102.
+ * Arquitectura Dual-Core (FreeRTOS):
+ *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz con el
+ *             algoritmo exacto que detecta tu dedo a la perfección.
+ *   - CORE 0: Transmisión WiFi en segundo plano hacia Vercel (1 Hz)
+ *             con reconexión automática ante cualquier red WiFi.
+ *
+ * Conexiones:
+ *   MAX30100 VIN -> 3.3V (o VIN/5V)
+ *   MAX30100 GND -> GND
+ *   MAX30100 SDA -> GPIO 21 (D21)
+ *   MAX30100 SCL -> GPIO 22 (D22)
  * ============================================================================
  */
 
+#include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <math.h>
 
 // ----------------------------------------------------------------------------
-// 1. CONFIGURACIÓN DE RED Y SERVIDOR
+// 1. CONFIGURACIÓN WIFI Y VERCEL (Coloca aquí los datos de cualquier red WiFi)
 // ----------------------------------------------------------------------------
-// Ajustar credenciales de la red WiFi local o institucional
-const char* WIFI_SSID     = "TU_RED_WIFI";
-const char* WIFI_PASSWORD = "TU_PASSWORD_WIFI";
+const char* WIFI_SSID     = "amenaza";             // Cambia por cualquier red WiFi
+const char* WIFI_PASSWORD = "TU_PASSWORD";         // Contraseña de la red WiFi
 
-// URL del endpoint de ingesta de la plataforma web sensor_pulso.
-// En desarrollo local (misma red WiFi): http://<IP_DE_TU_PC>:5173/api/esp32/telemetria
-// En producción (Vercel): https://<tu-app>.vercel.app/api/esp32/telemetria
-const char* SERVER_URL    = "http://192.168.1.100:5173/api/esp32/telemetria";
-
-// Token de autenticación del dispositivo ESP32 (RF54)
-// Este token es generado por el administrador en la plataforma (/admin o panel de dispositivos)
+// Endpoint oficial en Vercel
+const char* SERVER_URL    = "https://sensorpulso.vercel.app/api/esp32/telemetria";
 const char* DEVICE_TOKEN  = "esp_demotoken_unach_2026_rf05";
-
-// Nombre identificador del microcontrolador
 const char* DEVICE_NAME   = "ESP32-Biomedico-01";
 
-// Intervalo de transmisión por WiFi en milisegundos (1000 ms = 1 Hz)
-const unsigned long TRANSMIT_INTERVAL_MS = 1000;
-
-// Frecuencia de muestreo simulada de la señal PPG (Hz) y número de muestras por paquete
-const int PPG_SAMPLE_RATE_HZ = 50;  // 50 muestras por segundo
-const int SAMPLES_PER_BLOCK  = 25;  // 25 muestras por bloque transmitido
-
-// Pin de LED de estado (GPIO 2 suele ser el LED integrado en la mayoría de NodeMCU ESP32)
-const int LED_PIN = 2;
-
-// Descomentar la siguiente línea si se desea usar un sensor físico MAX30102 por I2C:
-// #define USE_MAX30102
-
-#ifdef USE_MAX30102
-#include <Wire.h>
-#include "MAX30105.h"
-MAX30105 max30102Sensor;
-bool sensorHardwarePresent = false;
-#endif
-
 // ----------------------------------------------------------------------------
-// 2. ESTRUCTURA DE DATOS PARA LOS 5 CANALES (RF08, RF12)
+// 2. REGISTROS Y PARÁMETROS DEL MAX30100 (Tu código probado y funcional)
 // ----------------------------------------------------------------------------
-struct CanalData {
-  int canal;
-  bool activo;
-  float bpm;
-  float spo2;
-  const char* calidad; // "buena", "regular", "mala"
-  float irSamples[SAMPLES_PER_BLOCK];
-  float redSamples[SAMPLES_PER_BLOCK];
-};
+const uint8_t  DIR_SENSOR   = 0x57;
+const int      PIN_SDA      = 21;
+const int      PIN_SCL      = 22;
 
-CanalData canales[5];
-unsigned long lastTransmitTime = 0;
-unsigned long packetCounter = 0;
-float simPhase[5] = {0.0, 0.5, 1.2, 2.0, 2.7}; // Fases iniciales desfasadas para cada canal
+const uint8_t REG_FIFO_WR  = 0x02;
+const uint8_t REG_FIFO_OVF = 0x03;
+const uint8_t REG_FIFO_RD  = 0x04;
+const uint8_t REG_FIFO_DAT = 0x05;
+const uint8_t REG_MODE     = 0x06;
+const uint8_t REG_SPO2     = 0x07;
+const uint8_t REG_LED      = 0x09;
+const uint8_t REG_PART_ID  = 0xFF;
 
-// ----------------------------------------------------------------------------
-// 3. SINTETIZADOR DE SEÑAL PPG FISIOLÓGICA (Datos de prueba)
-// Genera una forma de onda PPG realista con pico sistólico y muesca dícrota
-// ----------------------------------------------------------------------------
-float generarMuestraPPG(float phase) {
-  // Normalizar fase a rango [0, 2*PI]
-  float t = fmod(phase, 2.0 * M_PI);
-  if (t < 0) t += 2.0 * M_PI;
+// Umbral probado que funciona con tu dedo
+const uint16_t UMBRAL_DEDO = 7000;
 
-  // Curva de onda pulsátil: componente principal (sístole) + onda reflejada (dícrota)
-  float s1 = exp(-pow((t - 1.2), 2) / 0.18); // Pico sistólico principal
-  float s2 = 0.35 * exp(-pow((t - 2.3), 2) / 0.12); // Pico diastólico tras la incisura
-  
-  // Nivel de reflexión normalizado entre 0.0 y 1.0
-  float forma = (s1 + s2);
-  return forma;
+// Estado del procesamiento fisiológico
+float dc = 0;
+float filtrado = 0;
+float maximo = 0;
+float anterior = 0;
+float amplitud = 100;
+unsigned long ultimoLatido = 0;
+volatile float bpmActual = 0;
+volatile float spo2Actual = 98.0;
+volatile bool estadoSinDedo = true;
+volatile uint16_t valorGraficaActual = 2048;
+volatile uint16_t ultimoIRGlobal = 0;
+volatile uint16_t ultimoRojoGlobal = 0;
+
+const unsigned long REFRACTARIO_MS = 380;
+unsigned long dedoDesde = 0;
+const unsigned long CALENTAMIENTO_MS = 2000;
+bool habiaDedo = false;
+
+// Búfer para filtro de mediana
+float rrHist[4] = {800, 800, 800, 800};
+uint8_t rrIdx = 0;
+
+// Contador de paquetes WiFi transmitidos
+unsigned long contadorPaquetes = 0;
+
+void escribirReg(uint8_t reg, uint8_t valor) {
+  Wire.beginTransmission(DIR_SENSOR);
+  Wire.write(reg);
+  Wire.write(valor);
+  Wire.endTransmission();
 }
 
-void actualizarSenalesPrueba() {
-  // Parámetros fisiológicos base para los 5 canales de prueba
-  float bpmBase[5]     = {72.0, 68.5, 80.0, 75.2, 65.0};
-  float spo2Base[5]    = {98.2, 97.5, 99.0, 98.0, 96.8};
-  const char* cal[5]   = {"buena", "buena", "buena", "regular", "buena"};
-
-  for (int c = 0; c < 5; c++) {
-    canales[c].canal = c + 1;
-    canales[c].activo = true;
-    canales[c].calidad = cal[c];
-
-    // Variabilidad fisiológica sutil (+- 1.5 BPM, +- 0.3 % SpO2)
-    float jitterBpm = (sin((millis() + c * 300) / 4000.0) * 1.5);
-    canales[c].bpm = bpmBase[c] + jitterBpm;
-    canales[c].spo2 = spo2Base[c] + (cos((millis() + c * 500) / 6000.0) * 0.3);
-
-    // Calcular incremento de fase según el BPM actual
-    float freqHz = canales[c].bpm / 60.0;
-    float phaseStep = (2.0 * M_PI * freqHz) / (float)PPG_SAMPLE_RATE_HZ;
-
-    // Generar muestras del bloque para IR y RED
-    for (int i = 0; i < SAMPLES_PER_BLOCK; i++) {
-      simPhase[c] += phaseStep;
-      float ppg = generarMuestraPPG(simPhase[c]);
-
-      // Nivel ADC típico de fotodiodo (DC baseline ~ 24000, componente pulsátil AC ~ 1200)
-      float dcIr = 24500.0 + (c * 300);
-      float acIr = 1400.0 * ppg;
-      float ruIdo = ((rand() % 100) - 50) * 0.3; // Pequeño ruido estocástico
-
-      canales[c].irSamples[i] = dcIr + acIr + ruIdo;
-
-      // Señal Roja correlacionada según SpO2
-      float ratioSpO2 = (110.0 - canales[c].spo2) / 25.0; // Modelo empírico de absorción
-      float dcRed = 21000.0 + (c * 250);
-      float acRed = acIr * ratioSpO2;
-      canales[c].redSamples[i] = dcRed + acRed + ruIdo;
-    }
-  }
-
-#ifdef USE_MAX30102
-  // Si el hardware real está disponible, sobrescribir canal 1 con lecturas del sensor
-  if (sensorHardwarePresent) {
-    long irVal = max30102Sensor.getIR();
-    long redVal = max30102Sensor.getRed();
-    if (irVal > 40000) {
-      canales[0].irSamples[SAMPLES_PER_BLOCK - 1] = (float)irVal;
-      canales[0].redSamples[SAMPLES_PER_BLOCK - 1] = (float)redVal;
-      canales[0].calidad = "buena";
-    } else {
-      canales[0].calidad = "regular"; // Dedo no detectado firmemente
-    }
-  }
-#endif
+int leerReg(uint8_t reg) {
+  Wire.beginTransmission(DIR_SENSOR);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return -1;
+  if (Wire.requestFrom((int)DIR_SENSOR, 1) != 1) return -1;
+  return Wire.read();
 }
 
-// ----------------------------------------------------------------------------
-// 4. CONSTRUCCIÓN DE PAYLOAD JSON
-// Construye el paquete de telemetría optimizado para HTTP POST
-// ----------------------------------------------------------------------------
-String construirPayloadJSON() {
-  String json = "{";
-  json += "\"dispositivo\":\"" + String(DEVICE_NAME) + "\",";
-  json += "\"token\":\"" + String(DEVICE_TOKEN) + "\",";
-  json += "\"paquete\":" + String(packetCounter) + ",";
-  json += "\"uptime_ms\":" + String(millis()) + ",";
-  json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
-  json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
-  json += "\"frecuencia_hz\":" + String(PPG_SAMPLE_RATE_HZ) + ",";
-  json += "\"canales\":[";
-
-  for (int c = 0; c < 5; c++) {
-    if (c > 0) json += ",";
-    json += "{";
-    json += "\"canal\":" + String(canales[c].canal) + ",";
-    json += "\"activo\":" + String(canales[c].activo ? "true" : "false") + ",";
-    json += "\"bpm\":" + String(canales[c].bpm, 1) + ",";
-    json += "\"spo2\":" + String(canales[c].spo2, 1) + ",";
-    json += "\"calidad\":\"" + String(canales[c].calidad) + "\",";
-
-    // Muestras IR
-    json += "\"ir\":[";
-    for (int i = 0; i < SAMPLES_PER_BLOCK; i++) {
-      if (i > 0) json += ",";
-      json += String(canales[c].irSamples[i], 1);
-    }
-    json += "],";
-
-    // Muestras Rojo
-    json += "\"rojo\":[";
-    for (int i = 0; i < SAMPLES_PER_BLOCK; i++) {
-      if (i > 0) json += ",";
-      json += String(canales[c].redSamples[i], 1);
-    }
-    json += "]";
-    json += "}";
-  }
-
-  json += "]}";
-  return json;
+bool leerMuestra(uint16_t &ir, uint16_t &rojo) {
+  Wire.beginTransmission(DIR_SENSOR);
+  Wire.write(REG_FIFO_DAT);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((int)DIR_SENSOR, 4) != 4) return false;
+  uint8_t a = Wire.read();
+  uint8_t b = Wire.read();
+  uint8_t c = Wire.read();
+  uint8_t d = Wire.read();
+  ir = ((uint16_t)a << 8) | b;
+  rojo = ((uint16_t)c << 8) | d;
+  return true;
 }
 
-// ----------------------------------------------------------------------------
-// 5. ENVÍO DE DATOS POR WIFI (HTTP POST con Token RF54)
-// ----------------------------------------------------------------------------
-bool enviarTelemetriaPorWiFi(const String& payload) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[WiFi] ⚠️ Conexión perdida. Intentando reconectar...");
-    WiFi.reconnect();
+bool iniciarSensor() {
+  int id = leerReg(REG_PART_ID);
+  if (id != 0x11 && id != 0x15) {
     return false;
   }
+  escribirReg(REG_MODE, 0x40);          // Reset
+  delay(50);
+  escribirReg(REG_FIFO_WR, 0);
+  escribirReg(REG_FIFO_OVF, 0);
+  escribirReg(REG_FIFO_RD, 0);
+  escribirReg(REG_MODE, 0x03);          // Modo SpO2
+  escribirReg(REG_SPO2, 0x47);          // 100 muestras/s, 16 bits
+  escribirReg(REG_LED, 0x28);           // Rojo 7.6 mA, IR 27 mA
+  return true;
+}
 
-  HTTPClient http;
-  http.begin(SERVER_URL);
-  http.setTimeout(2500); // Timeout razonable para baja latencia (RNF04)
+void procesar(uint16_t ir, uint16_t rojo) {
+  bool sinDedo = ir < UMBRAL_DEDO;
+  int valor = 2048;
 
-  // Cabeceras de seguridad y formato
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-ESP32-Token", DEVICE_TOKEN);
-  http.addHeader("Authorization", String("Bearer ") + DEVICE_TOKEN);
+  ultimoIRGlobal = ir;
+  ultimoRojoGlobal = rojo;
+  estadoSinDedo = sinDedo;
 
-  unsigned long startRequest = millis();
-  int httpResponseCode = http.POST(payload);
-  unsigned long latencyMs = millis() - startRequest;
-
-  bool exito = false;
-  if (httpResponseCode > 0) {
-    String response = http.getString();
-    if (httpResponseCode == 200 || httpResponseCode == 201) {
-      Serial.printf("[WiFi] ✅ Paquete #%lu enviado | HTTP %d | Latencia: %lu ms | Servidor: %s\n",
-                    packetCounter, httpResponseCode, latencyMs, response.c_str());
-      exito = true;
-      // Parpadeo corto del LED indicador
-      digitalWrite(LED_PIN, HIGH);
-      delay(30);
-      digitalWrite(LED_PIN, LOW);
-    } else {
-      Serial.printf("[WiFi] ⚠️ Respuesta del servidor HTTP %d: %s\n", httpResponseCode, response.c_str());
-    }
+  if (sinDedo) {
+    bpmActual = 0;
+    dc = ir;
+    filtrado = 0;
+    maximo = 0;
+    amplitud = 100;
+    anterior = 0;
+    ultimoLatido = 0;
+    habiaDedo = false;
+  } else if (!habiaDedo || (millis() - dedoDesde) < CALENTAMIENTO_MS) {
+    if (!habiaDedo) { habiaDedo = true; dedoDesde = millis(); }
+    dc = ir;
+    filtrado = 0;
+    maximo = 0;
+    anterior = 0;
   } else {
-    Serial.printf("[WiFi] ❌ Error en petición POST: %s (código: %d)\n",
-                  http.errorToString(httpResponseCode).c_str(), httpResponseCode);
+    if (dc == 0) dc = ir;
+    dc += 0.02f * (ir - dc);
+    float x = dc - ir;
+    filtrado += 0.3f * (x - filtrado);
+
+    if (fabs(filtrado) > amplitud) amplitud = fabs(filtrado);
+    else amplitud *= 0.998f;
+    if (amplitud < 30) amplitud = 30;
+
+    unsigned long ahora = millis();
+
+    // Recuperación rápida si hubo movimiento brusco
+    if (ahora - ultimoLatido > 1800 && maximo > 60) {
+      maximo = 50;
+    }
+
+    if (filtrado > maximo) maximo = filtrado;
+    else maximo *= 0.995f;
+    float umbral = 0.45f * maximo;
+
+    if (filtrado > umbral && anterior <= umbral && maximo > 20 &&
+        (ahora - ultimoLatido) >= REFRACTARIO_MS) {
+      if (ultimoLatido > 0) {
+        float delta = ahora - ultimoLatido;
+        if (delta >= REFRACTARIO_MS && delta <= 1800) {
+          rrHist[rrIdx % 4] = delta;
+          rrIdx++;
+
+          // Filtro de mediana de 4 intervalos
+          float temp[4];
+          for (int k = 0; k < 4; k++) temp[k] = rrHist[k];
+          for (int a = 0; a < 3; a++) {
+            for (int b = a + 1; b < 4; b++) {
+              if (temp[a] > temp[b]) {
+                float t = temp[a]; temp[a] = temp[b]; temp[b] = t;
+              }
+            }
+          }
+          float medianDelta = (temp[1] + temp[2]) * 0.5f;
+          float bpm = 60000.0f / medianDelta;
+
+          if (bpm >= 45 && bpm <= 150) {
+            if (bpmActual == 0 || rrIdx <= 3) {
+              bpmActual = bpm;
+            } else {
+              bpmActual = 0.60f * bpmActual + 0.40f * bpm;
+            }
+          }
+        }
+      }
+      ultimoLatido = ahora;
+    }
+    anterior = filtrado;
+
+    float v = 2048.0f + filtrado * (1800.0f / amplitud);
+    valor = (int)constrain(v, 0, 4095);
+
+    // Estimación SpO2
+    if (ir > 1000 && rojo > 1000) {
+      float r = ((float)rojo / (float)ir);
+      float calcSpO2 = 110.0f - 25.0f * r;
+      if (calcSpO2 >= 88.0f && calcSpO2 <= 100.0f) {
+        spo2Actual = 0.92f * spo2Actual + 0.08f * calcSpO2;
+      }
+    }
   }
 
-  http.end();
-  return exito;
+  valorGraficaActual = valor;
 }
 
 // ----------------------------------------------------------------------------
-// 6. SETUP & CONEXIÓN INICIAL
+// 3. TAREA SEGUNDO PLANO EN CORE 0: TRANSMISIÓN WIFI HACIA VERCEL
+//    Se ejecuta de forma independiente sin quitarle ni 1 ms al sensor.
+// ----------------------------------------------------------------------------
+void tareaTransmisionWiFi(void *pvParameters) {
+  Serial.printf("[Core 0] Iniciando conexión WiFi a red: %s\n", WIFI_SSID);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.persistent(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  for (;;) {
+    vTaskDelay(1000 / portTICK_PERIOD_MS); // Transmitir cada 1 segundo (1 Hz)
+
+    if (WiFi.status() == WL_CONNECTED) {
+      WiFiClientSecure client;
+      client.setInsecure(); // Acepta HTTPS de Vercel (RF55)
+
+      HTTPClient http;
+      http.begin(client, SERVER_URL);
+      http.setTimeout(2500);
+
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("X-ESP32-Token", DEVICE_TOKEN);
+
+      contadorPaquetes++;
+      String calidad = estadoSinDedo ? "sin_dedo" : ((bpmActual > 0) ? "buena" : "regular");
+
+      // Construir paquete de telemetría con los datos del sensor
+      String json = "{";
+      json += "\"dispositivo\":\"" + String(DEVICE_NAME) + "\",";
+      json += "\"token\":\"" + String(DEVICE_TOKEN) + "\",";
+      json += "\"paquete\":" + String(contadorPaquetes) + ",";
+      json += "\"canales\":[{";
+      json += "\"canal\":1,";
+      json += "\"activo\":true,";
+      json += "\"bpm\":" + String(bpmActual, 1) + ",";
+      json += "\"spo2\":" + String(spo2Actual, 1) + ",";
+      json += "\"calidad\":\"" + calidad + "\",";
+      json += "\"ir\":[" + String(ultimoIRGlobal) + "],";
+      json += "\"rojo\":[" + String(ultimoRojoGlobal) + "]";
+      json += "}]}";
+
+      int httpCodigo = http.POST(json);
+      if (httpCodigo == 200 || httpCodigo == 201) {
+        Serial.printf("☁️ [Vercel OK] Paquete #%lu | BPM: %.1f | SpO2: %.1f%% | Estado: %s\n",
+                      contadorPaquetes, bpmActual, spo2Actual, estadoSinDedo ? "sin_dedo" : "DEDO_OK");
+      } else {
+        Serial.printf("⚠️ [Vercel] Error HTTP: %d\n", httpCodigo);
+      }
+      http.end();
+    } else {
+      Serial.println("🔄 Reconectando a WiFi...");
+      WiFi.reconnect();
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// 4. SETUP Y LOOP PRINCIPAL EN CORE 1: LECTURA CONTINUA DEL SENSOR
 // ----------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  delay(300);
 
-  Serial.println("\n========================================================");
-  Serial.println("  sensor_pulso · ESP32 Firmware WiFi (RF05 / RF54)");
-  Serial.println("  Universidad Adventista de Chile (UNACH)");
-  Serial.println("========================================================");
-  Serial.printf("Dispositivo : %s\n", DEVICE_NAME);
-  Serial.printf("Endpoint    : %s\n", SERVER_URL);
-  Serial.printf("Token       : %s\n", DEVICE_TOKEN);
+  Serial.println(F("\n======================================================="));
+  Serial.println(F("  sensor_pulso · ESP32 + MAX30100 Dual-Core WiFi Vercel"));
+  Serial.println(F("======================================================="));
 
-#ifdef USE_MAX30102
-  Wire.begin(21, 22);
-  if (max30102Sensor.begin(Wire, I2C_SPEED_FAST)) {
-    Serial.println("[I2C] Sensor MAX30102 detectado correctamente.");
-    max30102Sensor.setup(60, 4, 2, 100, 411, 4096);
-    sensorHardwarePresent = true;
-  } else {
-    Serial.println("[I2C] No se detectó MAX30102. Usando modo simulador fisiológico.");
+  Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(100000);
+
+  while (!iniciarSensor()) {
+    Serial.println(F("Esperando sensor MAX30100..."));
+    delay(1000);
   }
-#else
-  Serial.println("[Modo] Ejecutando en modo datos de prueba fisiológicos (5 canales).");
-#endif
+  Serial.println(F("✅ Sensor iniciado y operando correctamente."));
 
-  // Conexión WiFi
-  Serial.printf("[WiFi] Conectando a SSID: %s ", WIFI_SSID);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  // Crear la tarea WiFi en CORE 0 para que NUNCA congele las lecturas del sensor
+  xTaskCreatePinnedToCore(
+    tareaTransmisionWiFi,   // Función de la tarea
+    "WiFiSenderTask",       // Nombre descriptivo
+    8192,                   // Tamaño de pila (stack)
+    NULL,                   // Parámetros
+    1,                      // Prioridad
+    NULL,                   // Handle de tarea
+    0                       // Core 0 (el sensor corre en Core 1)
+  );
 
-  int intentos = 0;
-  while (WiFi.status() != WL_CONNECTED && intentos < 30) {
-    delay(400);
-    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Parpadeo durante conexión
-    Serial.print(".");
-    intentos++;
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    digitalWrite(LED_PIN, HIGH);
-    Serial.println("\n[WiFi] ✅ Conectado con éxito!");
-    Serial.printf("[WiFi] IP Asignada : %s\n", WiFi.localIP().toString().c_str());
-    Serial.printf("[WiFi] MAC Address : %s\n", WiFi.macAddress().c_str());
-    Serial.printf("[WiFi] Intensidad  : %d dBm\n", WiFi.RSSI());
-  } else {
-    digitalWrite(LED_PIN, LOW);
-    Serial.println("\n[WiFi] ⚠️ No se pudo conectar a la red WiFi. Se reintentará en el loop.");
-  }
+  Serial.println(F("t_ms,ecg_raw,leads_off,bpm"));
 }
 
-// ----------------------------------------------------------------------------
-// 7. LOOP PRINCIPAL
-// ----------------------------------------------------------------------------
 void loop() {
-  unsigned long now = millis();
+  // Bucle rápido y exclusivo para el sensor en Core 1 (100% libre de bloqueos de red)
+  int wr = leerReg(REG_FIFO_WR);
+  int rd = leerReg(REG_FIFO_RD);
+  if (wr < 0 || rd < 0) { delay(10); return; }
 
-  // Transmitir periódicamente según el intervalo configurado
-  if (now - lastTransmitTime >= TRANSMIT_INTERVAL_MS) {
-    lastTransmitTime = now;
-    packetCounter++;
-
-    // Generar muestras de señal y métricas para los 5 canales
-    actualizarSenalesPrueba();
-
-    // Construir JSON y enviar por WiFi
-    String jsonPayload = construirPayloadJSON();
-    enviarTelemetriaPorWiFi(jsonPayload);
+  int n = (wr - rd) & 0x0F;
+  for (int i = 0; i < n; i++) {
+    uint16_t ir, rojo;
+    if (!leerMuestra(ir, rojo)) break;
+    procesar(ir, rojo);
   }
 
-  delay(20);
+  // Emisión por puerto USB en el formato tradicional
+  Serial.print(millis());
+  Serial.print(',');
+  Serial.print(valorGraficaActual);
+  Serial.print(',');
+  Serial.print(estadoSinDedo ? 1 : 0);
+  Serial.print(',');
+  Serial.println(bpmActual, 1);
+
+  delay(5);
 }
