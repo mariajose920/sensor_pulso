@@ -672,6 +672,17 @@
           </div>
         </div>
 
+        <!-- RF22: cómo se obtuvieron el BPM y la SpO₂ de esta medición -->
+        <details class="explicacion-obtencion" open>
+          <summary>¿Cómo se obtuvieron estos resultados?</summary>
+          <ExplicacionResultados
+            tipo="ambos"
+            :bpm="resultadosFinales.bpm"
+            :spo2="resultadosFinales.spo2"
+            :ratioR="monitorSpo2.stats.ratioR"
+          />
+        </details>
+
         <!-- Comparación Cuantitativa y Visual de Resultados con el Rango Fisiológico (RF20) -->
         <ComparadorRangoCard
           :bpm="resultadosFinales.bpm"
@@ -770,6 +781,7 @@ import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
 import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
+import ExplicacionResultados from '../components/ExplicacionResultados.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
 import ComparadorRangoCard from '../components/ComparadorRangoCard.vue'
 import AlertaFueraRangoBanner from '../components/AlertaFueraRangoBanner.vue'
@@ -2284,4 +2296,19 @@ onBeforeUnmount(() => {
     width: 100%;
   }
 }
+.explicacion-obtencion {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+.explicacion-obtencion > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: var(--alto-tactil);
+  display: flex;
+  align-items: center;
+}
+.explicacion-obtencion[open] > summary { margin-bottom: 0.75rem; }
 </style>
