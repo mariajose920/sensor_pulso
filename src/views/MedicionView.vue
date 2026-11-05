@@ -679,6 +679,13 @@
           :paciente="pacienteActivo"
         />
 
+        <!-- Interpretación textual de los resultados y causas de variación (RF23) -->
+        <InterpretacionResultados
+          :bpm="resultadosFinales.bpm"
+          :spo2="resultadosFinales.spo2"
+          :paciente="pacienteActivo"
+        />
+
         <!-- Tarjeta de Clasificación del Ritmo Cardíaco (RF18 AHA / Mayo Clinic) -->
         <div 
           v-if="clasificacionRitmo" 
@@ -772,6 +779,7 @@ import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
 import ComparadorRangoCard from '../components/ComparadorRangoCard.vue'
+import InterpretacionResultados from '../components/InterpretacionResultados.vue'
 import AlertaFueraRangoBanner from '../components/AlertaFueraRangoBanner.vue'
 import { useAuth } from '../composables/useAuth'
 import { sesionActivaId } from '../services/sesionMedicionService'
