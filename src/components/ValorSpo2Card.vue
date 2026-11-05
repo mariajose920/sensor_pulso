@@ -14,7 +14,7 @@
 
     <!-- Banner de Alerta Clínica si hay Hipoxia (<95% o <90%) -->
     <div v-if="esHipoxia" class="banner-alerta-spo2" :class="'banner-' + evaluacionClinica.severidad">
-      <div class="banner-icon">⚠️</div>
+      <div class="banner-icon"></div>
       <div class="banner-body">
         <strong>{{ evaluacionClinica.etiqueta }}: {{ evaluacionClinica.descripcion }}</strong>
         <p class="banner-action">{{ evaluacionClinica.accionRecomendada }}</p>
@@ -51,7 +51,7 @@
           </svg>
 
           <div class="gauge-center-icon">
-            <span class="oximeter-icon">🫁</span>
+            <span class="oximeter-icon"></span>
           </div>
         </div>
 
@@ -77,7 +77,7 @@
             class="range-pill"
             :class="spo2Actual >= 95 ? 'in-range' : 'out-of-range'"
           >
-            {{ spo2Actual >= 95 ? '✓ Rango Clínico Seguro (≥95%)' : '⚠️ Atención Requerida (<95%)' }}
+            {{ spo2Actual >= 95 ? 'Rango Seguro (≥95%)' : 'Atención Requerida (<95%)' }}
           </span>
         </div>
       </div>

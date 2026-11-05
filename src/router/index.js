@@ -27,6 +27,11 @@ const routes = [
     component: MedicionView
   },
   {
+    // RF13: Asistente integrado en la vista de medición
+    path: '/asistente',
+    redirect: '/medicion'
+  },
+  {
     path: '/dispositivos',
     name: 'Dispositivos',
     component: DispositivosView

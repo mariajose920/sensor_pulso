@@ -7,7 +7,8 @@
  * - Persistencia en Supabase (tabla declaraciones_paciente con bytea para datos_cifrados)
  * - Persistencia en localStorage para soporte sin conexión (RNF03 - PWA offline).
  */
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
+import { ACTIVIDADES_CANONICAS, normalizarActividadId, obtenerNombreActividad } from './actividadesService.js'
 
 export const NIVELES_ESTRES = [
   { id: 'bajo', label: 'Bajo (Tranquilo / Relajado)', color: '#16a34a' },
@@ -30,13 +31,13 @@ export const OPCIONES_CAFEINA = [
   { id: 'alta', label: 'Alta (3+ cafés o bebida energética)' }
 ]
 
-export const OPCIONES_ACTIVIDAD = [
-  { id: 'reposo', label: 'Reposo absoluto (>15 min sentado/quieto)' },
-  { id: 'caminata', label: 'Caminata o actividad cotidiana leve' },
-  { id: 'ejercicio_moderado', label: 'Ejercicio moderado reciente (trote, bicicleta)' },
-  { id: 'ejercicio_intenso', label: 'Ejercicio intenso reciente (carrera, pesas)' },
-  { id: 'post_ejercicio', label: 'En fase de recuperación post-esfuerzo' }
-]
+export const OPCIONES_ACTIVIDAD = ACTIVIDADES_CANONICAS.map(a => ({
+  id: a.codigo,
+  actividadId: a.id,
+  label: a.label,
+  nombre: a.nombre,
+  descripcion: a.descripcion
+}))
 
 export const OPCIONES_MEDICACION = [
   { 
@@ -209,6 +210,8 @@ export const pacienteService = {
       medicacionDetalle: detalleMed,
       medicacion: textoMedicacion,
       actividadPrevia: datos.actividadPrevia || 'reposo',
+      actividadId: normalizarActividadId(datos.actividadId || datos.actividadPrevia || 1),
+      actividadNombre: obtenerNombreActividad(datos.actividadId || datos.actividadPrevia || 1),
       condicionSalud: datos.condicionSalud || 'Ninguna conocida',
       observaciones: datos.observaciones ? datos.observaciones.trim() : ''
     }
@@ -289,6 +292,8 @@ export const pacienteService = {
             nombre: data.nombre,
             edad: data.edad,
             ...factores,
+            actividadId: normalizarActividadId(factores.actividadId || factores.actividadPrevia || 1),
+            actividadNombre: obtenerNombreActividad(factores.actividadId || factores.actividadPrevia || 1),
             creadoEn: data.creado_en,
             actualizadoEn: data.creado_en,
             origen: 'supabase'
@@ -319,6 +324,15 @@ export const pacienteService = {
   /**
    * Limpia los datos del paciente guardados localmente
    */
+  obtenerUltimaDeclaracion() {
+    try {
+      const guardado = localStorage.getItem(LOCAL_STORAGE_KEY)
+      return guardado ? JSON.parse(guardado) : null
+    } catch (e) {
+      return null
+    }
+  },
+
   limpiarDeclaracionLocal() {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY)

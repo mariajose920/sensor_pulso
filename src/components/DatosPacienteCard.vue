@@ -68,7 +68,7 @@
           <span class="value">{{ etiquetaCafeina(paciente.cafeina) }}</span>
         </div>
         <div class="paciente-item">
-          <span class="label">Actividad previa:</span>
+          <span class="label">Contexto / Actividad:</span>
           <span class="value">{{ etiquetaActividad(paciente.actividadPrevia) }}</span>
         </div>
         <div class="paciente-item">
@@ -92,11 +92,12 @@
       </div>
       <div style="margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem; background: #f8fafc; padding: 0.4rem 0.75rem; border-radius: 0.375rem; border: 1px solid #e2e8f0;">
         <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
-          <span style="color: #15803d; font-weight: 600;">
-            ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
-          </span>
-          <span v-if="consentimientoEstado.aceptadoEn" style="color: #475569; font-size: 0.74rem;">
-            Registrado: <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> (RF59)
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span style="color: #16a34a; font-weight: 700;">● Consentimiento Informado Vigente</span>
+            <span class="badge badge-success" style="font-size: 0.68rem; padding: 0.1rem 0.45rem;">Ley 19.628</span>
+          </div>
+          <span v-if="consentimientoEstado.aceptadoEn" style="color: #64748b; font-size: 0.75rem;">
+            Registrado el <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> para uso docente y confidencial
           </span>
         </div>
         <div v-else style="display: flex; flex-direction: column; gap: 0.15rem;">
@@ -115,7 +116,7 @@
             @click="emit('abrir-consentimiento')"
             title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
           >
-            📋 Ver términos (RF76)
+            Ver términos
           </button>
           <button 
             v-if="consentimientoEstado.vigente"
@@ -269,7 +270,7 @@
           <!-- Actividad previa -->
           <div class="form-group">
             <label class="form-label" for="actividadPrevia">
-              Actividad física previa (últimos 30-60 min)
+              Actividad o Contexto de la Medición
             </label>
             <select 
               id="actividadPrevia"
@@ -280,7 +281,7 @@
                 {{ opt.label }}
               </option>
             </select>
-            <small class="form-text">Determina los rangos fisiológicos esperados.</small>
+            <small class="form-text">Asocia el contexto físico (reposo, movimiento o post-ejercicio) a la medición para calibrar los rangos esperados.</small>
           </div>
 
           <!-- Medicación Asistida (RF03) -->
@@ -352,13 +353,14 @@
           </small>
           <div style="margin-top: 0.5rem; pt: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem;">
             <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
-              <span style="color: #15803d; font-weight: 600;">
-                ● Consentimiento Informado Vigente (v{{ consentimientoEstado.version }})
-              </span>
-              <span v-if="consentimientoEstado.aceptadoEn" style="color: #475569; font-size: 0.74rem;">
-                Registrado: <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> (RF59)
-              </span>
-            </div>
+          <div style="display: flex; align-items: center; gap: 0.4rem;">
+            <span style="color: #16a34a; font-weight: 700;">● Consentimiento Informado Vigente</span>
+            <span class="badge badge-success" style="font-size: 0.68rem; padding: 0.1rem 0.45rem;">Ley 19.628</span>
+          </div>
+          <span v-if="consentimientoEstado.aceptadoEn" style="color: #64748b; font-size: 0.75rem;">
+            Registrado el <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> para uso docente y confidencial
+          </span>
+        </div>
             <div v-else style="display: flex; flex-direction: column; gap: 0.15rem;">
               <span style="color: #d97706; font-weight: 600;">
                 ○ Consentimiento pendiente (saltará al medir / conectar)
@@ -391,7 +393,7 @@
           </div>
         </div>
 
-        <!-- Botones de Acción -->
+        <!-- Botón ocultad c:
         <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
           <button 
             type="submit" 
@@ -401,6 +403,7 @@
             {{ guardando ? 'Guardando...' : 'Guardar ficha del paciente' }}
           </button>
         </div>
+        -->
       </form>
     </div>
   </div>
@@ -543,14 +546,15 @@ async function guardar() {
     const res = await pacienteService.guardarDeclaracion(formulario.value)
     if (!res.ok) {
       errores.value = res.errores
-      return
+      return false   // Agrega este return false
     }
-
     paciente.value = res.data
     modoEdicion.value = false
     emit('paciente-actualizado', res.data)
+    return true      // Agrega este return true
   } catch (err) {
     errores.value = ['Error inesperado al guardar la declaración: ' + err.message]
+    return false     //Agrega este return false
   } finally {
     guardando.value = false
   }
@@ -603,6 +607,11 @@ function etiquetaActividad(id) {
   const item = OPCIONES_ACTIVIDAD.find(a => a.id === id)
   return item ? item.label : id
 }
+
+defineExpose({
+  guardar,
+  modoEdicion
+})
 </script>
 
 <style scoped>

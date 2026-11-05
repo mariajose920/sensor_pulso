@@ -19,20 +19,34 @@ export const BPM_MAX_FISIOLOGICO = 250
  * Fuentes: American Heart Association (AHA)
  */
 export function obtenerRangosBpmEsperados(edad = 25, actividad = 'reposo') {
-  if (actividad === 'ejercicio') {
-    return { min: 90, max: 170, descripcion: 'En actividad física / ejercicio moderado' }
+  const act = String(actividad || 'reposo').toLowerCase().trim()
+
+  if (act.includes('intenso')) {
+    return { min: 120, max: 185, descripcion: 'Ejercicio intenso / Esfuerzo máximo' }
+  }
+  if (act.includes('moderado') || act === 'ejercicio') {
+    return { min: 90, max: 150, descripcion: 'Ejercicio moderado / Trote / Bicicleta' }
+  }
+  if (act.includes('post') || act.includes('recuperacion')) {
+    return { min: 80, max: 130, descripcion: 'Fase de recuperación post-ejercicio' }
+  }
+  if (act.includes('caminata') || act.includes('movimiento')) {
+    return { min: 75, max: 120, descripcion: 'Caminata o actividad cotidiana leve' }
+  }
+  if (act.includes('sentado')) {
+    return { min: 65, max: 105, descripcion: 'Sentado activo / En escritorio' }
   }
 
-  // Adultos mayores (65+)
+  // Adultos mayores (65+) en reposo
   if (edad >= 65) {
-    return { min: 58, max: 95, descripcion: 'Adulto mayor en reposo (AHA)' }
+    return { min: 58, max: 95, descripcion: 'Adulto mayor en reposo basal (AHA)' }
   }
-  // Adultos estándar (18 - 64)
+  // Adultos estándar (18 - 64) en reposo
   if (edad >= 18) {
-    return { min: 60, max: 100, descripcion: 'Adulto en reposo (Normocardia estándar AHA: 60-100 BPM)' }
+    return { min: 60, max: 100, descripcion: 'Adulto en reposo (Normocardia basal AHA: 60-100 BPM)' }
   }
-  // Adolescentes (12 - 17)
-  return { min: 65, max: 105, descripcion: 'Adolescente en reposo' }
+  // Adolescentes (12 - 17) en reposo
+  return { min: 65, max: 105, descripcion: 'Adolescente en reposo basal' }
 }
 
 /**
@@ -99,6 +113,8 @@ export function crearMonitorEstadisticasBpm() {
     maxBpm: null,
     ibiMs: 0,
     totalLecturas: 0,
+    sdnn: 0,
+    rmssd: 0,
     estabilidad: 'Esperando señal...',
     estabilidadNivel: 'normal', // 'alta' | 'moderada' | 'baja'
     dentroDeRango: true,
@@ -139,6 +155,20 @@ export function crearMonitorEstadisticasBpm() {
     const evaluacion = evaluarRangoBpm(stats.currentBpm, rango)
     stats.dentroDeRango = evaluacion.dentroDeRango
     stats.estadoRitmo = evaluacion.estado
+
+    // Cálculo dinámico de HRV real (SDNN y RMSSD en ms a partir de intervalos R-R)
+    if (historial.length >= 2) {
+      const rrIntervals = historial.map(b => (60000 / b))
+      const meanRR = rrIntervals.reduce((a, b) => a + b, 0) / rrIntervals.length
+      const varRR = rrIntervals.reduce((acc, v) => acc + Math.pow(v - meanRR, 2), 0) / rrIntervals.length
+      stats.sdnn = Math.round(Math.sqrt(varRR))
+
+      let sumDiffSq = 0
+      for (let i = 0; i < rrIntervals.length - 1; i++) {
+        sumDiffSq += Math.pow(rrIntervals[i + 1] - rrIntervals[i], 2)
+      }
+      stats.rmssd = Math.round(Math.sqrt(sumDiffSq / (rrIntervals.length - 1)))
+    }
 
     // Evaluación de estabilidad de la frecuencia (desviación típica en la ventana)
     if (historial.length >= 5) {

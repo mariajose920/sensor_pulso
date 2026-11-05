@@ -214,3 +214,5 @@ export async function resolverPropuestaRango(propuestaId, aprobar) {
   if (error) return fallo(error, 'No se pudo resolver la propuesta.')
   return { success: true }
 }
+// Re-exportación del motor de comparación cuantitativa y cualitativa (RF20)
+export { evaluarComparacionRango, obtenerRangoReferencia } from "../utils/comparacionRangos.js"
