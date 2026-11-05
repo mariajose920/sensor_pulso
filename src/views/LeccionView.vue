@@ -66,16 +66,21 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import EsquemaLeccion from '../components/EsquemaLeccion.vue'
 import Spo2MedidaLeccion from '../components/Spo2MedidaLeccion.vue'
-import { AVISO_EDUCATIVO, CATEGORIAS, buscarLeccion, vecinas } from '../data/lecciones.js'
+import { AVISO_EDUCATIVO, CATEGORIAS, LECCIONES as LECCIONES_BASE } from '../data/lecciones.js'
+import { obtenerLeccionesPlataforma } from '../services/panelAdminService'
 
 const route = useRoute()
-const leccion = computed(() => buscarLeccion(String(route.params.slug)))
-const anterior = computed(() => vecinas(String(route.params.slug)).anterior)
-const siguiente = computed(() => vecinas(String(route.params.slug)).siguiente)
+// RF46: las lecciones precargadas más los cambios que aprobó el administrador
+const lecciones = ref(LECCIONES_BASE)
+onMounted(async () => { lecciones.value = await obtenerLeccionesPlataforma() })
+const indice = computed(() => lecciones.value.findIndex((l) => l.slug === String(route.params.slug)))
+const leccion = computed(() => lecciones.value[indice.value] || null)
+const anterior = computed(() => lecciones.value[indice.value - 1] || null)
+const siguiente = computed(() => (indice.value === -1 ? null : lecciones.value[indice.value + 1] || null))
 </script>
 
 <style scoped>

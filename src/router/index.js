@@ -10,6 +10,7 @@ import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
 import AdminView from '../views/AdminView.vue'
 import RangosView from '../views/RangosView.vue'
+import ContenidosView from '../views/ContenidosView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import HistorialView from '../views/HistorialView.vue'
 import { useAuth } from '../composables/useAuth'
@@ -89,6 +90,13 @@ const routes = [
     path: '/rangos',
     name: 'Rangos',
     component: RangosView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
+  },
+  {
+    // RF46: el profesor con permiso editar_contenidos propone cambios de lecciones y de sincronización
+    path: '/contenidos',
+    name: 'Contenidos',
+    component: ContenidosView,
     meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {

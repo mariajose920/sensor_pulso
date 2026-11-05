@@ -37,7 +37,13 @@
 </template>
 
 <script setup>
-import { AVISO_EDUCATIVO, CATEGORIAS, LECCIONES } from '../data/lecciones.js'
+import { ref, onMounted } from 'vue'
+import { AVISO_EDUCATIVO, CATEGORIAS, LECCIONES as LECCIONES_BASE } from '../data/lecciones.js'
+import { obtenerLeccionesPlataforma } from '../services/panelAdminService'
+
+// RF46: las lecciones precargadas más los cambios que aprobó el administrador
+const LECCIONES = ref(LECCIONES_BASE)
+onMounted(async () => { LECCIONES.value = await obtenerLeccionesPlataforma() })
 </script>
 
 <style scoped>
