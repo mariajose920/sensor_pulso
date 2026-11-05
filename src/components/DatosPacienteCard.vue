@@ -95,6 +95,7 @@
           <div style="display: flex; align-items: center; gap: 0.4rem;">
             <span style="color: #16a34a; font-weight: 700;">● Consentimiento Informado Vigente</span>
             <span class="badge badge-success" style="font-size: 0.68rem; padding: 0.1rem 0.45rem;">Ley 19.628</span>
+            <span class="badge" style="font-size: 0.68rem; padding: 0.1rem 0.45rem; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">🔒 AES-256 + TLS (RF55)</span>
           </div>
           <span v-if="consentimientoEstado.aceptadoEn" style="color: #64748b; font-size: 0.75rem;">
             Registrado el <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> para uso docente y confidencial
@@ -349,7 +350,7 @@
         <!-- Privacidad y Protección de Datos (RF116 / RF117) -->
         <div class="privacidad-box">
           <small>
-            La información médica declarada se almacena cifrada en base de datos bajo control de acceso de nivel de fila (RLS). Para fines <strong>pedagógicos</strong>, en las vistas compartidas solo se exponen nombre y rangos etarios.
+            La información médica declarada se almacena cifrada (AES-256-GCM) en base de datos bajo control de acceso de nivel de fila (RLS). En tránsito se protege mediante HTTPS/TLS 1.3 (RF55). Para fines <strong>pedagógicos</strong>, en las vistas compartidas solo se exponen nombre y rangos etarios.
           </small>
           <div style="margin-top: 0.5rem; pt: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem;">
             <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
