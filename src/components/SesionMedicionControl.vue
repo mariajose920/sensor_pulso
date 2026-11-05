@@ -54,6 +54,11 @@
         </div>
       </div>
 
+      <!-- Notificación de éxito en sesión activa (RF111) -->
+      <div v-if="mensajeExito" class="alert alert-success anim-fade" style="margin: 0.75rem 0;">
+        {{ mensajeExito }}
+      </div>
+
       <!-- Metadatos de la Sesión Oficial -->
       <div class="sesion-meta-grid">
         <div class="meta-item">
@@ -351,6 +356,8 @@ async function onAvanzarRonda() {
     const res = await avanzarRondaSesion()
     if (res.ok) {
       formRonda.value = res.ronda
+      mensajeExito.value = `¡Ronda ${res.ronda} iniciada con éxito! Los 5 canales han quedado libres (RF111).`
+      setTimeout(() => { mensajeExito.value = '' }, 4000)
     }
   } finally {
     avanzandoRonda.value = false
