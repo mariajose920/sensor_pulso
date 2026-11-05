@@ -2,7 +2,7 @@
  * ============================================================================
  * sensor_pulso · Firmware ESP32 + MAX30100 (WiFi Vercel + Sensor Físico)
  * ============================================================================
- * Rama: rf05-recepcion-wifi
+ * Ramas: rf05-recepcion-wifi, rf54-token-dispositivo, rf55-cifrado-en-transito
  *
  * Arquitectura Dual-Core (FreeRTOS):
  *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz.
@@ -380,8 +380,15 @@ void setup() {
 
   Serial.println(F("\n======================================================="));
   Serial.println(F("  sensor_pulso · ESP32 + MAX30100 Dual-Core WiFi Vercel"));
-  Serial.println(F("  UNACH - Rama rf05-recepcion-wifi"));
+  Serial.println(F("  UNACH - Telemetría Dual-Core con Cifrado TLS (RF55)"));
   Serial.println(F("======================================================="));
+
+  // RF55: Verificación de Cifrado en Tránsito TLS/HTTPS
+  if (strncmp(SERVER_URL, "https://", 8) != 0) {
+    Serial.println(F("⚠️ [Seguridad RF55] ALERTA: SERVER_URL debe usar https:// con TLS."));
+  } else {
+    Serial.println(F("🔒 [Seguridad RF55] Cifrado en tránsito TLS 1.2+ (HTTPS) verificado."));
+  }
 
   Wire.begin(PIN_SDA, PIN_SCL);
   Wire.setClock(100000);

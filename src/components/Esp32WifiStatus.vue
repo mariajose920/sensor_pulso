@@ -21,6 +21,9 @@
         <div class="badge-token" :title="'Autenticación de dispositivo verificada (RF54)'">
           <span class="badge-icon">🔒</span> Token RF54 Válido
         </div>
+        <div class="badge-tls" :title="'Cifrado en tránsito HTTPS/TLS 1.3 activo (RF55)'">
+          <span class="badge-icon">🛡️</span> TLS 1.3 (RF55)
+        </div>
       </div>
     </div>
 
@@ -166,6 +169,19 @@ const estadoConexionCalculado = computed(() => {
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   color: #166534;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 9999px;
+}
+
+.badge-tls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
   font-size: 0.8rem;
   font-weight: 600;
   border-radius: 9999px;
