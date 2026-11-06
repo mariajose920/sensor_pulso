@@ -133,10 +133,10 @@ async function encodeObjectToByteaHex(obj) {
 /**
  * Decodifica y descifra una cadena hex bytea (\x...) de PostgreSQL a un objeto JavaScript (RF55, RF116)
  */
-async function decodeByteaHexToObject(byteaStr, claveVersion = 1) {
+async function decodeByteaHexToObject(byteaStr, claveVersion = 1, declaracionId = null, token = null, usuarioId = null) {
   if (!byteaStr) return {}
   try {
-    return await cifradoService.descifrarFactoresSalud(byteaStr, claveVersion)
+    return await cifradoService.descifrarFactoresSaludEnServidor({ declaracionId, datosCifrados: byteaStr, claveVersion, token, usuarioId })
   } catch (e) {
     console.warn('No se pudo descifrar datos_cifrados de la declaración:', e)
     return {}
@@ -237,7 +237,7 @@ export const pacienteService = {
             nombre: declaracionNormalizada.nombre,
             edad: declaracionNormalizada.edad,
             datos_cifrados: byteaHex,
-            clave_version: 1
+            clave_version: cifradoService.obtenerVersionActiva()
           })
           .select('id, creado_en')
           .single()
@@ -279,7 +279,7 @@ export const pacienteService = {
           .maybeSingle()
 
         if (!error && data) {
-          const factores = await decodeByteaHexToObject(data.datos_cifrados, data.clave_version)
+          const factores = await decodeByteaHexToObject(data.datos_cifrados, data.clave_version, data.id, session.access_token, session.user.id)
           const consolidado = {
             id: data.id,
             nombre: data.nombre,
