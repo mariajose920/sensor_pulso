@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue'
 import MedicionView from '../views/MedicionView.vue'
 import ComparacionView from '../views/ComparacionView.vue'
 import AulasView from '../views/AulasView.vue'
+import AulaDetalleView from '../views/AulaDetalleView.vue'
 import AprendizajeView from '../views/AprendizajeView.vue'
 import LeccionView from '../views/LeccionView.vue'
 import SimuladorView from '../views/SimuladorView.vue'
@@ -52,6 +53,13 @@ const routes = [
     path: '/aulas',
     name: 'Aulas',
     component: AulasView
+  },
+  {
+    // RF103: Página del aula (con pestañas: estudiantes, cursos y evaluaciones)
+    path: '/aulas/:id',
+    name: 'AulaDetalle',
+    component: AulaDetalleView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {
     path: '/aprendizaje',
