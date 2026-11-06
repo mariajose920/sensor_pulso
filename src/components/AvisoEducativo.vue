@@ -1,6 +1,5 @@
 <template>
   <aside class="aviso-educativo" :class="{ compacto }" role="note" aria-label="Aviso educativo" data-testid="aviso-educativo">
-    <span class="aviso-icono" aria-hidden="true">ℹ️</span>
     <p class="aviso-texto">
       <template v-if="compacto"><strong>Aviso:</strong> {{ AVISO_EDUCATIVO_CORTO }}</template>
       <template v-else><strong>{{ AVISO_EDUCATIVO_TITULO }}.</strong> {{ AVISO_EDUCATIVO_TEXTO }}</template>
