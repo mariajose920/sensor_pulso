@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { validarCorreoInstitucional } from '../utils/validators'
+import { enviarCorreoInvitacion } from './emailService'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -18,6 +19,7 @@ const STORAGE_AULA_ESTUDIANTES = 'sensor_pulso_aula_estudiantes_locales'
 const STORAGE_CURSOS = 'sensor_pulso_cursos_locales'
 const STORAGE_CURSO_ESTUDIANTES = 'sensor_pulso_curso_estudiantes_locales'
 const STORAGE_INVITACIONES = 'sensor_pulso_invitaciones_aulas_locales'
+const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
 
 function cargarDeStorage(key, porDefecto) {
   if (typeof window === 'undefined' || !window.localStorage) return porDefecto
@@ -84,9 +86,100 @@ let cursoEstudiantesLocales = cargarDeStorage(STORAGE_CURSO_ESTUDIANTES, [
 // Invitaciones por correo (RF100)
 let invitacionesLocales = cargarDeStorage(STORAGE_INVITACIONES, [])
 
+// Evaluaciones del aula (RF103 / RF104)
+let evaluacionesLocales = cargarDeStorage(STORAGE_EVALUACIONES, [
+  {
+    id: 'eval-001',
+    aula_id: 'aula-001',
+    titulo: 'Evaluación Práctica: Medición de Pulso y SpO2 en Reposo',
+    descripcion: 'Prueba práctica de adquisición de señal fotopletismográfica, cálculo de frecuencia cardíaca e interpretación de saturación de oxígeno con sensor MAX30102.',
+    tiempo_limite_minutos: 45,
+    activa: true,
+    preguntas_count: 5,
+    creada_en: '2026-11-01T10:00:00Z'
+  },
+  {
+    id: 'eval-002',
+    aula_id: 'aula-001',
+    titulo: 'Control Teórico: Ciberseguridad y Privacidad en Dispositivos IoT Médicos',
+    descripcion: 'Evaluación de conceptos de cifrado AES-GCM, autenticación segura y cumplimiento de normativas de salud en telemetría inalámbrica.',
+    tiempo_limite_minutos: 30,
+    activa: true,
+    preguntas_count: 8,
+    creada_en: '2026-11-03T14:30:00Z'
+  }
+])
+
 /**
  * Obtener aulas
  */
+/**
+ * RF103: Obtener datos de una sola aula por su ID y validar permisos de acceso.
+ * Criterio de aceptación: Solo entra el profesor dueño o el admin.
+ */
+export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+
+  let aula = null
+
+  // 1. Intentar buscar en Supabase
+  try {
+    const { data, error } = await supabase
+      .from('aulas')
+      .select('*, perfiles:profesor_id(nombre, correo)')
+      .eq('id', aulaId)
+      .maybeSingle()
+
+    if (!error && data) {
+      aula = {
+        ...data,
+        profesor_nombre: data.perfiles?.nombre || 'Docente'
+      }
+    }
+  } catch (_) {}
+
+  // 2. Si no está en Supabase, buscar en almacenamiento local
+  if (!aula) {
+    aula = aulasLocales.find(a => a.id === aulaId)
+  }
+
+  if (!aula) {
+    return { success: false, error: 'El aula solicitada no existe o fue archivada.' }
+  }
+
+  // 3. Criterio de aceptación estricto RF103: Solo entra el profesor dueño o el admin
+  if (usuarioId && !esAdmin && aula.profesor_id !== usuarioId) {
+    return {
+      success: false,
+      error: 'Acceso no autorizado: Solo el profesor titular o un administrador pueden acceder a esta aula.',
+      noAutorizado: true
+    }
+  }
+
+  return { success: true, data: aula }
+}
+
+/**
+ * RF103: Obtener evaluaciones asociadas al aula (datos reales de Supabase / locales)
+ */
+export async function obtenerEvaluacionesAula(aulaId) {
+  if (!aulaId) return { success: true, data: [] }
+  try {
+    const { data, error } = await supabase
+      .from('evaluaciones')
+      .select('*')
+      .or(`aula_id.eq.${aulaId},aula_id.is.null`)
+      .order('creada_en', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      return { success: true, data }
+    }
+  } catch (_) {}
+
+  const evals = evaluacionesLocales.filter(e => !e.aula_id || e.aula_id === aulaId)
+  return { success: true, data: evals }
+}
+
 export async function obtenerAulas({ usuarioId, usuarioCorreo, esAdmin, esProfesor }) {
   try {
     let query = supabase.from('aulas').select('*').order('creado_en', { ascending: false })
@@ -308,11 +401,15 @@ export async function regenerarCodigoAulaDocente({ aulaId, profesorId, esAdmin }
 /**
  * RF100: Enviar invitación con el código al correo del estudiante (@alu.unach.cl)
  */
-export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, esAdmin }) {
+export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, profesorNombre, esAdmin }) {
   const aula = aulasLocales.find(a => a.id === aulaId)
   if (!aula) return { success: false, error: 'Aula no encontrada.' }
   if (!esAdmin && aula.profesor_id !== profesorId) {
     return { success: false, error: 'No tienes permiso para gestionar invitaciones en esta aula.' }
+  }
+
+  if (!aula.codigo_activo) {
+    return { success: false, error: 'El código de acceso de esta aula se encuentra desactivado. Actívalo antes de enviar invitaciones.' }
   }
 
   const validacion = validarCorreoInstitucional(correoEstudiante)
@@ -322,13 +419,46 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   const correoLimpio = correoEstudiante.trim().toLowerCase()
 
-  // Guardar invitación
+  // Conectar con el servicio de correo real (Resend)
+  const resultadoEnvio = await enviarCorreoInvitacion({
+    correo: correoLimpio,
+    codigo: aula.codigo,
+    aulaNombre: aula.nombre,
+    profesorNombre: profesorNombre || 'Docente'
+  })
+
+  // Criterio de aceptación: Si el envío falla, NO dice "enviada" y registra el resultado del envío
+  if (!resultadoEnvio.success) {
+    const invitacionFallida = {
+      id: `inv-err-${Date.now()}`,
+      aula_id: aulaId,
+      aula_nombre: aula.nombre,
+      codigo_aula: aula.codigo,
+      correo: correoLimpio,
+      servicio: 'Resend',
+      estado: 'fallido',
+      error_detalle: resultadoEnvio.error,
+      intentado_en: new Date().toISOString()
+    }
+    invitacionesLocales.unshift(invitacionFallida)
+    guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+
+    return {
+      success: false,
+      error: resultadoEnvio.error
+    }
+  }
+
+  // Registro de envío exitoso
   const nuevaInvitacion = {
     id: `inv-${Date.now()}`,
     aula_id: aulaId,
     aula_nombre: aula.nombre,
     codigo_aula: aula.codigo,
     correo: correoLimpio,
+    servicio: 'Resend',
+    estado: 'enviada',
+    resend_id: resultadoEnvio.messageId || null,
     enviada_en: new Date().toISOString()
   }
 
@@ -344,8 +474,30 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   return {
     success: true,
-    message: `Invitación enviada a ${correoLimpio} con el código de acceso ${aula.codigo}.`
+    message: `Invitación enviada con éxito a ${correoLimpio} mediante Resend (Código: ${aula.codigo}).`,
+    invitacion: nuevaInvitacion
   }
+}
+
+/**
+ * RF100: Obtener el registro de invitaciones del aula (para verificar estados enviado/fallido)
+ */
+export async function obtenerInvitacionesAula(aulaId) {
+  if (!aulaId) return { success: true, data: [] }
+  try {
+    const { data, error } = await supabase
+      .from('invitaciones_aula')
+      .select('*')
+      .eq('aula_id', aulaId)
+      .order('enviada_en', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      return { success: true, data }
+    }
+  } catch (_) {}
+
+  const filtradas = invitacionesLocales.filter(inv => inv.aula_id === aulaId)
+  return { success: true, data: filtradas }
 }
 
 // ==========================================
@@ -495,4 +647,87 @@ export async function actualizarEstudiantesCurso({ cursoId, aulaId, estudiantesI
 
   guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
   return { success: true }
+}
+
+/**
+ * RF102: Retirar a uno o varios estudiantes del aula
+ */
+export async function retirarEstudiantesAula({ aulaId, estudiantesIds, profesorId, esAdmin }) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+  if (!estudiantesIds || estudiantesIds.length === 0) {
+    return { success: false, error: 'No se seleccionaron estudiantes para retirar.' }
+  }
+
+  // 1. Llamar a la función RPC retirar_estudiantes en Supabase (si está disponible)
+  try {
+    const { data, error } = await supabase.rpc('retirar_estudiantes', {
+      p_aula: aulaId,
+      p_usuarios: estudiantesIds
+    })
+    if (error) throw error
+  } catch (err) {
+    console.warn('Aviso: RPC retirar_estudiantes ejecutando en modo local:', err.message)
+    try {
+      await supabase
+        .from('aula_estudiantes')
+        .update({
+          estado: 'retirado',
+          retirado_en: new Date().toISOString(),
+          retirado_por: profesorId
+        })
+        .eq('aula_id', aulaId)
+        .in('usuario_id', estudiantesIds)
+
+      await supabase
+        .from('curso_estudiantes')
+        .delete()
+        .eq('aula_id', aulaId)
+        .in('usuario_id', estudiantesIds)
+    } catch (_) {}
+  }
+
+  // 2. Actualizar almacenamiento local para pruebas inmediatas y modo offline
+  aulaEstudiantesLocales = aulaEstudiantesLocales.map(e => {
+    if (e.aula_id === aulaId && estudiantesIds.includes(e.usuario_id)) {
+      return {
+        ...e,
+        estado: 'retirado',
+        retirado_en: new Date().toISOString(),
+        retirado_por: profesorId
+      }
+    }
+    return e
+  })
+  guardarEnStorage(STORAGE_AULA_ESTUDIANTES, aulaEstudiantesLocales)
+
+  // Desvincular de los cursos de esa aula
+  cursoEstudiantesLocales = cursoEstudiantesLocales.filter(
+    ce => !(ce.aula_id === aulaId && estudiantesIds.includes(ce.usuario_id))
+  )
+  guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
+
+  // 3. Registrar en auditoría
+  try {
+    const STORAGE_AUDITORIA = 'sensor_pulso_auditoria_roles'
+    const logs = JSON.parse(localStorage.getItem(STORAGE_AUDITORIA) || '[]')
+    logs.unshift({
+      id: `audit-${Date.now()}`,
+      accion: 'retiro_estudiantes',
+      tabla: 'aulas',
+      registro_id: aulaId,
+      actor_id: profesorId,
+      detalles: {
+        usuarios_retirados: estudiantesIds,
+        cantidad: estudiantesIds.length
+      },
+      creado_en: new Date().toISOString()
+    })
+    localStorage.setItem(STORAGE_AUDITORIA, JSON.stringify(logs))
+  } catch (_) {}
+
+  return {
+    success: true,
+    count: estudiantesIds.length,
+    message: `Se retiró exitosamente a ${estudiantesIds.length} estudiante(s) del aula.`
+  }
 }

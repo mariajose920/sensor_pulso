@@ -42,6 +42,8 @@
       </div>
     </div>
 
+    <AvisoEducativo />
+
     <!-- 1. Cargar o Ingresar Medición Tomada con el Sensor (Compartido) -->
     <MeasurementSelector
       v-model:bpm="selectedBpm"
@@ -95,6 +97,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 
 import AvisoGirar from '../components/AvisoGirar.vue'
 import MeasurementSelector from '../components/MeasurementSelector.vue'

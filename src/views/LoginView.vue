@@ -65,6 +65,9 @@
         </p>
       </div>
 
+      <!-- RF75: aviso educativo antes de usar la plataforma -->
+      <AvisoEducativo compacto />
+
       <!-- Formulario de Autenticación -->
       <form @submit.prevent="handleSubmit">
         <div v-if="mode === 'register'" class="form-group">
@@ -205,6 +208,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'

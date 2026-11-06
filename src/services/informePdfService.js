@@ -7,6 +7,7 @@
  */
 import { jsPDF } from 'jspdf'
 import { evaluarComparacionRango } from '../utils/comparacionRangos.js'
+import { AVISO_EDUCATIVO_TEXTO, AVISO_EDUCATIVO_TITULO, AVISO_EDUCATIVO_CORTO } from '../data/avisoEducativo.js'
 
 /**
  * Genera el documento PDF y lo descarga de forma directa en el computador.
@@ -292,6 +293,22 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   const compHeight = compInsideY - compBoxY + 1.5
   doc.roundedRect(margin, compBoxY, contentWidth, compHeight, 2, 2, 'FD')
 
+  // RF75: aviso de que el informe es educativo y no un diagnóstico
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8.5)
+  const lineasAviso = doc.splitTextToSize(AVISO_EDUCATIVO_TEXTO, contentWidth - 8)
+  const altoAviso = 10 + lineasAviso.length * 4
+  let avisoY = compBoxY + compHeight + 5
+  if (avisoY + altoAviso > pageHeight - 20) { doc.addPage(); avisoY = margin }
+  doc.setFillColor(239, 246, 255)
+  doc.setDrawColor(191, 219, 254)
+  doc.roundedRect(margin, avisoY, contentWidth, altoAviso, 2, 2, 'FD')
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(30, 58, 138)
+  doc.text(AVISO_EDUCATIVO_TITULO, margin + 4, avisoY + 6)
+  doc.setFont('helvetica', 'normal')
+  doc.text(lineasAviso, margin + 4, avisoY + 11)
+
   // =========================================================================
   // PIE DE PÁGINA
   // =========================================================================
@@ -302,7 +319,7 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
   doc.setTextColor(148, 163, 184)
-  doc.text('Evaluación docente orientativa basada en criterios de la American Heart Association (AHA) · Ley 19.628', margin, pageHeight - 11)
+  doc.text('Evaluación docente orientativa (criterios AHA) · Ley 19.628 · ' + AVISO_EDUCATIVO_CORTO, margin, pageHeight - 11, { maxWidth: contentWidth - 55 })
   doc.text('sensor_pulso · Universidad Adventista de Chile (UNACH)', pageWidth - margin, pageHeight - 11, { align: 'right' })
 
   // =========================================================================
