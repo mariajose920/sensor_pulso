@@ -112,8 +112,8 @@
         </button>
       </div>
 
-      <!-- ======================================================== -->
-      <!-- PESTAÑA 1: ESTUDIANTES                                   -->
+            <!-- ======================================================== -->
+      <!-- PESTAÑA 1: ESTUDIANTES (RF102 Selección múltiple/Retiro) -->
       <!-- ======================================================== -->
       <div v-if="tabActiva === 'estudiantes'" class="tab-panel">
         <div class="panel-header mb-3">
@@ -121,9 +121,20 @@
             <h2 class="panel-title">Estudiantes Inscritos</h2>
             <p class="panel-desc">Alumnos que forman parte de esta aula y tienen acceso a las mediciones y actividades.</p>
           </div>
-          <button @click="abrirModalInvitar" class="btn btn-primary btn-sm">
-            ✉️ Invitar Estudiante por Correo
-          </button>
+          <div class="panel-actions-group">
+            <!-- Botón de retiro masivo (RF102) -->
+            <button 
+              v-if="estudiantesSeleccionadosParaEliminar.length > 0" 
+              @click="abrirConfirmacionEliminarVarios" 
+              class="btn btn-danger btn-sm"
+              style="background: #dc2626; color: white; border: none; margin-right: 0.5rem; font-weight: 600;"
+            >
+              🗑️ Retirar Seleccionados ({{ estudiantesSeleccionadosParaEliminar.length }})
+            </button>
+            <button @click="abrirModalInvitar" class="btn btn-primary btn-sm">
+              ✉️ Invitar Estudiante por Correo
+            </button>
+          </div>
         </div>
 
         <div v-if="estudiantes.length === 0" class="empty-state card">
@@ -140,14 +151,30 @@
           <table class="data-table">
             <thead>
               <tr>
+                <th style="width: 40px; text-align: center;">
+                  <input 
+                    type="checkbox" 
+                    :checked="todosSeleccionados" 
+                    @change="alternarSeleccionarTodos"
+                    title="Seleccionar o deseleccionar todos"
+                  />
+                </th>
                 <th>Nombre del Estudiante</th>
                 <th>Correo Institucional</th>
                 <th>Secciones Asignadas</th>
                 <th>Estado</th>
+                <th style="width: 90px; text-align: center;">Acción</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="est in estudiantes" :key="est.usuario_id">
+                <td style="text-align: center;">
+                  <input 
+                    type="checkbox" 
+                    :value="est.usuario_id" 
+                    v-model="estudiantesSeleccionadosParaEliminar" 
+                  />
+                </td>
                 <td>
                   <strong>{{ est.nombre }}</strong>
                 </td>
@@ -168,6 +195,16 @@
                 </td>
                 <td>
                   <span class="badge badge-profesor">Activo</span>
+                </td>
+                <td style="text-align: center;">
+                  <button 
+                    @click="abrirConfirmacionEliminarUno(est)" 
+                    class="btn-icon" 
+                    style="color: #dc2626; cursor: pointer; border: none; background: none; font-size: 1rem;" 
+                    title="Retirar estudiante del aula"
+                  >
+                    🗑️
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -432,10 +469,43 @@
       </div>
     </div>
   </div>
+      <!-- MODAL CONFIRMAR RETIRO DE ESTUDIANTES (RF102) -->
+    <div v-if="modalRetiroAbierto" class="modal-backdrop" @click.self="modalRetiroAbierto = false">
+      <div class="modal-card">
+        <h3 class="modal-title" style="color: #dc2626;">⚠️ Confirmar Retiro de Estudiante(s)</h3>
+        <p class="modal-subtitle">
+          ¿Estás seguro de que deseas retirar del aula <strong>{{ aula?.nombre }}</strong> a los siguientes alumnos?
+        </p>
+
+        <div class="retiro-lista-box" style="max-height: 160px; overflow-y: auto; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem;">
+          <div v-for="est in estudiantesARetirar" :key="est.usuario_id" style="padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem;">
+            <strong>{{ est.nombre }}</strong> <span style="color: #64748b;">({{ est.correo }})</span>
+          </div>
+        </div>
+
+        <div class="alert alert-warning" style="font-size: 0.8rem; margin-bottom: 1.25rem; line-height: 1.4;">
+          ℹ️ <strong>Criterios de seguridad (RF102):</strong>
+          <ul style="margin: 0.25rem 0 0 1rem; padding: 0;">
+            <li>La cuenta del estudiante y sus mediciones personales <strong>no se borrarán</strong>.</li>
+            <li>El docente conservará las calificaciones y nivel, pero perderá acceso a mediciones detalladas.</li>
+            <li>El estudiante podrá volver a ingresar si cuenta con un código activo.</li>
+          </ul>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" @click="modalRetiroAbierto = false" class="btn btn-secondary" :disabled="procesandoRetiro">
+            Cancelar
+          </button>
+          <button @click="confirmarRetirarEstudiantes" class="btn btn-danger" :disabled="procesandoRetiro" style="background: #dc2626; color: white; border: none; font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.35rem; cursor: pointer;">
+            {{ procesandoRetiro ? 'Retirando...' : 'Confirmar Retiro' }}
+          </button>
+        </div>
+      </div>
+    </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import {
@@ -450,12 +520,14 @@ import {
   crearCurso,
   renombrarCurso,
   eliminarCurso,
-  actualizarEstudiantesCurso
+  actualizarEstudiantesCurso,
+  retirarEstudiantesAula
 } from '../services/aulasService'
 
 const route = useRoute()
 const router = useRouter()
 const { currentUserId, currentUserName, isAdmin, isProfesor } = useAuth()
+
 
 const aulaId = route.params.id
 const aula = ref(null)
@@ -743,6 +815,61 @@ const mostrarFeedback = (exito, mensaje) => {
 onMounted(() => {
   cargarDatos()
 })
+
+// Selección múltiple y retiro de estudiantes (RF102)
+const estudiantesSeleccionadosParaEliminar = ref([])
+const modalRetiroAbierto = ref(false)
+const estudiantesARetirar = ref([])
+const procesandoRetiro = ref(false)
+
+const todosSeleccionados = computed(() => {
+  return estudiantes.value.length > 0 && estudiantesSeleccionadosParaEliminar.value.length === estudiantes.value.length
+})
+
+const alternarSeleccionarTodos = () => {
+  if (todosSeleccionados.value) {
+    estudiantesSeleccionadosParaEliminar.value = []
+  } else {
+    estudiantesSeleccionadosParaEliminar.value = estudiantes.value.map(e => e.usuario_id)
+  }
+}
+
+const abrirConfirmacionEliminarUno = (est) => {
+  estudiantesARetirar.value = [est]
+  modalRetiroAbierto.value = true
+}
+
+const abrirConfirmacionEliminarVarios = () => {
+  estudiantesARetirar.value = estudiantes.value.filter(e => 
+    estudiantesSeleccionadosParaEliminar.value.includes(e.usuario_id)
+  )
+  modalRetiroAbierto.value = true
+}
+
+const confirmarRetirarEstudiantes = async () => {
+  if (estudiantesARetirar.value.length === 0) return
+  procesandoRetiro.value = true
+
+  const ids = estudiantesARetirar.value.map(e => e.usuario_id)
+  const res = await retirarEstudiantesAula({
+    aulaId: aula.value.id,
+    estudiantesIds: ids,
+    profesorId: currentUserId.value,
+    esAdmin: isAdmin.value
+  })
+
+  procesandoRetiro.value = false
+  modalRetiroAbierto.value = false
+  estudiantesSeleccionadosParaEliminar.value = []
+
+  if (res.success) {
+    mostrarFeedback(true, res.message)
+    // Recargar lista de estudiantes y cursos
+    await cargarDatos()
+  } else {
+    mostrarFeedback(false, res.error)
+  }
+}
 </script>
 
 <style scoped>

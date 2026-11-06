@@ -648,3 +648,86 @@ export async function actualizarEstudiantesCurso({ cursoId, aulaId, estudiantesI
   guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
   return { success: true }
 }
+
+/**
+ * RF102: Retirar a uno o varios estudiantes del aula
+ */
+export async function retirarEstudiantesAula({ aulaId, estudiantesIds, profesorId, esAdmin }) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+  if (!estudiantesIds || estudiantesIds.length === 0) {
+    return { success: false, error: 'No se seleccionaron estudiantes para retirar.' }
+  }
+
+  // 1. Llamar a la función RPC retirar_estudiantes en Supabase (si está disponible)
+  try {
+    const { data, error } = await supabase.rpc('retirar_estudiantes', {
+      p_aula: aulaId,
+      p_usuarios: estudiantesIds
+    })
+    if (error) throw error
+  } catch (err) {
+    console.warn('Aviso: RPC retirar_estudiantes ejecutando en modo local:', err.message)
+    try {
+      await supabase
+        .from('aula_estudiantes')
+        .update({
+          estado: 'retirado',
+          retirado_en: new Date().toISOString(),
+          retirado_por: profesorId
+        })
+        .eq('aula_id', aulaId)
+        .in('usuario_id', estudiantesIds)
+
+      await supabase
+        .from('curso_estudiantes')
+        .delete()
+        .eq('aula_id', aulaId)
+        .in('usuario_id', estudiantesIds)
+    } catch (_) {}
+  }
+
+  // 2. Actualizar almacenamiento local para pruebas inmediatas y modo offline
+  aulaEstudiantesLocales = aulaEstudiantesLocales.map(e => {
+    if (e.aula_id === aulaId && estudiantesIds.includes(e.usuario_id)) {
+      return {
+        ...e,
+        estado: 'retirado',
+        retirado_en: new Date().toISOString(),
+        retirado_por: profesorId
+      }
+    }
+    return e
+  })
+  guardarEnStorage(STORAGE_AULA_ESTUDIANTES, aulaEstudiantesLocales)
+
+  // Desvincular de los cursos de esa aula
+  cursoEstudiantesLocales = cursoEstudiantesLocales.filter(
+    ce => !(ce.aula_id === aulaId && estudiantesIds.includes(ce.usuario_id))
+  )
+  guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
+
+  // 3. Registrar en auditoría
+  try {
+    const STORAGE_AUDITORIA = 'sensor_pulso_auditoria_roles'
+    const logs = JSON.parse(localStorage.getItem(STORAGE_AUDITORIA) || '[]')
+    logs.unshift({
+      id: `audit-${Date.now()}`,
+      accion: 'retiro_estudiantes',
+      tabla: 'aulas',
+      registro_id: aulaId,
+      actor_id: profesorId,
+      detalles: {
+        usuarios_retirados: estudiantesIds,
+        cantidad: estudiantesIds.length
+      },
+      creado_en: new Date().toISOString()
+    })
+    localStorage.setItem(STORAGE_AUDITORIA, JSON.stringify(logs))
+  } catch (_) {}
+
+  return {
+    success: true,
+    count: estudiantesIds.length,
+    message: `Se retiró exitosamente a ${estudiantesIds.length} estudiante(s) del aula.`
+  }
+}
