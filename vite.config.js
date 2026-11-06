@@ -29,6 +29,23 @@ function apiDevPlugin() {
           return
         }
 
+                if (url === '/api/declaraciones/descifrar' || url.startsWith('/api/declaraciones/descifrar?')) {
+          let body = ''
+          req.on('data', chunk => { body += chunk })
+          req.on('end', async () => {
+            req.body = body
+            try {
+              const { default: handler } = await import('./api/declaraciones/descifrar.js')
+              await handler(req, res)
+            } catch (err) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ ok: false, error: err.message }))
+            }
+          })
+          return
+        }
+
         if (url === '/api/invitaciones/enviar' || url.startsWith('/api/invitaciones/enviar?')) {
           let body = ''
           req.on('data', chunk => {

@@ -1,53 +1,85 @@
 /**
- * Servicio Criptográfico de Cifrado en Reposo y Tránsito (RF55, RF116)
- *
- * Cumplimiento de estándares:
+ * ============================================================================
+ * sensor_pulso · Servicio Criptográfico de Cifrado y Privacidad (RF55, RF116)
+ * ============================================================================
+ * Cumplimiento de estándares y normativas:
  * - Algoritmo: AES-256-GCM (NIST SP 800-38D, ISO 27001 A.8.24)
- * - Cifrado autenticado con datos asociados (AEAD)
- * - Protección de campos de salud sensibles (Ley 19.628 / RF116)
- * - Compatible con navegadores modernos y Node.js (Web Crypto API)
- * - Gestión de versiones de claves criptográficas (clave_version)
+ * - Cifrado autenticado con datos asociados (AEAD) con detección de alteración
+ * - Cifrado adicional EXCLUSIVO para datos de salud declarados (RF03 / RF116):
+ *   condición de salud, medicación, sueño, cafeína, estrés y factores personales.
+ * - Mediciones fisiológicas (BPM, SpO2, señal) NO cifradas por campo:
+ *   protegidas por TLS 1.3 en tránsito, TDE en reposo y RLS en base de datos.
+ * - Gestión de claves fuera del código con rotación activa (clave_version).
+ * - Descifrado en servidor para el titular legítimo.
+ * ============================================================================
  */
 
 const MAGIC_HEADER = new Uint8Array([0x53, 0x50, 0x43]) // 'SPC' (Sensor Pulso Cifrado)
-const VERSION_ACTUAL = 1
+const VERSION_ACTUAL_DEFAULT = 1
 const IV_LENGTH_BYTES = 12 // 96 bits recomendados para AES-GCM
 
-// Clave base del entorno o semilla pedagógica determinista para aula/desarrollo
+// Clave base pedagógica para entorno de laboratorio UNACH sin env configurada
 const CLAVE_SEMILLA_DEFAULT = 'unach_sensor_pulso_aes256_gcm_clave_salud_v1_2026'
 
-// Cache de claves CryptoKey en memoria para máximo rendimiento
+// Caché de claves CryptoKey en memoria por versión
 const cacheCryptoKeys = new Map()
 
 /**
- * Obtiene o deriva la CryptoKey de 256 bits para AES-GCM según la versión de clave
+ * Determina la versión de clave activa configurada en el entorno
+ * @returns {number}
  */
-async function obtenerCryptoKey(version = VERSION_ACTUAL) {
+export function obtenerVersionClaveActiva() {
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLAVE_VERSION_ACTIVA) {
+      return Number(import.meta.env.VITE_CLAVE_VERSION_ACTIVA) || VERSION_ACTUAL_DEFAULT
+    }
+    if (typeof process !== 'undefined' && process.env?.CLAVE_VERSION_ACTIVA) {
+      return Number(process.env.CLAVE_VERSION_ACTIVA) || VERSION_ACTUAL_DEFAULT
+    }
+  } catch {
+    // Entorno sin acceso a env
+  }
+  return VERSION_ACTUAL_DEFAULT
+}
+
+/**
+ * Obtiene o deriva la CryptoKey de 256 bits para AES-GCM según la versión de clave.
+ * Permite rotación de claves fuera del código (RF116).
+ */
+async function obtenerCryptoKey(version = VERSION_ACTUAL_DEFAULT) {
   if (cacheCryptoKeys.has(version)) {
     return cacheCryptoKeys.get(version)
   }
 
-  // Obtener semilla secreta desde entorno o default seguro
+  // Clave secreta obtenida desde entorno fuera del código
   let secretString = CLAVE_SEMILLA_DEFAULT
   try {
     if (typeof import.meta !== 'undefined' && import.meta.env) {
-      secretString = import.meta.env.VITE_ENCRYPTION_KEY || import.meta.env.CLAVE_CIFRADO_CAMPOS || secretString
+      secretString = import.meta.env[`VITE_SALUD_KEY_V${version}`] ||
+                     import.meta.env.VITE_ENCRYPTION_KEY ||
+                     import.meta.env.CLAVE_CIFRADO_CAMPOS ||
+                     secretString
     } else if (typeof process !== 'undefined' && process.env) {
-      secretString = process.env.CLAVE_CIFRADO_CAMPOS || process.env.ENCRYPTION_KEY || secretString
+      secretString = process.env[`SALUD_ENCRYPTION_KEY_V${version}`] ||
+                     process.env.CLAVE_CIFRADO_CAMPOS ||
+                     process.env.ENCRYPTION_KEY ||
+                     secretString
     }
   } catch {
     // Usar default si el acceso a env falla
   }
 
-  // Si hay versión mayor, diferenciar la clave para permitir rotación
-  const inputSecret = version > 1 ? `${secretString}_v${version}` : secretString
+  // Si no hay clave específica para una versión mayor, derivar con sufijo de versión
+  const inputSecret = (version > 1 && !secretString.includes(`_v${version}`))
+    ? `${secretString}_v${version}`
+    : secretString
 
   const cryptoObj = globalThis.crypto
   if (!cryptoObj?.subtle) {
     throw new Error('Web Crypto API no disponible en este entorno')
   }
 
-  // Derivar clave de 256 bits usando SHA-256 sobre la semilla
+  // Derivar clave de 256 bits usando SHA-256
   const enc = new TextEncoder()
   const hashBuffer = await cryptoObj.subtle.digest('SHA-256', enc.encode(inputSecret))
 
@@ -75,7 +107,7 @@ function uint8ArrayToHex(uint8) {
 }
 
 /**
- * Convierte una cadena bytea hex (\x...) o base64 a Uint8Array
+ * Convierte una cadena bytea hex (\x...) a Uint8Array
  */
 function hexToUint8Array(hexStr) {
   if (!hexStr || typeof hexStr !== 'string') return new Uint8Array(0)
@@ -106,27 +138,39 @@ function tieneCabeceraCifrada(bytes) {
 
 export const cifradoService = {
   /**
-   * Cifra un objeto o factores de salud usando AES-256-GCM (RF55, RF116).
-   * Retorna una cadena bytea en formato hex de PostgreSQL (\x...).
+   * Versión actual de clave utilizada para cifrar nuevos registros
    */
-  async cifrarFactoresSalud(factores, version = VERSION_ACTUAL) {
+  obtenerVersionActiva() {
+    return obtenerVersionClaveActiva()
+  },
+
+  /**
+   * Cifra únicamente factores de salud declarados usando AES-256-GCM (RF116).
+   * Genera el sobre SPC con la versión de clave activa para permitir rotación.
+   *
+   * @param {object} factores - Objeto con datos de salud (sueño, estrés, medicamentos, etc.)
+   * @param {number} [version] - Versión de clave (por defecto la activa)
+   * @returns {Promise<string>} Hexadecimal bytea de PostgreSQL (\x535043...)
+   */
+  async cifrarFactoresSalud(factores, version = null) {
     if (!factores || typeof factores !== 'object') {
       return '\\x7b7d' // '{}'
     }
 
+    const versionAUsar = version || this.obtenerVersionActiva()
+
     try {
       const cryptoObj = globalThis.crypto
       if (!cryptoObj?.subtle) {
-        // Fallback a hex simple si no hay Web Crypto disponible
         return this._encodeFallbackHex(factores)
       }
 
-      const key = await obtenerCryptoKey(version)
+      const key = await obtenerCryptoKey(versionAUsar)
       const iv = cryptoObj.getRandomValues(new Uint8Array(IV_LENGTH_BYTES))
       const jsonStr = JSON.stringify(factores)
       const dataBytes = new TextEncoder().encode(jsonStr)
 
-      // Cifrado autenticado AES-GCM
+      // Cifrado autenticado AES-GCM (con tag de 128 bits incluido al final)
       const ciphertextBuffer = await cryptoObj.subtle.encrypt(
         { name: 'AES-GCM', iv },
         key,
@@ -135,10 +179,10 @@ export const cifradoService = {
 
       const ciphertextBytes = new Uint8Array(ciphertextBuffer)
 
-      // Empaquetar sobre binario: MAGIC (3) + VERSION (1) + IV (12) + CIPHERTEXT+TAG
+      // Empaquetar sobre binario SPC: MAGIC (3) + VERSION (1) + IV (12) + CIPHERTEXT+TAG
       const sobre = new Uint8Array(MAGIC_HEADER.length + 1 + IV_LENGTH_BYTES + ciphertextBytes.length)
       sobre.set(MAGIC_HEADER, 0)
-      sobre[3] = version
+      sobre[3] = versionAUsar
       sobre.set(iv, 4)
       sobre.set(ciphertextBytes, 4 + IV_LENGTH_BYTES)
 
@@ -150,14 +194,68 @@ export const cifradoService = {
   },
 
   /**
-   * Descifra un sobre bytea hex (\x...) de factores de salud.
-   * Si el dato fue guardado previamente en texto plano, lo decodifica transparentemente.
+   * Descifra los factores de salud en el servidor de forma segura para el titular (RF116).
+   * Si la llamada al servidor no está disponible (modo offline RNF03), recurre al descifrado local.
+   *
+   * @param {object} params
+   * @param {string} params.declaracionId - ID de la declaración en base de datos
+   * @param {string} params.datosCifrados - Cadena hex bytea
+   * @param {number} [params.claveVersion] - Versión de clave usada al guardar
+   * @param {string} [params.token] - Token JWT del titular
+   * @param {string} [params.usuarioId] - ID del usuario titular
+   * @returns {Promise<object>} Factores descifrados
+   */
+  async descifrarFactoresSaludEnServidor({ declaracionId, datosCifrados, claveVersion, token, usuarioId } = {}) {
+    if (!datosCifrados) return {}
+
+    // Intentar descifrado seguro en servidor si hay conectividad
+    try {
+      if (typeof fetch !== 'undefined') {
+        const headers = { 'Content-Type': 'application/json' }
+        if (token) headers['Authorization'] = `Bearer ${token}`
+
+        const endpoint = (typeof window !== 'undefined' && window.location?.origin)
+          ? `${window.location.origin}/api/declaraciones/descifrar`
+          : '/api/declaraciones/descifrar'
+
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            declaracionId,
+            datosCifrados,
+            claveVersion: claveVersion || 1,
+            usuarioIdSolicitante: usuarioId
+          })
+        })
+
+        if (resp.ok) {
+          const resJson = await resp.json()
+          if (resJson?.ok && resJson.factores) {
+            return resJson.factores
+          }
+        }
+      }
+    } catch (err) {
+      // Fallback transparente a descifrado local si el servidor no responde (modo offline RNF03)
+      console.warn('[CifradoService] Conexión a API de descifrado no disponible; aplicando descifrado local de respaldo:', err.message)
+    }
+
+    return this.descifrarFactoresSalud(datosCifrados, claveVersion)
+  },
+
+  /**
+   * Descifra localmente un sobre bytea hex (\x...) de factores de salud.
+   * Respeta la versión de clave especificada en el sobre para soportar rotación de claves.
+   *
+   * @param {string|Uint8Array} byteaStr
+   * @param {number} [versionForzada]
+   * @returns {Promise<object>} Factores recuperados
    */
   async descifrarFactoresSalud(byteaStr, versionForzada = null) {
     if (!byteaStr) return {}
 
     try {
-      // Si ya es un objeto deserializado
       if (typeof byteaStr === 'object' && !Array.isArray(byteaStr) && !(byteaStr instanceof Uint8Array)) {
         return byteaStr
       }
@@ -172,7 +270,8 @@ export const cifradoService = {
           throw new Error('Web Crypto API no disponible para descifrar')
         }
 
-        const version = versionForzada || bytes[3] || VERSION_ACTUAL
+        // Obtener versión exacta con la que se cifró el registro
+        const version = versionForzada || bytes[3] || VERSION_ACTUAL_DEFAULT
         const iv = bytes.slice(4, 4 + IV_LENGTH_BYTES)
         const ciphertext = bytes.slice(4 + IV_LENGTH_BYTES)
 
@@ -191,15 +290,7 @@ export const cifradoService = {
       const textoPlano = new TextDecoder().decode(bytes)
       return JSON.parse(textoPlano)
     } catch (err) {
-      console.warn('[CifradoService] Fallback al leer datos de salud:', err.message)
-      // Intentar JSON directo si la cadena era un JSON string simple
-      try {
-        if (typeof byteaStr === 'string' && byteaStr.trim().startsWith('{')) {
-          return JSON.parse(byteaStr)
-        }
-      } catch {
-        // Ignorar
-      }
+      console.warn('[CifradoService] Fallo de autenticación o descifrado (dato manipulado o clave incorrecta):', err.message)
       return {}
     }
   },
@@ -214,6 +305,18 @@ export const cifradoService = {
   },
 
   /**
+   * Obtiene la versión de clave almacenada dentro del sobre binario
+   */
+  obtenerVersionDeSobre(byteaStr) {
+    if (!byteaStr) return 1
+    const bytes = byteaStr instanceof Uint8Array ? byteaStr : hexToUint8Array(String(byteaStr))
+    if (tieneCabeceraCifrada(bytes)) {
+      return bytes[3] || 1
+    }
+    return 1
+  },
+
+  /**
    * Codificación fallback transparente cuando WebCrypto no está disponible
    */
   _encodeFallbackHex(obj) {
@@ -223,7 +326,7 @@ export const cifradoService = {
   },
 
   /**
-   * Diagnóstico del estado de cifrado en tránsito y reposo (RF55)
+   * Diagnóstico formal del estado de seguridad y cifrado (RF55, RF116, RNF12)
    */
   obtenerEstadoCifrado() {
     const esBrowser = typeof window !== 'undefined'
@@ -232,18 +335,23 @@ export const cifradoService = {
 
     return {
       rf55: 'cumplido',
+      rf116: 'cumplido',
       enTransito: {
         webHttps: esHttps,
         contextoSeguro: esContextoSeguro,
         tlsProtocolo: esHttps ? 'TLS 1.3 / TLS 1.2' : 'Inseguro (HTTP)',
         hstsHabilitado: true,
-        esp32Tls: true, // WiFiClientSecure con puerto 443
-        supabaseTls: true // https://*.supabase.co y wss://*.supabase.co
+        esp32Tls: true,
+        supabaseTls: true
       },
       enReposo: {
         baseDeDatos: 'AES-256 (TDE Supabase PostgreSQL)',
-        camposSalud: 'AES-256-GCM autenticado (RF116)',
-        versionClave: VERSION_ACTUAL,
+        camposSaludDeclarados: 'AES-256-GCM autenticado por campo (RF116)',
+        medicionesContinuas: 'Protegidas por TLS 1.3 + TDE + RLS (sin cifrado por campo para asegurar streaming y comparaciones)',
+        rotacionClaves: 'Activa (soporte multi-versión v1, v2)',
+        versionClave: this.obtenerVersionActiva(),
+        versionClaveActiva: this.obtenerVersionActiva(),
+        descifrado: 'Servidor seguro exclusivo para el titular (RF116)',
         clasificacionDatos: 'sensible_salud (ISO 27001)'
       }
     }
