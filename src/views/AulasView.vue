@@ -56,6 +56,13 @@
               Docente: <strong>{{ aula.profesor_nombre || 'Docente asignado' }}</strong>
             </div>
 
+            <!-- RF103: Acceso a la página dedicada del aula -->
+            <div class="aula-enter-row" style="margin: 0.75rem 0;">
+              <router-link :to="`/aulas/${aula.id}`" class="btn btn-primary btn-sm w-100" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; text-decoration: none; font-weight: 700;">
+                🏛️ Gestionar Aula (Página del Aula) ➜
+              </router-link>
+            </div>
+
             <!-- Código único del aula y Controles de Gestión RF100 -->
             <div class="codigo-box">
               <div class="codigo-top-row">
