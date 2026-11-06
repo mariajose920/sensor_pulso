@@ -153,6 +153,11 @@
       <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad (RF19) -->
       <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
 
+      <!-- SECCIÓN: Método de sincronización, contenidos y propuestas de profesores (RF46) -->
+      <MetodoSincronizacionPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+      <ContenidosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+      <PropuestasPanel class="mt-4" modo="admin" />
+
       <!-- SECCIÓN: Primer Administrador (Arranque Inicial) -->
       <div class="seed-card card mt-4">
         <h2 class="section-title">Inicialización del Sistema</h2>
@@ -304,6 +309,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import RangosPanel from '../components/RangosPanel.vue'
+import MetodoSincronizacionPanel from '../components/MetodoSincronizacionPanel.vue'
+import ContenidosPanel from '../components/ContenidosPanel.vue'
+import PropuestasPanel from '../components/PropuestasPanel.vue'
 import { 
   verificarOCrearPrimerAdmin, 
   obtenerCuentas, 

@@ -14,7 +14,7 @@
 
     <!-- Banner de Alerta Clínica si hay Hipoxia (<95% o <90%) -->
     <div v-if="esHipoxia" class="banner-alerta-spo2" :class="'banner-' + evaluacionClinica.severidad">
-      <div class="banner-icon">⚠️</div>
+      <div class="banner-icon"></div>
       <div class="banner-body">
         <strong>{{ evaluacionClinica.etiqueta }}: {{ evaluacionClinica.descripcion }}</strong>
         <p class="banner-action">{{ evaluacionClinica.accionRecomendada }}</p>
@@ -51,7 +51,7 @@
           </svg>
 
           <div class="gauge-center-icon">
-            <span class="oximeter-icon">🫁</span>
+            <span class="oximeter-icon"></span>
           </div>
         </div>
 
@@ -77,7 +77,7 @@
             class="range-pill"
             :class="spo2Actual >= 95 ? 'in-range' : 'out-of-range'"
           >
-            {{ spo2Actual >= 95 ? '✓ Rango Clínico Seguro (≥95%)' : '⚠️ Atención Requerida (<95%)' }}
+            {{ spo2Actual >= 95 ? 'Rango Seguro (≥95%)' : 'Atención Requerida (<95%)' }}
           </span>
         </div>
       </div>
@@ -134,42 +134,11 @@
         @click="mostrarExplicacion = !mostrarExplicacion"
       >
         <span class="toggle-icon">{{ mostrarExplicacion ? '▼' : '►' }}</span>
-        <span>🔬 Fundamento Biofotónico del Sensor MAX30102 (Luz Roja 660 nm vs Infrarroja 880 nm)</span>
+        <span>🔬 ¿Cómo se obtiene la SpO₂? (luz roja 660 nm e infrarroja 880 nm)</span>
       </button>
 
       <div v-if="mostrarExplicacion" class="biofotonica-body">
-        <div class="biofotonica-grid">
-          <div class="wavelength-card red-wavelength">
-            <div class="wl-header">
-              <span class="wl-dot red-dot"></span>
-              <strong>LED Rojo (λ = 660 nm)</strong>
-            </div>
-            <p class="wl-text">
-              La <strong>Desoxihemoglobina (Hb)</strong> absorbe sustancialmente más luz roja (660 nm) que la oxihemoglobina.
-            </p>
-            <div class="absorption-bar-wrapper">
-              <span class="bar-label">Absorción Hb:</span>
-              <div class="bar-track"><div class="bar-fill fill-red" style="width: 82%;"></div></div>
-            </div>
-          </div>
-
-          <div class="wavelength-card ir-wavelength">
-            <div class="wl-header">
-              <span class="wl-dot ir-dot"></span>
-              <strong>LED Infrarrojo (λ = 880 - 940 nm)</strong>
-            </div>
-            <p class="wl-text">
-              La <strong>Oxihemoglobina (HbO₂)</strong> absorbe más luz infrarroja (880-940 nm), permitiendo cuantificar la saturación mediante el cociente:
-            </p>
-            <div class="formula-inline font-mono">
-              R = (AC<sub>660</sub> / DC<sub>660</sub>) / (AC<sub>880</sub> / DC<sub>880</sub>)
-            </div>
-          </div>
-        </div>
-
-        <div class="calibracion-info">
-          <span>💡 <strong>Curva clínica del MAX30102:</strong> Para un paciente sano con SpO₂ ~ 98%, la razón <code>R ≈ 0.48</code>. Si la sangre se desoxigena (SpO₂ baja a 85%), <code>R</code> sube hacia <code>1.00</code>.</span>
-        </div>
+        <ExplicacionResultados tipo="spo2" :spo2="spo2" :ratioR="ratioR" />
       </div>
     </div>
 
@@ -195,6 +164,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import ExplicacionResultados from './ExplicacionResultados.vue'
 import {
   esSpo2Valido,
   evaluarEstadoSpo2,

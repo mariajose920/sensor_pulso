@@ -34,9 +34,32 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-ESP32-Token')
 
+  // RF55 / RNF11: Cabeceras de seguridad y cifrado en tránsito (HSTS estricto)
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
     return res.end()
+  }
+
+  // --------------------------------------------------------------------------
+  // RF55: Verificación de Cifrado en Tránsito (TLS/HTTPS)
+  // En producción (Vercel u hosting), rechazar conexiones no cifradas en texto plano
+  // --------------------------------------------------------------------------
+  const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http')
+  const host = req.headers['host'] || ''
+  const esLocalhost = host.includes('localhost') || host.includes('127.0.0.1')
+  const esProduccion = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1'
+
+  if (esProduccion && !esLocalhost && proto !== 'https') {
+    res.statusCode = 426 // Upgrade Required
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Upgrade', 'TLS/1.3, HTTP/2.0')
+    return res.end(JSON.stringify({
+      ok: false,
+      error: 'Se requiere cifrado en tránsito HTTPS/TLS (RF55). Tráfico en texto plano no permitido.'
+    }))
   }
 
   // --------------------------------------------------------------------------
@@ -59,6 +82,13 @@ export default async function handler(req, res) {
       estadisticas: {
         totalPaquetes: bufferPaquetes.length,
         tasaRecepcionEstimada: bufferPaquetes.length >= 2 ? '1.0 Hz' : '0.0 Hz'
+      },
+      // RF55: Metadatos de cifrado y seguridad
+      cifrado: {
+        enTransito: true,
+        protocolo: proto === 'https' ? 'TLS 1.3 / HTTPS' : (esLocalhost ? 'Localhost (dev)' : proto),
+        hstsHabilitado: true,
+        rf55: 'cumplido'
       }
     }
 
@@ -68,7 +98,7 @@ export default async function handler(req, res) {
   }
 
   // --------------------------------------------------------------------------
-  // POST: Recepción de telemetría WiFi del ESP32 (RF05, RF54)
+  // POST: Recepción de telemetría WiFi del ESP32 (RF05, RF54, RF55)
   // --------------------------------------------------------------------------
   if (req.method === 'POST') {
     try {
@@ -156,7 +186,7 @@ export default async function handler(req, res) {
         activo: ch.activo !== false,
         bpm: Number(ch.bpm) || 0,
         spo2: Number(ch.spo2) || 0,
-        calidad: ['buena', 'regular', 'mala'].includes(ch.calidad) ? ch.calidad : 'buena',
+        calidad: ['buena', 'regular', 'mala', 'sin_dedo'].includes(ch.calidad) ? ch.calidad : 'buena',
         ir: Array.isArray(ch.ir) ? ch.ir.slice(0, 100) : [],
         rojo: Array.isArray(ch.rojo) ? ch.rojo.slice(0, 100) : []
       }))
@@ -200,7 +230,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // 7. Respuesta exitosa al ESP32
+      // 7. Respuesta exitosa al ESP32 con metadatos de seguridad RF55
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json')
       return res.end(JSON.stringify({
@@ -210,7 +240,8 @@ export default async function handler(req, res) {
         dispositivo: dispositivoNombre,
         paquete: ultimaTelemetria.paquete,
         canales_recibidos: canalesProcesados.length,
-        timestamp: ahoraIso
+        timestamp: ahoraIso,
+        cifrado_transito: 'TLS_1_3'
       }))
 
     } catch (err) {

@@ -4,10 +4,13 @@ import MedicionView from '../views/MedicionView.vue'
 import ComparacionView from '../views/ComparacionView.vue'
 import AulasView from '../views/AulasView.vue'
 import AprendizajeView from '../views/AprendizajeView.vue'
+import LeccionView from '../views/LeccionView.vue'
+import SimuladorView from '../views/SimuladorView.vue'
 import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
 import AdminView from '../views/AdminView.vue'
 import RangosView from '../views/RangosView.vue'
+import ContenidosView from '../views/ContenidosView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import HistorialView from '../views/HistorialView.vue'
 import { useAuth } from '../composables/useAuth'
@@ -23,6 +26,11 @@ const routes = [
     path: '/medicion',
     name: 'Medicion',
     component: MedicionView
+  },
+  {
+    // RF13: Asistente integrado en la vista de medición
+    path: '/asistente',
+    redirect: '/medicion'
   },
   {
     path: '/dispositivos',
@@ -51,8 +59,20 @@ const routes = [
     component: AprendizajeView
   },
   {
+    // RF41: el simulador vive dentro del apartado de aprendizaje; va antes de la lección para que no se tome como slug
+    path: '/aprendizaje/simulador',
+    name: 'Simulador',
+    component: SimuladorView
+  },
+  {
+    // RF38: una lección del apartado de aprendizaje
+    path: '/aprendizaje/:slug',
+    name: 'Leccion',
+    component: LeccionView
+  },
+  {
     path: '/simulador',
-    redirect: '/aprendizaje'
+    redirect: '/aprendizaje/simulador'
   },
   {
     path: '/login',
@@ -70,6 +90,13 @@ const routes = [
     path: '/rangos',
     name: 'Rangos',
     component: RangosView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
+  },
+  {
+    // RF46: el profesor con permiso editar_contenidos propone cambios de lecciones y de sincronización
+    path: '/contenidos',
+    name: 'Contenidos',
+    component: ContenidosView,
     meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {

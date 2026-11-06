@@ -1,7 +1,7 @@
 import { ref, reactive } from 'vue'
-import { supabase } from './supabase'
-import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal'
-import { actualizarBuffersMultiCanal } from './multiCanalService'
+import { supabase } from './supabase.js'
+import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal.js'
+import { actualizarBuffersMultiCanal } from './multiCanalService.js'
 
 // Estado reactivo global de la telemetría del ESP32
 export const esp32State = reactive({
@@ -119,6 +119,17 @@ export function repetirMedicionCanal() {
   senalBuffer.rojo = []
 }
 
+// Finalizar la medición: la señal en pantalla se congela con lo último recibido
+export function finalizarMedicionCanal() {
+  senalBuffer.congelado = true
+}
+
+// Nueva medición del canal: se descarta lo anterior y la señal vuelve a graficarse en vivo
+export function iniciarNuevaMedicionCanal() {
+  repetirMedicionCanal()
+  senalBuffer.congelado = false
+}
+
 /**
  * Cambia el canal observado en el osciloscopio y limpia/recarga el buffer
  */
@@ -152,7 +163,7 @@ export function detenerSondeoWiFi() {
  * Envía un paquete de prueba directamente al endpoint /api/esp32/telemetria
  * Simula el comportamiento del ESP32 enviando datos por WiFi (RF05)
  */
-export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_rf05') {
+export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_rf05', customCanal1 = null) {
   const now = Date.now()
   const canales = []
 
@@ -162,8 +173,12 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
 
   for (let c = 0; c < 5; c++) {
     const jitter = Math.sin((now + c * 300) / 4000) * 1.5
-    const bpm = parseFloat((bpmBases[c] + jitter).toFixed(1))
-    const spo2 = parseFloat((spo2Bases[c] + Math.cos((now + c * 500) / 6000) * 0.3).toFixed(1))
+    let bpm = parseFloat((bpmBases[c] + jitter).toFixed(1))
+    let spo2 = parseFloat((spo2Bases[c] + Math.cos((now + c * 500) / 6000) * 0.3).toFixed(1))
+    if (c === 0 && customCanal1) {
+      if (typeof customCanal1.bpm === 'number') bpm = customCanal1.bpm
+      if (typeof customCanal1.spo2 === 'number') spo2 = customCanal1.spo2
+    }
 
     const freqHz = bpm / 60.0
     const phaseStep = (2 * Math.PI * freqHz) / 50.0

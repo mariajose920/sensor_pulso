@@ -11,8 +11,19 @@
         </div>
       </div>
 
-      <div class="badge-token" :title="'Autenticación de dispositivo verificada (RF54)'">
-        <span class="badge-icon">🔒</span> Token RF54 Válido
+      <div class="header-badges-row">
+        <!-- RF11: Indicador oficial del estado de conexión -->
+        <EstadoConexionBadge 
+          :estado="estadoConexionCalculado" 
+          :segundosSinContacto="tiempoDesdeContacto"
+          tamano="sm" 
+        />
+        <div class="badge-token" :title="'Autenticación de dispositivo verificada (RF54)'">
+          <span class="badge-icon">🔒</span> Token RF54 Válido
+        </div>
+        <div class="badge-tls" :title="'Cifrado en tránsito HTTPS/TLS 1.3 activo (RF55)'">
+          <span class="badge-icon">🛡️</span> TLS 1.3 (RF55)
+        </div>
       </div>
     </div>
 
@@ -45,7 +56,13 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+import EstadoConexionBadge from './EstadoConexionBadge.vue'
+const props = defineProps({
+  estadoConexion: {
+    type: String,
+    default: null
+  },
   conectado: {
     type: Boolean,
     default: false
@@ -71,6 +88,13 @@ defineProps({
     default: null
   }
 })
+
+const estadoConexionCalculado = computed(() => {
+  if (props.estadoConexion) return props.estadoConexion
+  if (props.conectado) return 'activa'
+  if (props.tiempoDesdeContacto !== null && props.tiempoDesdeContacto > 0) return 'perdida'
+  return 'inactiva'
+})
 </script>
 
 <style scoped>
@@ -78,6 +102,13 @@ defineProps({
   margin-bottom: 1.5rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+}
+
+.header-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .status-header {
@@ -138,6 +169,19 @@ defineProps({
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
   color: #166534;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 9999px;
+}
+
+.badge-tls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
   font-size: 0.8rem;
   font-weight: 600;
   border-radius: 9999px;

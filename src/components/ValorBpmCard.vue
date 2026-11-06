@@ -21,7 +21,7 @@
             :class="{ active: tieneLecturaValida }"
             :style="animacionCorazonStyle"
           >
-            ❤️
+            
           </div>
           <span v-if="tieneLecturaValida" class="pulse-wave-ring"></span>
         </div>
@@ -48,7 +48,7 @@
             class="range-pill"
             :class="dentroDeRango ? 'in-range' : 'out-of-range'"
           >
-            {{ dentroDeRango ? '✓ Dentro de rango' : '⚠️ Fuera de rango' }}
+            {{ dentroDeRango ? 'Dentro de rango' : 'Fuera de rango' }}
           </span>
         </div>
       </div>
@@ -106,9 +106,9 @@
           type="button" 
           class="btn-explain" 
           @click="mostrarExplicacion = !mostrarExplicacion"
-          title="Ver cómo se obtiene el BPM según RF22"
+          title="Ver cómo se obtiene el BPM"
         >
-          🔬 ¿Cómo se calcula? (RF22)
+          🔬 ¿Cómo se calcula?
         </button>
       </div>
     </div>
@@ -116,40 +116,17 @@
     <!-- Panel Educativo Desplegable: Explicación de Obtención del BPM (RF22) -->
     <div v-if="mostrarExplicacion" class="educational-panel alert alert-info">
       <div class="educational-header">
-        <strong>Fisiología e Ingeniería de la Medición de BPM (RF22):</strong>
+        <strong>Fisiología e ingeniería de la medición</strong>
         <button type="button" class="btn-close-sm" @click="mostrarExplicacion = false">✕</button>
       </div>
-      <div class="pipeline-steps">
-        <div class="step-card">
-          <span class="step-num">1</span>
-          <strong>Emisión IR (880 nm)</strong>
-          <p>El sensor MAX30102 emite luz infrarroja hacia el lecho vascular digital.</p>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step-card">
-          <span class="step-num">2</span>
-          <strong>Reflexión & Fotodiodo</strong>
-          <p>La intensidad de luz reflejada varía en cada contracción cardíaca (eyección sistólica).</p>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step-card">
-          <span class="step-num">3</span>
-          <strong>Detección de Picos</strong>
-          <p>El algoritmo identifica los picos sistólicos ($P_{sys}$) y calcula el intervalo $\Delta t$ (ms).</p>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step-card">
-          <span class="step-num">4</span>
-          <strong>Fórmula de Conversión</strong>
-          <p><code>BPM = 60000 / Intervalo_ms</code></p>
-        </div>
-      </div>
+      <ExplicacionResultados tipo="bpm" :bpm="bpm" />
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import ExplicacionResultados from './ExplicacionResultados.vue'
 import {
   obtenerRangosBpmEsperados,
   evaluarRangoBpm,

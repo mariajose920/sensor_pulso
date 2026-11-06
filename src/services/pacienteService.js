@@ -7,7 +7,9 @@
  * - Persistencia en Supabase (tabla declaraciones_paciente con bytea para datos_cifrados)
  * - Persistencia en localStorage para soporte sin conexión (RNF03 - PWA offline).
  */
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
+import { ACTIVIDADES_CANONICAS, normalizarActividadId, obtenerNombreActividad } from './actividadesService.js'
+import { cifradoService } from '../utils/cifradoService.js'
 
 export const NIVELES_ESTRES = [
   { id: 'bajo', label: 'Bajo (Tranquilo / Relajado)', color: '#16a34a' },
@@ -30,13 +32,13 @@ export const OPCIONES_CAFEINA = [
   { id: 'alta', label: 'Alta (3+ cafés o bebida energética)' }
 ]
 
-export const OPCIONES_ACTIVIDAD = [
-  { id: 'reposo', label: 'Reposo absoluto (>15 min sentado/quieto)' },
-  { id: 'caminata', label: 'Caminata o actividad cotidiana leve' },
-  { id: 'ejercicio_moderado', label: 'Ejercicio moderado reciente (trote, bicicleta)' },
-  { id: 'ejercicio_intenso', label: 'Ejercicio intenso reciente (carrera, pesas)' },
-  { id: 'post_ejercicio', label: 'En fase de recuperación post-esfuerzo' }
-]
+export const OPCIONES_ACTIVIDAD = ACTIVIDADES_CANONICAS.map(a => ({
+  id: a.codigo,
+  actividadId: a.id,
+  label: a.label,
+  nombre: a.nombre,
+  descripcion: a.descripcion
+}))
 
 export const OPCIONES_MEDICACION = [
   { 
@@ -118,33 +120,25 @@ export const CONDICIONES_SALUD_COMUNES = [
 const LOCAL_STORAGE_KEY = 'sensor_paciente_declaracion_rf03'
 
 /**
- * Convierte un objeto a formato hex para la columna bytea de PostgreSQL (\x...)
+ * Convierte un objeto a formato hex cifrado (AES-256-GCM) para la columna bytea de PostgreSQL (RF55, RF116)
  */
-function encodeObjectToByteaHex(obj) {
+async function encodeObjectToByteaHex(obj) {
   try {
-    const jsonStr = JSON.stringify(obj)
-    const bytes = new TextEncoder().encode(jsonStr)
-    return '\\x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-  } catch (e) {
-    return '\\x7b7d' // '{}'
+    return await cifradoService.cifrarFactoresSalud(obj)
+  } catch {
+    return '\\x7b7d'
   }
 }
 
 /**
- * Decodifica una cadena hex bytea (\x...) de PostgreSQL a un objeto JavaScript
+ * Decodifica y descifra una cadena hex bytea (\x...) de PostgreSQL a un objeto JavaScript (RF55, RF116)
  */
-function decodeByteaHexToObject(byteaStr) {
+async function decodeByteaHexToObject(byteaStr, claveVersion = 1) {
   if (!byteaStr) return {}
   try {
-    if (typeof byteaStr === 'string' && byteaStr.startsWith('\\x')) {
-      const hex = byteaStr.slice(2)
-      const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
-      return JSON.parse(new TextDecoder().decode(bytes))
-    }
-    if (typeof byteaStr === 'object') return byteaStr
-    return JSON.parse(byteaStr)
+    return await cifradoService.descifrarFactoresSalud(byteaStr, claveVersion)
   } catch (e) {
-    console.warn('No se pudo decodificar datos_cifrados de la declaración:', e)
+    console.warn('No se pudo descifrar datos_cifrados de la declaración:', e)
     return {}
   }
 }
@@ -209,6 +203,8 @@ export const pacienteService = {
       medicacionDetalle: detalleMed,
       medicacion: textoMedicacion,
       actividadPrevia: datos.actividadPrevia || 'reposo',
+      actividadId: normalizarActividadId(datos.actividadId || datos.actividadPrevia || 1),
+      actividadNombre: obtenerNombreActividad(datos.actividadId || datos.actividadPrevia || 1),
       condicionSalud: datos.condicionSalud || 'Ninguna conocida',
       observaciones: datos.observaciones ? datos.observaciones.trim() : ''
     }
@@ -232,7 +228,7 @@ export const pacienteService = {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user?.id) {
-        const byteaHex = encodeObjectToByteaHex(factoresSalud)
+        const byteaHex = await encodeObjectToByteaHex(factoresSalud)
 
         const { data, error } = await supabase
           .from('declaraciones_paciente')
@@ -283,12 +279,14 @@ export const pacienteService = {
           .maybeSingle()
 
         if (!error && data) {
-          const factores = decodeByteaHexToObject(data.datos_cifrados)
+          const factores = await decodeByteaHexToObject(data.datos_cifrados, data.clave_version)
           const consolidado = {
             id: data.id,
             nombre: data.nombre,
             edad: data.edad,
             ...factores,
+            actividadId: normalizarActividadId(factores.actividadId || factores.actividadPrevia || 1),
+            actividadNombre: obtenerNombreActividad(factores.actividadId || factores.actividadPrevia || 1),
             creadoEn: data.creado_en,
             actualizadoEn: data.creado_en,
             origen: 'supabase'
@@ -319,6 +317,15 @@ export const pacienteService = {
   /**
    * Limpia los datos del paciente guardados localmente
    */
+  obtenerUltimaDeclaracion() {
+    try {
+      const guardado = localStorage.getItem(LOCAL_STORAGE_KEY)
+      return guardado ? JSON.parse(guardado) : null
+    } catch (e) {
+      return null
+    }
+  },
+
   limpiarDeclaracionLocal() {
     try {
       localStorage.removeItem(LOCAL_STORAGE_KEY)

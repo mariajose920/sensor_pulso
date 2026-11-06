@@ -48,6 +48,7 @@
 
     <footer class="footer">
       <p>sensor_pulso — Plataforma Educativa de Monitoreo de Frecuencia Cardíaca y SpO₂ (UNACH)</p>
+      <p class="footer-aviso" data-testid="aviso-pie">{{ AVISO_EDUCATIVO_CORTO }}</p>
     </footer>
 
     <!-- Barra inferior (solo móvil): íconos con texto, fácil de tocar con el pulgar. -->
@@ -75,6 +76,7 @@
 </template>
 
 <script setup>
+import { AVISO_EDUCATIVO_CORTO } from './data/avisoEducativo.js'
 import { computed } from 'vue'
 import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
@@ -109,7 +111,10 @@ const enlaces = computed(() => {
   const lista = [...enlacesBase]
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
-  else if (isProfesor.value) lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
+  else if (isProfesor.value) {
+    lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
+    lista.push({ to: '/contenidos', texto: 'Contenidos', corto: 'Contenidos', icono: 'comparacion' })   // RF46
+  }
   return lista
 })
 
@@ -128,6 +133,11 @@ const { oculto, mostrar } = useScrollDirection()
 main.container {
   flex: 1;
   width: 100%;
+}
+
+.footer-aviso {
+  margin-top: 0.35rem;
+  font-weight: 600;
 }
 
 .footer {

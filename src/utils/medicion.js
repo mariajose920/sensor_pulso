@@ -99,7 +99,7 @@ export function construirMedicion(e = {}) {
     usuario_id: e.usuarioId,
     fuente,
     canal: enRango(canal, 1, 5) ? canal : null,
-    sesion_id: null,
+    sesion_id: e.sesionId || null,
     actividad_id: e.actividadId ?? null,
     declaracion_id: e.declaracionId || null,
     edad_al_medir: enRango(edad, 18, 120) ? Math.round(edad) : null,
@@ -113,6 +113,7 @@ export function construirMedicion(e = {}) {
     explicacion_ritmo: e.explicacionRitmo || null,
     calidad,
     causa_calidad: e.causaCalidad || null,
+    dentro_de_rango: typeof e.dentroDeRango === 'boolean' ? e.dentroDeRango : (typeof e.dentro_de_rango === 'boolean' ? e.dentro_de_rango : null),
     estado_conexion: 'finalizada'
   }
   if (e.idCliente) fila.id_cliente = e.idCliente
@@ -154,6 +155,9 @@ export function resumirParaHistorial(m) {
     inicio: m.inicio,
     fuente: m.fuente,
     canal: m.canal,
+    sesionId: m.sesion_id || null,
+    estadoConexion: m.estado_conexion || 'finalizada',
+    motivoFin: m.motivo_fin || null,
     actividad: m.actividad?.nombre || null,
     bpm: m.bpm_promedio !== null && m.bpm_promedio !== undefined ? Number(m.bpm_promedio) : null,
     spo2: m.spo2_promedio !== null && m.spo2_promedio !== undefined ? Number(m.spo2_promedio) : null,

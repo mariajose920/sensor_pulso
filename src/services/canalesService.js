@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue'
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
 
 // Usuario de sesión simulado / por defecto para pruebas si no hay Supabase Auth activo
 export const usuarioActual = reactive({
@@ -15,7 +15,7 @@ export const canalesState = reactive({
   error: null,
   sesiones: [],
   sesionActivaId: 'ses-demo-01',
-  // Lista de 5 canales de la sesión activa
+  // Lista de 5 canales de la sesión activa (RF12 / RF111)
   canales: [
     { canal: 1, usuario_id: null, usuario_nombre: null, usuario_email: null, asignado_en: null },
     { canal: 2, usuario_id: null, usuario_nombre: null, usuario_email: null, asignado_en: null },
@@ -39,6 +39,19 @@ export const miCanalAsignado = computed(() => {
   return c ? c.canal : null
 })
 
+// Métricas de la ronda actual (RF111)
+export const metricasRonda = computed(() => {
+  const ocupados = canalesState.canales.filter(c => c.usuario_id !== null).length
+  const libres = 5 - ocupados
+  return {
+    rondaActual: canalesState.sesionActiva.ronda || 1,
+    canalesOcupados: ocupados,
+    canalesLibres: libres,
+    rondaCompleta: ocupados === 5,
+    porcentajeOcupacion: Math.round((ocupados / 5) * 100)
+  }
+})
+
 /**
  * Carga la sesión activa y el estado de sus 5 canales desde Supabase o mock local
  */
@@ -54,6 +67,20 @@ export async function cargarSesionYCanales(sesionId = canalesState.sesionActivaI
         usuarioActual.id = user.id
         usuarioActual.email = user.email || usuarioActual.email
         usuarioActual.nombre = user.user_metadata?.nombre || usuarioActual.nombre
+        if (user.user_metadata?.rol) {
+          usuarioActual.rol = user.user_metadata.rol
+        } else {
+          // Consultar rol en tabla perfiles
+          const { data: perfil } = await supabase
+            .from('perfiles')
+            .select('rol, nombre')
+            .eq('id', user.id)
+            .single()
+          if (perfil) {
+            if (perfil.rol) usuarioActual.rol = perfil.rol
+            if (perfil.nombre) usuarioActual.nombre = perfil.nombre
+          }
+        }
       }
     } catch {
       // Usar usuarioActual por defecto
@@ -98,7 +125,7 @@ export async function cargarSesionYCanales(sesionId = canalesState.sesionActivaI
       }
     }
   } catch (err) {
-    console.warn('[RF12] Conexión local fallback para canales:', err.message)
+    console.warn('[RF12/RF111] Conexión local fallback para canales:', err.message)
   } finally {
     canalesState.cargando = false
   }
@@ -106,24 +133,27 @@ export async function cargarSesionYCanales(sesionId = canalesState.sesionActivaI
 
 /**
  * Un estudiante elige y vincula su cuenta a un canal libre del ESP32 (RF12, RF111)
- * Regla: Atómico, sólo toma el canal si está libre, y un usuario sólo puede tener 1 canal activo
+ * Reglas atómicas:
+ * 1. Solo toma el canal si está libre (usuario_id is null).
+ * 2. Un usuario sólo puede tener 1 canal activo por sesión.
+ * 3. Si el canal objetivo fue tomado por otro estudiante, se rechaza de forma atómica.
  */
 export async function vincularMiCuentaACanal(canalNum) {
   canalesState.cargando = true
   canalesState.error = null
 
-  // Verificar si el usuario ya tiene otro canal vinculado en esta sesión
+  // Validación 1: Verificar si el usuario ya tiene otro canal vinculado en esta sesión
   const canalPrevio = canalesState.canales.find(c => c.usuario_id === usuarioActual.id)
   if (canalPrevio && canalPrevio.canal !== canalNum) {
     canalesState.cargando = false
     throw new Error(`Ya tienes asignado el Canal ${canalPrevio.canal}. Debes liberarlo antes de tomar otro.`)
   }
 
-  // Verificar si el canal objetivo está ocupado por otra persona
+  // Validación 2: Verificar si el canal objetivo está ocupado por otra persona
   const target = canalesState.canales.find(c => c.canal === canalNum)
   if (target && target.usuario_id && target.usuario_id !== usuarioActual.id) {
     canalesState.cargando = false
-    throw new Error(`El Canal ${canalNum} ya está ocupado por ${target.usuario_nombre || target.usuario_email}.`)
+    throw new Error(`El Canal ${canalNum} ya fue tomado por ${target.usuario_nombre || target.usuario_email || 'otro estudiante'}.`)
   }
 
   try {
@@ -135,10 +165,13 @@ export async function vincularMiCuentaACanal(canalNum) {
 
     if (!error && ok) {
       await cargarSesionYCanales()
+      canalesState.cargando = false
       return { ok: true, canal: canalNum }
+    } else if (error) {
+      console.warn('[RF111] RPC error:', error.message)
     }
   } catch (rpcErr) {
-    console.warn('[RF12] RPC falló, aplicando vinculación en estado local:', rpcErr.message)
+    console.warn('[RF111] RPC falló, aplicando vinculación en memoria local:', rpcErr.message)
   }
 
   // Actualización en memoria local / offline fallback
@@ -161,15 +194,17 @@ export async function desvincularMiCuenta() {
   const miCanal = canalesState.canales.find(c => c.usuario_id === usuarioActual.id)
   if (!miCanal) {
     canalesState.cargando = false
-    return
+    return { ok: true }
   }
+
+  const canalNumero = miCanal.canal
 
   try {
     await supabase
       .from('sesion_canales')
       .update({ usuario_id: null, asignado_en: null })
       .eq('sesion_id', canalesState.sesionActivaId)
-      .eq('canal', miCanal.canal)
+      .eq('canal', canalNumero)
   } catch {
     // Fallback local
   }
@@ -179,6 +214,8 @@ export async function desvincularMiCuenta() {
   miCanal.usuario_email = null
   miCanal.asignado_en = null
   canalesState.cargando = false
+
+  return { ok: true, canalLiberado: canalNumero }
 }
 
 /**
@@ -205,11 +242,12 @@ export async function asignarCanalProfesor(canalNum, nuevoUsuarioId = null, usua
     canal.asignado_en = nuevoUsuarioId ? new Date().toISOString() : null
   }
   canalesState.cargando = false
+  return { ok: true, canal: canalNum, usuarioId: nuevoUsuarioId }
 }
 
 /**
- * El profesor abre la siguiente ronda de 5 estudiantes (RF110, RF111)
- * Libera los 5 canales e incrementa la ronda en la sesión
+ * El profesor abre la siguiente ronda de 5 estudiantes (RF111)
+ * Libera atómicamente los 5 canales e incrementa el contador de ronda en la sesión
  */
 export async function abrirSiguienteRonda() {
   canalesState.cargando = true

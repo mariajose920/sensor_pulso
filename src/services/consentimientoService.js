@@ -100,7 +100,7 @@ export const consentimientoService = {
 
       if (!error && data) {
         return {
-          version: data.version,
+          version: (typeof data.version === 'string' && data.version) ? data.version : '1.0',
           titulo: 'Consentimiento Informado para Medición de Pulso y SpO₂',
           finalidad: data.finalidad || CONSENTIMIENTO_BASE.finalidad,
           advertenciaMedica: CONSENTIMIENTO_BASE.advertenciaMedica,
@@ -160,7 +160,7 @@ export const consentimientoService = {
           const list = JSON.parse(raw)
           if (list.length > 0) {
             previo = {
-              version: list[0].version,
+              version: (typeof list[0].version === 'string' && list[0].version) ? list[0].version : '1.0',
               aceptadoEn: list[0].aceptado_en,
               fechaHoraTexto: list[0].fecha_hora_texto || formatearFechaHora(list[0].aceptado_en),
               origen: 'local'
@@ -185,7 +185,8 @@ export const consentimientoService = {
   /**
    * Registra la aceptación del consentimiento informado con versión, fecha y hora (RF04, RF59)
    */
-  async aceptarConsentimiento(version = '1.0') {
+  async aceptarConsentimiento(versionParam = '1.0') {
+    const version = (typeof versionParam === 'string' && versionParam) ? versionParam : (versionParam?.version || '1.0')
     const ahora = new Date().toISOString()
     const fechaHoraTexto = formatearFechaHora(ahora)
 
@@ -215,7 +216,7 @@ export const consentimientoService = {
       // Mantener los últimos 50 registros para auditoría
       localStorage.setItem(LOCAL_HISTORIAL_KEY, JSON.stringify(historial.slice(0, 50)))
     } catch (e) {
-      console.warn('Error guardando consentimiento local (RF59):', e)
+      console.warn('Error guardando consentimiento local:', e)
     }
 
     // 2. Si hay sesión iniciada en Supabase, registrar en la tabla consentimientos_aceptados

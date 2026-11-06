@@ -4,7 +4,7 @@
     <div style="margin-bottom: 1rem;">
       <h2 class="card-title" style="margin-bottom: 0.25rem;">Detección de picos, BPM y HRV (RF17)</h2>
       <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 0;">
-        Detección de picos en tiempo real, cálculo de BPM, variabilidad de la frecuencia cardíaca (HRV) y regularidad del ritmo, con el sensor por USB o con el simulador.
+        Detección de picos en tiempo real, cálculo de BPM, variabilidad de la frecuencia cardíaca (HRV) y regularidad del ritmo, con el sensor por WiFi, USB o con el simulador.
       </p>
     </div>
 
@@ -12,6 +12,8 @@
     <Esp32Connection
       :isConnected="serialSensor.isConnected.value"
       :isSimulating="isSimulating"
+      :isWifiConnected="esp32State.conectado"
+      :wifiDevice="esp32State.dispositivo"
       :portInfo="serialSensor.portInfo.value"
       :rawLine="serialSensor.rawLine.value"
       :errorMessage="serialSensor.errorMessage.value"
@@ -52,7 +54,7 @@
       :explicacionRitmo="clasificacionParaGuardar.explicacionPorque"
       :calidad="calidadSenal.nivel"
       :causasCalidad="calidadSenal.causas"
-      :fuente="isSimulating ? 'simulador' : 'sensor'"
+      :fuente="fuenteMedicion"
       :paciente="paciente"
       @solicitar-consentimiento="(accion) => emit('solicitar-consentimiento', accion)"
     />
@@ -104,13 +106,15 @@
 const emit = defineEmits(['solicitar-consentimiento'])
 
 const props = defineProps({
-  paciente: { type: Object, default: null }
+  paciente: { type: Object, default: null },
+  canal: { type: Number, default: 1 }
 })
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { consentimientoEstado } from '../services/consentimientoService'
 import { useSerialSensor } from '../composables/useSerialSensor.js'
 import { usePeakDetector } from '../composables/usePeakDetector.js'
 import { PpgDcFilter } from '../utils/ppgFilter.js'
+import { esp32State } from '../services/esp32Service.js'
 
 import Esp32Connection from './Esp32Connection.vue'
 import PeakMetricsCards from './PeakMetricsCards.vue'
@@ -140,6 +144,14 @@ const peakDetector = usePeakDetector({
   windowSize: 8
 })
 
+// Fuente de la medición para RF30
+const fuenteMedicion = computed(() => {
+  if (isSimulating.value) return 'simulador'
+  if (serialSensor.isConnected.value) return 'sensor_usb'
+  if (esp32State.conectado) return 'sensor_wifi'
+  return 'sensor'
+})
+
 // RF30: ritmo (RF18) y su explicación para guardarlos junto a la medición
 const clasificacionParaGuardar = computed(() => clasificarRitmo({
   bpm: peakDetector.currentBpm.value,
@@ -153,7 +165,9 @@ const clasificacionParaGuardar = computed(() => clasificarRitmo({
 }))
 
 const isSignalActive = computed(() => {
-  return (serialSensor.isConnected.value && serialSensor.isReading.value) || isSimulating.value
+  return (serialSensor.isConnected.value && serialSensor.isReading.value) ||
+         isSimulating.value ||
+         Boolean(esp32State.conectado)
 })
 
 // RF15: ventana de ~3 s del valor crudo (100 Hz) para evaluar la calidad cada 0,25 s
@@ -215,9 +229,46 @@ function processSampleData(tMs, rawValue, leadsOff = false, hardwareBpm = 0) {
   }
 }
 
-// Procesar cada muestra entrante del sensor fisico USB
+// Procesar cada muestra entrante del sensor fisico USB (Web Serial)
 serialSensor.subscribe((sample) => {
   processSampleData(sample.tMs, sample.value, sample.leadsOff, sample.hardwareBpm)
+})
+
+// Procesar telemetría inalámbrica WiFi del ESP32 (RF05, RF17)
+watch(() => esp32State.paquete, () => {
+  // Si está conectado por USB o en simulador, priorizar esa fuente local
+  if (serialSensor.isConnected.value || isSimulating.value) return
+  if (!esp32State.conectado) return
+
+  const canalActivo = esp32State.canales.find(c => c.canal === (props.canal || 1)) || esp32State.canales[0]
+  if (!canalActivo) return
+
+  const leadsOff = canalActivo.calidad === 'sin_dedo' || canalActivo.bpm === 0
+  const muestras = Array.isArray(canalActivo.ir) ? canalActivo.ir : []
+
+  if (muestras.length === 0) {
+    if (leadsOff) {
+      processSampleData(Date.now(), 2048, true, 0)
+    }
+    return
+  }
+
+  // Distribuir temporalmente las muestras recibidas (25 muestras/s -> ~40 ms entre puntos)
+  const stepMs = Math.max(10, Math.round(1000 / muestras.length))
+  let t = Date.now() - (muestras.length * stepMs)
+  for (const rawVal of muestras) {
+    t += stepMs
+    processSampleData(t, rawVal, leadsOff, canalActivo.bpm)
+  }
+})
+
+// Limpiar si el WiFi se desconecta
+watch(() => esp32State.conectado, (estaConectado) => {
+  if (!estaConectado && !serialSensor.isConnected.value && !isSimulating.value) {
+    reiniciarCalidad()
+    dcFilter.reset()
+    peakDetector.handleLeadsOff()
+  }
 })
 
 async function handleConnectUsb() {
