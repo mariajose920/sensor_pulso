@@ -1,14 +1,17 @@
 <template>
   <div>
-    <!-- Encabezado de la Sección Comparación (RF24 y RF25) -->
+    <!-- Encabezado de la Sección Comparación -->
     <div class="card" style="margin-bottom: 1rem;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
         <div>
           <h1 class="card-title" style="margin-bottom: 0.25rem;">Comparación de Bioseñales Fisiológicas</h1>
           <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 0;">
-            Contraste de ondas fotopletismográficas (PPG) de laboratorio contra patrones basales de reposo y biblioteca de arritmias con correlación electrocardiográfica (ECG).
+            Contraste de ondas fotopletismográficas (PPG) de laboratorio contra patrones basales de reposo, catálogo de arritmias y mediciones históricas o comunitarias.
           </p>
         </div>
+        <span class="badge badge-usuario" style="font-size: 0.8rem;">
+          {{ etiquetaPestaña }}
+        </span>
       </div>
 
       <!-- Navegación por Pestañas de Comparación -->
@@ -39,6 +42,21 @@
           </svg>
           Patologías y Arritmias Precargadas
         </button>
+
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ active: pestañaActiva === 'guardadas' }"
+          @click="pestañaActiva = 'guardadas'"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          Mediciones Propias o Públicas
+        </button>
       </div>
     </div>
 
@@ -55,7 +73,7 @@
     <AvisoGirar />
 
     <!-- ===================================================================== -->
-    <!-- MODO 1: PLANTILLA NORMAL DE REPOSO (RF24)                             -->
+    <!-- MODO 1: PLANTILLA NORMAL DE REPOSO                                    -->
     <!-- ===================================================================== -->
     <template v-if="pestañaActiva === 'reposo'">
       <!-- Comparación de Parámetros: Medición vs Plantilla de Reposo (72 BPM) y ECG -->
@@ -72,7 +90,7 @@
         :measurementName="selectedMeasurementName"
       />
 
-      <!-- Tabla y Análisis Comparativo de Parámetros con ECG y Reposo (RF24) -->
+      <!-- Tabla y Análisis Comparativo de Parámetros con ECG y Reposo -->
       <TemplateComparator
         :currentBpm="selectedBpm"
         :lastIntervalMs="currentIntervalMs"
@@ -81,10 +99,22 @@
     </template>
 
     <!-- ===================================================================== -->
-    <!-- MODO 2: PATOLOGÍAS Y ARRITMIAS PRECARGADAS PPG + ECG (RF25)           -->
+    <!-- MODO 2: PATOLOGÍAS Y ARRITMIAS PRECARGADAS PPG + ECG                  -->
     <!-- ===================================================================== -->
     <template v-else-if="pestañaActiva === 'patologias'">
       <ComparadorPatologiasCard
+        :currentBpm="selectedBpm"
+        :lastIntervalMs="currentIntervalMs"
+        :amplitude="selectedAmplitude"
+        :measurementName="selectedMeasurementName"
+      />
+    </template>
+
+    <!-- ===================================================================== -->
+    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS                                 -->
+    <!-- ===================================================================== -->
+    <template v-else-if="pestañaActiva === 'guardadas'">
+      <ComparadorMedicionesCard
         :currentBpm="selectedBpm"
         :lastIntervalMs="currentIntervalMs"
         :amplitude="selectedAmplitude"
@@ -105,17 +135,26 @@ import MetricsCards from '../components/MetricsCards.vue'
 import OscilloscopeCanvas from '../components/OscilloscopeCanvas.vue'
 import TemplateComparator from '../components/TemplateComparator.vue'
 import ComparadorPatologiasCard from '../components/ComparadorPatologiasCard.vue'
+import ComparadorMedicionesCard from '../components/ComparadorMedicionesCard.vue'
 
 const route = useRoute()
 
-// Pestaña activa: 'patologias' (RF25) o 'reposo' (RF24)
-const pestañaActiva = ref('patologias')
+// Pestaña activa: 'guardadas', 'patologias' o 'reposo'
+const pestañaActiva = ref('guardadas')
+
+const etiquetaPestaña = computed(() => {
+  if (pestañaActiva.value === 'guardadas') return 'Comparación Histórica y Pública'
+  if (pestañaActiva.value === 'patologias') return 'Patologías y Arritmias Precargadas'
+  return 'Plantilla Normal de Reposo'
+})
 
 onMounted(() => {
   if (route.query.modo === 'reposo') {
     pestañaActiva.value = 'reposo'
   } else if (route.query.modo === 'patologias') {
     pestañaActiva.value = 'patologias'
+  } else if (route.query.modo === 'guardadas' || route.query.modo === 'propias' || route.query.modo === 'publicas') {
+    pestañaActiva.value = 'guardadas'
   }
 })
 
