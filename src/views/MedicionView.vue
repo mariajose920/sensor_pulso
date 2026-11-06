@@ -331,6 +331,7 @@
     <!-- PASO 4: MEDICIÓN EN TIEMPO REAL (TODO LO QUE ES MEDICIÓN)             -->
     <!-- ===================================================================== -->
     <section v-else-if="pasoActual === 4" class="anim-fade" aria-labelledby="paso4-titulo">
+      <AvisoEducativo compacto />
       <div class="card step-intro-medicion">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
           <div>
@@ -623,6 +624,9 @@
         </p>
       </div>
 
+      <!-- RF75: los resultados son orientativos, no un diagnóstico -->
+      <AvisoEducativo />
+
       <!-- Contenedor Imprimible Exclusivo para el Informe Clínico y Evaluación del Ritmo -->
       <div id="informe-clinico-imprimible">
         <!-- Resumen del Paciente Vinculado (RF03) -->
@@ -778,6 +782,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import ConsentimientoModal from '../components/ConsentimientoModal.vue'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'
 import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'

@@ -15,6 +15,8 @@
       </div>
     </div>
 
+    <AvisoEducativo />
+
     <!-- 1. Cargar o Ingresar Medicion Tomada con el Sensor -->
     <MeasurementSelector
       v-model:bpm="selectedBpm"
@@ -49,6 +51,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed } from 'vue'
 
 import AvisoGirar from '../components/AvisoGirar.vue'

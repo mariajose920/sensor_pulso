@@ -5,6 +5,7 @@
       <p class="hero-subtitle">
         Plataforma web educativa, responsiva e instalable (PWA) para medir, visualizar, comparar e interpretar la frecuencia cardíaca y saturación de oxígeno (SpO₂) mediante ESP32 conectado por WiFi.
       </p>
+      <AvisoEducativo />
       <div class="system-status alert alert-info">
         <strong>Estado de la plataforma:</strong> Base del sistema inicializada para el equipo (Vue 3 + Vite + Supabase).
       </div>
@@ -47,6 +48,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 </script>
 
 <style scoped>

@@ -8,6 +8,8 @@
       </p>
     </div>
 
+    <AvisoEducativo />
+
     <!-- Navegación por Pestañas del Historial -->
     <div class="historial-tabs">
       <button 
@@ -249,6 +251,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
 import EstadoConexionBadge from '../components/EstadoConexionBadge.vue'
