@@ -224,6 +224,11 @@
           Aula: <strong>{{ aulaSeleccionada?.nombre }}</strong> (Código: <code>{{ aulaSeleccionada?.codigo }}</code>)
         </p>
 
+        <!-- Alerta de error real dentro del modal si falla el envío -->
+        <div v-if="errorInvitacionModal" class="alert alert-error mb-3" style="font-size: 0.85rem; padding: 0.65rem 0.85rem; margin-bottom: 1rem; border-left: 4px solid #ef4444;">
+          <strong>Error de envío:</strong> {{ errorInvitacionModal }}
+        </div>
+
         <form @submit.prevent="enviarInvitacion">
           <div class="form-group">
             <label class="form-label">Correo Institucional del Estudiante (@alu.unach.cl) *</label>
@@ -233,17 +238,53 @@
               class="form-input" 
               placeholder="estudiante@alu.unach.cl" 
               required 
+              :disabled="enviandoInvitacion"
             />
-            <small class="help-text">Se enviará el código de acceso directamente a la casilla del estudiante.</small>
+            <small class="help-text">El código de acceso será enviado a través de Resend a la casilla del estudiante.</small>
           </div>
 
           <div class="modal-actions">
-            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary">Cancelar</button>
+            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary" :disabled="enviandoInvitacion">Cancelar</button>
             <button type="submit" class="btn btn-primary" :disabled="enviandoInvitacion">
-              {{ enviandoInvitacion ? 'Enviando...' : 'Enviar Invitación' }}
+              <span v-if="enviandoInvitacion">📨 Enviando con Resend...</span>
+              <span v-else>Enviar Invitación</span>
             </button>
           </div>
         </form>
+
+        <!-- Registro de invitaciones recientes del aula -->
+        <div class="invitaciones-historial mt-4" style="margin-top: 1.5rem; border-top: 1px solid var(--color-border, #e2e8f0); padding-top: 1rem;">
+          <h4 style="font-size: 0.9rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--color-muted);">
+            Registro de Envíos en esta Aula
+          </h4>
+          <div v-if="cargandoInvitaciones" style="font-size: 0.8rem; color: var(--color-muted);">
+            Consultando registros...
+          </div>
+          <div v-else-if="listaInvitaciones.length === 0" style="font-size: 0.8rem; color: var(--color-muted);">
+            No hay registros previos de invitaciones para esta aula.
+          </div>
+          <div v-else class="invitaciones-lista" style="max-height: 140px; overflow-y: auto; font-size: 0.8rem;">
+            <div 
+              v-for="inv in listaInvitaciones" 
+              :key="inv.id" 
+              style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9;"
+            >
+              <div>
+                <strong>{{ inv.correo }}</strong>
+                <small style="display: block; color: #94a3b8;">
+                  {{ formatearFechaInvitacion(inv.enviada_en || inv.intentado_en) }}
+                  <span v-if="inv.error_detalle" style="color: #ef4444; display: block;">{{ inv.error_detalle }}</span>
+                </small>
+              </div>
+              <span 
+                :class="inv.estado === 'fallido' ? 'badge badge-desactivado' : 'badge badge-profesor'" 
+                style="font-size: 0.72rem;"
+              >
+                {{ inv.estado === 'fallido' ? '❌ Fallido' : '✓ Enviado' }}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -320,6 +361,7 @@ import {
   alternarEstadoCodigoAula,
   regenerarCodigoAulaDocente,
   enviarInvitacionCorreo,
+  obtenerInvitacionesAula,
   obtenerCursosAula, 
   obtenerEstudiantesAula, 
   crearCurso, 
@@ -348,6 +390,9 @@ const formAula = ref({ nombre: '', descripcion: '' })
 const modalInvitarAbierto = ref(false)
 const correoInvitacion = ref('')
 const enviandoInvitacion = ref(false)
+const errorInvitacionModal = ref('')
+const listaInvitaciones = ref([])
+const cargandoInvitaciones = ref(false)
 
 // Modales Cursos (RF101)
 const modalCursoAbierto = ref(false)
@@ -458,20 +503,48 @@ const confirmarRegenerarCodigo = async (aula) => {
   }
 }
 
-// RF100: Enviar invitación por correo
-const abrirModalInvitar = (aula) => {
+// RF100: Enviar invitación real por correo (Resend)
+const formatearFechaInvitacion = (fecha) => {
+  if (!fecha) return ''
+  try {
+    const d = new Date(fecha)
+    return isNaN(d.getTime()) ? '' : d.toLocaleString()
+  } catch (_) {
+    return ''
+  }
+}
+
+const cargarHistorialInvitaciones = async (aulaId) => {
+  if (!aulaId) return
+  cargandoInvitaciones.value = true
+  try {
+    const res = await obtenerInvitacionesAula(aulaId)
+    listaInvitaciones.value = res.data || []
+  } catch (_) {
+    listaInvitaciones.value = []
+  } finally {
+    cargandoInvitaciones.value = false
+  }
+}
+
+const abrirModalInvitar = async (aula) => {
   aulaSeleccionada.value = aula
   correoInvitacion.value = ''
+  errorInvitacionModal.value = ''
   modalInvitarAbierto.value = true
+  await cargarHistorialInvitaciones(aula.id)
 }
 
 const enviarInvitacion = async () => {
   if (!correoInvitacion.value) return
   enviandoInvitacion.value = true
+  errorInvitacionModal.value = ''
+
   const res = await enviarInvitacionCorreo({
     aulaId: aulaSeleccionada.value.id,
     correoEstudiante: correoInvitacion.value,
     profesorId: currentUserId.value,
+    profesorNombre: currentUserName.value,
     esAdmin: isAdmin.value
   })
   enviandoInvitacion.value = false
@@ -479,10 +552,15 @@ const enviarInvitacion = async () => {
   if (res.success) {
     feedbackExito.value = true
     feedbackMensaje.value = res.message
+    errorInvitacionModal.value = ''
+    correoInvitacion.value = ''
     modalInvitarAbierto.value = false
   } else {
+    // Si el envío falla, NO dice "enviada". Se muestra el error real adentro del modal y en feedback
+    errorInvitacionModal.value = res.error
     feedbackExito.value = false
     feedbackMensaje.value = res.error
+    await cargarHistorialInvitaciones(aulaSeleccionada.value.id)
   }
 }
 

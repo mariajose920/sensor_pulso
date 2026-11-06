@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { validarCorreoInstitucional } from '../utils/validators'
+import { enviarCorreoInvitacion } from './emailService'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -308,11 +309,15 @@ export async function regenerarCodigoAulaDocente({ aulaId, profesorId, esAdmin }
 /**
  * RF100: Enviar invitación con el código al correo del estudiante (@alu.unach.cl)
  */
-export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, esAdmin }) {
+export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, profesorNombre, esAdmin }) {
   const aula = aulasLocales.find(a => a.id === aulaId)
   if (!aula) return { success: false, error: 'Aula no encontrada.' }
   if (!esAdmin && aula.profesor_id !== profesorId) {
     return { success: false, error: 'No tienes permiso para gestionar invitaciones en esta aula.' }
+  }
+
+  if (!aula.codigo_activo) {
+    return { success: false, error: 'El código de acceso de esta aula se encuentra desactivado. Actívalo antes de enviar invitaciones.' }
   }
 
   const validacion = validarCorreoInstitucional(correoEstudiante)
@@ -322,13 +327,46 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   const correoLimpio = correoEstudiante.trim().toLowerCase()
 
-  // Guardar invitación
+  // Conectar con el servicio de correo real (Resend)
+  const resultadoEnvio = await enviarCorreoInvitacion({
+    correo: correoLimpio,
+    codigo: aula.codigo,
+    aulaNombre: aula.nombre,
+    profesorNombre: profesorNombre || 'Docente'
+  })
+
+  // Criterio de aceptación: Si el envío falla, NO dice "enviada" y registra el resultado del envío
+  if (!resultadoEnvio.success) {
+    const invitacionFallida = {
+      id: `inv-err-${Date.now()}`,
+      aula_id: aulaId,
+      aula_nombre: aula.nombre,
+      codigo_aula: aula.codigo,
+      correo: correoLimpio,
+      servicio: 'Resend',
+      estado: 'fallido',
+      error_detalle: resultadoEnvio.error,
+      intentado_en: new Date().toISOString()
+    }
+    invitacionesLocales.unshift(invitacionFallida)
+    guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+
+    return {
+      success: false,
+      error: resultadoEnvio.error
+    }
+  }
+
+  // Registro de envío exitoso
   const nuevaInvitacion = {
     id: `inv-${Date.now()}`,
     aula_id: aulaId,
     aula_nombre: aula.nombre,
     codigo_aula: aula.codigo,
     correo: correoLimpio,
+    servicio: 'Resend',
+    estado: 'enviada',
+    resend_id: resultadoEnvio.messageId || null,
     enviada_en: new Date().toISOString()
   }
 
@@ -344,8 +382,30 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   return {
     success: true,
-    message: `Invitación enviada a ${correoLimpio} con el código de acceso ${aula.codigo}.`
+    message: `Invitación enviada con éxito a ${correoLimpio} mediante Resend (Código: ${aula.codigo}).`,
+    invitacion: nuevaInvitacion
   }
+}
+
+/**
+ * RF100: Obtener el registro de invitaciones del aula (para verificar estados enviado/fallido)
+ */
+export async function obtenerInvitacionesAula(aulaId) {
+  if (!aulaId) return { success: true, data: [] }
+  try {
+    const { data, error } = await supabase
+      .from('invitaciones_aula')
+      .select('*')
+      .eq('aula_id', aulaId)
+      .order('enviada_en', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      return { success: true, data }
+    }
+  } catch (_) {}
+
+  const filtradas = invitacionesLocales.filter(inv => inv.aula_id === aulaId)
+  return { success: true, data: filtradas }
 }
 
 // ==========================================
