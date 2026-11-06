@@ -1,20 +1,23 @@
 <template>
   <div class="comparador-rango-card card" :class="{ 'card-compact': compacto }">
-    <!-- Encabezado de la Tarjeta -->
+    <!-- Encabezado Unificado y Limpio -->
     <div class="comparador-head">
       <div class="head-title-block">
         <div class="title-with-badge">
-          <h3 class="main-title">Comparación con Rango Fisiológico</h3>
+          <h3 class="main-title">Evaluación de Rangos Fisiológicos</h3>
           <span 
             v-if="evaluacion.estadoGlobal !== 'sin_datos'" 
             class="estado-pill" 
             :class="evaluacion.dentroDeRango ? 'pill-in' : 'pill-out'"
           >
-            {{ evaluacion.etiquetaGlobal }}
+            {{ resumenPillTexto }}
+          </span>
+          <span v-else class="estado-pill pill-idle">
+            En espera de bioseñales
           </span>
         </div>
         <p class="sub-title">
-          Evaluación cuantitativa y visual de biomarcadores según edad y contexto basal (Guía AHA)
+          Guía AHA · Evaluación cuantitativa según edad y contexto basal
         </p>
       </div>
 
@@ -26,84 +29,32 @@
       </div>
     </div>
 
-    <!-- Banner de Estado General -->
-    <div 
-      class="status-banner" 
-      :class="{
-        'status-in': evaluacion.dentroDeRango === true,
-        'status-out': evaluacion.dentroDeRango === false,
-        'status-idle': evaluacion.estadoGlobal === 'sin_datos'
-      }"
-    >
-      <div class="status-left">
-        <div class="status-icon-box">
-          <!-- Icono SVG Dentro de Rango -->
-          <svg v-if="evaluacion.dentroDeRango === true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-          <!-- Icono SVG Fuera de Rango -->
-          <svg v-else-if="evaluacion.dentroDeRango === false" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <!-- Icono Esperando Datos -->
-          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-        </div>
-        <div class="status-text-wrap">
-          <strong class="status-title">
-            <template v-if="evaluacion.dentroDeRango === true">
-              Dentro de Rango Fisiológico de Referencia
-            </template>
-            <template v-else-if="evaluacion.dentroDeRango === false">
-              Fuera de Rango Fisiológico de Referencia
-            </template>
-            <template v-else>
-              En Espera de Bioseñales del Sensor
-            </template>
-          </strong>
-          <p class="status-desc">{{ evaluacion.resumenClinico }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Cuadrícula de Comparación Biométrica: BPM y SpO₂ -->
-    <div class="biometric-comp-grid">
-      <!-- 1. Métrica: Frecuencia Cardíaca (BPM) -->
-      <div class="comp-col-card" :class="{ 'col-out': evaluacion.bpm.valor !== null && !evaluacion.bpm.dentro }">
-        <div class="col-head">
-          <span class="col-title">Frecuencia Cardíaca</span>
-          <span 
-            v-if="evaluacion.bpm.valor !== null" 
-            class="comp-badge" 
-            :class="evaluacion.bpm.dentro ? 'badge-in' : 'badge-out'"
-          >
-            {{ evaluacion.bpm.dentro ? 'Dentro de Rango' : 'Fuera de Rango' }}
-          </span>
-        </div>
-
-        <div class="reading-row">
-          <div class="current-reading">
-            <span class="reading-num font-mono">
-              {{ evaluacion.bpm.valor !== null ? evaluacion.bpm.valor.toFixed(1) : '--.-' }}
+    <!-- Lista de Biomarcadores en Filas Horizontales Compactas -->
+    <div class="biometric-rows-container">
+      <!-- Fila 1: Frecuencia Cardíaca (BPM) -->
+      <div class="metric-row-item" :class="{ 'row-out': evaluacion.bpm.valor !== null && !evaluacion.bpm.dentro }">
+        <div class="metric-info-col">
+          <div class="metric-title-line">
+            <span class="metric-name">Frecuencia Cardíaca</span>
+            <span 
+              v-if="evaluacion.bpm.valor !== null" 
+              class="metric-diff-chip" 
+              :class="evaluacion.bpm.dentro ? 'chip-in' : 'chip-out'"
+            >
+              {{ chipBpmTexto }}
             </span>
-            <span class="reading-unit">BPM</span>
           </div>
-
-          <div class="ref-boundary-box">
-            <span class="ref-sub-lbl">Rango Esperado (AHA)</span>
-            <span class="ref-boundary-val font-mono">
-              {{ evaluacion.rangoAplicado.bpm_min }} – {{ evaluacion.rangoAplicado.bpm_max }} BPM
+          <div class="metric-reading-line">
+            <span class="metric-num-wrap">
+              <strong class="metric-num font-mono">{{ evaluacion.bpm.valor !== null ? Math.round(evaluacion.bpm.valor) : '--' }}</strong>
+              <small class="metric-unit">BPM</small>
             </span>
+            <span class="metric-expected">Esperado: {{ evaluacion.rangoAplicado.bpm_min }} - {{ evaluacion.rangoAplicado.bpm_max }} BPM</span>
           </div>
         </div>
 
-        <!-- Escala Gráfica Continua de BPM -->
-        <div v-if="mostrarEscala" class="scale-wrapper">
+        <!-- Escala Gráfica Continua (BPM) -->
+        <div v-if="mostrarEscala" class="metric-gauge-col">
           <div class="scale-track track-bpm">
             <div class="track-segment seg-low" title="Bradicardia (<60 BPM)"></div>
             <div class="track-segment seg-normal" title="Normocardia (60-100 BPM)"></div>
@@ -114,7 +65,9 @@
               class="scale-pin" 
               :style="{ left: evaluacion.bpm.porcentajeEscala + '%' }"
               :title="'Valor: ' + evaluacion.bpm.valor + ' BPM'"
-            ></div>
+            >
+              <span class="pin-tip font-mono">{{ Math.round(evaluacion.bpm.valor) }}</span>
+            </div>
           </div>
           <div class="scale-legend">
             <span>Bradicardia (&lt;{{ evaluacion.rangoAplicado.bpm_min }})</span>
@@ -122,44 +75,32 @@
             <span>Taquicardia (&gt;{{ evaluacion.rangoAplicado.bpm_max }})</span>
           </div>
         </div>
-
-        <div class="eval-note-box">
-          <span class="note-bullet">•</span>
-          <span class="note-text">{{ evaluacion.bpm.diagnostico }}</span>
-        </div>
       </div>
 
-      <!-- 2. Métrica: Saturación de Oxígeno (SpO₂) -->
-      <div class="comp-col-card" :class="{ 'col-out': evaluacion.spo2.valor !== null && !evaluacion.spo2.dentro }">
-        <div class="col-head">
-          <span class="col-title">Saturación de Oxígeno</span>
-          <span 
-            v-if="evaluacion.spo2.valor !== null" 
-            class="comp-badge" 
-            :class="evaluacion.spo2.dentro ? 'badge-in' : 'badge-out'"
-          >
-            {{ evaluacion.spo2.dentro ? 'Dentro de Rango' : 'Fuera de Rango' }}
-          </span>
-        </div>
-
-        <div class="reading-row">
-          <div class="current-reading">
-            <span class="reading-num font-mono color-spo2">
-              {{ evaluacion.spo2.valor !== null ? evaluacion.spo2.valor.toFixed(1) : '--.-' }}
+      <!-- Fila 2: Saturación de Oxígeno (SpO2) -->
+      <div class="metric-row-item" :class="{ 'row-out': evaluacion.spo2.valor !== null && !evaluacion.spo2.dentro }">
+        <div class="metric-info-col">
+          <div class="metric-title-line">
+            <span class="metric-name">Saturación de Oxígeno</span>
+            <span 
+              v-if="evaluacion.spo2.valor !== null" 
+              class="metric-diff-chip" 
+              :class="evaluacion.spo2.dentro ? 'chip-in' : 'chip-out'"
+            >
+              {{ chipSpo2Texto }}
             </span>
-            <span class="reading-unit">% SpO₂</span>
           </div>
-
-          <div class="ref-boundary-box">
-            <span class="ref-sub-lbl">Límite Normoxémico</span>
-            <span class="ref-boundary-val font-mono">
-              ≥ {{ evaluacion.rangoAplicado.spo2_min }}.0 %
+          <div class="metric-reading-line">
+            <span class="metric-num-wrap">
+              <strong class="metric-num font-mono color-spo2">{{ evaluacion.spo2.valor !== null ? Math.round(evaluacion.spo2.valor) : '--' }}</strong>
+              <small class="metric-unit">% SpO₂</small>
             </span>
+            <span class="metric-expected">Límite normoxémico: &ge; {{ evaluacion.rangoAplicado.spo2_min }}%</span>
           </div>
         </div>
 
-        <!-- Escala Gráfica Continua de SpO₂ -->
-        <div v-if="mostrarEscala" class="scale-wrapper">
+        <!-- Escala Gráfica Continua (SpO2) -->
+        <div v-if="mostrarEscala" class="metric-gauge-col">
           <div class="scale-track track-spo2">
             <div class="track-segment seg-spo2-sev" title="Hipoxia Severa (<90%)"></div>
             <div class="track-segment seg-spo2-mod" title="Hipoxia Leve (90-94%)"></div>
@@ -170,18 +111,15 @@
               class="scale-pin" 
               :style="{ left: evaluacion.spo2.porcentajeEscala + '%' }"
               :title="'Valor: ' + evaluacion.spo2.valor + '%'"
-            ></div>
+            >
+              <span class="pin-tip font-mono">{{ Math.round(evaluacion.spo2.valor) }}%</span>
+            </div>
           </div>
           <div class="scale-legend">
             <span>Severa (&lt;90%)</span>
             <span class="legend-center">Leve (90-94%)</span>
-            <span>Óptima (≥95%)</span>
+            <span>Óptima (&ge;95%)</span>
           </div>
-        </div>
-
-        <div class="eval-note-box">
-          <span class="note-bullet">•</span>
-          <span class="note-text">{{ evaluacion.spo2.diagnostico }}</span>
         </div>
       </div>
     </div>
@@ -233,15 +171,59 @@ const evaluacion = computed(() => {
     actividad: contextoTexto.value
   })
 })
+
+const resumenPillTexto = computed(() => {
+  if (evaluacion.value.dentroDeRango) {
+    return 'Dentro de Rango Fisiológico'
+  }
+  const fueraBpm = evaluacion.value.bpm.valor !== null && !evaluacion.value.bpm.dentro
+  const fueraSpo2 = evaluacion.value.spo2.valor !== null && !evaluacion.value.spo2.dentro
+  const totalFuera = (fueraBpm ? 1 : 0) + (fueraSpo2 ? 1 : 0)
+  if (totalFuera === 1) {
+    return '1 Biomarcador Fuera de Rango'
+  }
+  if (totalFuera > 1) {
+    return '2 Biomarcadores Fuera de Rango'
+  }
+  return 'Fuera de Rango'
+})
+
+const chipBpmTexto = computed(() => {
+  const b = evaluacion.value.bpm
+  if (b.dentro) return 'Dentro del rango'
+  if (b.estado === 'bajo') {
+    return `${Math.abs(b.diferencia)} BPM bajo límite`
+  }
+  if (b.estado === 'alto') {
+    return `+${b.diferencia} BPM sobre límite`
+  }
+  return 'Fuera de rango'
+})
+
+const chipSpo2Texto = computed(() => {
+  const s = evaluacion.value.spo2
+  if (s.dentro) return 'Normoxemia óptima'
+  if (s.estado === 'leve') return 'Hipoxia leve'
+  if (s.estado === 'severa') return 'Hipoxia severa'
+  return 'Fuera de rango'
+})
 </script>
 
 <style scoped>
 .comparador-rango-card {
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.card-compact {
+  padding: 0.75rem 1rem;
 }
 
 .comparador-head {
@@ -250,36 +232,37 @@ const evaluacion = computed(() => {
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .title-with-badge {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.6rem;
   flex-wrap: wrap;
 }
 
 .main-title {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--color-text);
   margin: 0;
 }
 
 .sub-title {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--color-muted);
-  margin: 0.2rem 0 0 0;
+  margin: 0.15rem 0 0 0;
 }
 
 .estado-pill {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
   padding: 0.2rem 0.6rem;
   border-radius: 9999px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
 }
 
 .pill-in {
@@ -289,9 +272,15 @@ const evaluacion = computed(() => {
 }
 
 .pill-out {
-  background: #fee2e2;
+  background: #fef2f2;
   color: #b91c1c;
-  border: 1px solid #fca5a5;
+  border: 1px solid #fecaca;
+}
+
+.pill-idle {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
 }
 
 .context-pill {
@@ -300,9 +289,9 @@ const evaluacion = computed(() => {
   gap: 0.35rem;
   background: #f8fafc;
   border: 1px solid #cbd5e1;
-  padding: 0.35rem 0.75rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 0.5rem;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #334155;
 }
 
@@ -323,179 +312,113 @@ const evaluacion = computed(() => {
   color: #1e3a8a;
 }
 
-/* Banner de Estado */
-.status-banner {
+/* Filas de Biomarcadores */
+.biometric-rows-container {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.85rem 1.15rem;
-  border-radius: 0.5rem;
-  margin-bottom: 1.25rem;
-  transition: all 0.2s ease;
-}
-
-.status-left {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.75rem;
 }
 
-.status-icon-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.status-text-wrap {
-  display: flex;
-  flex-direction: column;
-}
-
-.status-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.status-desc {
-  font-size: 0.82rem;
-  margin: 0.15rem 0 0 0;
-  opacity: 0.92;
-}
-
-.status-in {
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  color: #065f46;
-}
-
-.status-out {
-  background: #fff1f2;
-  border: 1px solid #fecdd3;
-  color: #9f1239;
-}
-
-.status-idle {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-}
-
-/* Cuadrícula de Métricas */
-.biometric-comp-grid {
+.metric-row-item {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 240px 1fr;
+  align-items: center;
   gap: 1.25rem;
-}
-
-@media (max-width: 768px) {
-  .biometric-comp-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.comp-col-card {
   background: #f8fafc;
   border: 1px solid var(--color-border);
-  border-radius: 0.65rem;
-  padding: 1rem 1.15rem;
-  transition: border-color 0.15s ease;
+  border-radius: 0.6rem;
+  padding: 0.75rem 1rem;
+  transition: all 0.15s ease;
 }
 
-.comp-col-card.col-out {
-  border-color: #fca5a5;
+.metric-row-item.row-out {
   background: #fffafa;
+  border-color: #fecaca;
 }
 
-.col-head {
+.metric-info-col {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.metric-title-line {
+  display: flex;
   align-items: center;
-  margin-bottom: 0.75rem;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
-.col-title {
-  font-size: 0.8rem;
+.metric-name {
+  font-size: 0.85rem;
   font-weight: 700;
-  color: var(--color-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--color-text);
 }
 
-.comp-badge {
-  font-size: 0.72rem;
+.metric-diff-chip {
+  font-size: 0.7rem;
   font-weight: 700;
-  padding: 0.2rem 0.55rem;
+  padding: 0.12rem 0.45rem;
   border-radius: 4px;
 }
 
-.badge-in {
+.chip-in {
   background: #dcfce7;
   color: #15803d;
   border: 1px solid #86efac;
 }
 
-.badge-out {
+.chip-out {
   background: #fee2e2;
   color: #b91c1c;
   border: 1px solid #fca5a5;
 }
 
-.reading-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 0.85rem;
-}
-
-.current-reading {
+.metric-reading-line {
   display: flex;
   align-items: baseline;
-  gap: 0.35rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.reading-num {
-  font-size: 2.15rem;
+.metric-num-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+}
+
+.metric-num {
+  font-size: 1.35rem;
   font-weight: 800;
   color: #0f172a;
   line-height: 1;
 }
 
-.reading-num.color-spo2 {
+.metric-num.color-spo2 {
   color: #0284c7;
 }
 
-.reading-unit {
-  font-size: 0.85rem;
+.metric-unit {
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--color-muted);
 }
 
-.ref-boundary-box {
-  text-align: right;
+.metric-expected {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
 }
 
-.ref-sub-lbl {
-  font-size: 0.7rem;
-  color: var(--color-muted);
-  display: block;
-}
-
-.ref-boundary-val {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #1e3a8a;
-}
-
-/* Escala Visual Continua */
-.scale-wrapper {
-  margin-top: 0.5rem;
-  margin-bottom: 0.75rem;
+/* Escala Gráfica Continua */
+.metric-gauge-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .scale-track {
-  height: 10px;
+  height: 9px;
   background: #e2e8f0;
   border-radius: 5px;
   position: relative;
@@ -517,15 +440,41 @@ const evaluacion = computed(() => {
 
 .scale-pin {
   position: absolute;
-  top: -4px;
+  top: -5px;
   width: 4px;
-  height: 18px;
+  height: 19px;
   background: #0f172a;
   border-radius: 2px;
   transform: translateX(-50%);
   box-shadow: 0 0 0 2px #ffffff;
   transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 2;
+}
+
+.pin-tip {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.pin-tip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 3px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
 }
 
 .scale-legend {
@@ -540,31 +489,14 @@ const evaluacion = computed(() => {
   font-weight: 600;
 }
 
-.eval-note-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  background: #ffffff;
-  border: 1px solid var(--color-border);
-  border-radius: 0.4rem;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.78rem;
-  color: #334155;
-  line-height: 1.35;
-}
-
-.note-bullet {
-  color: #0284c7;
-  font-weight: 800;
-  font-size: 0.9rem;
-  line-height: 1;
-}
-
-.note-text {
-  flex: 1;
-}
-
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@media (max-width: 768px) {
+  .metric-row-item {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
 }
 </style>

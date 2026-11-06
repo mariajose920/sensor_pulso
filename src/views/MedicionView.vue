@@ -676,8 +676,25 @@
           </div>
         </div>
 
+        <!-- Grid 50-50: Evaluación de Rangos (RF20) + Significado Clínico (RF23) -->
+        <div class="resultados-analisis-grid">
+          <!-- Columna Izquierda (50%): Evaluación Cuantitativa y Visual de Rangos (RF20) -->
+          <ComparadorRangoCard
+            :bpm="resultadosFinales.bpm"
+            :spo2="resultadosFinales.spo2"
+            :paciente="pacienteActivo"
+          />
+
+          <!-- Columna Derecha (50%): Significado Clínico y Factores del Caso (RF23) -->
+          <InterpretacionResultados
+            :bpm="resultadosFinales.bpm"
+            :spo2="resultadosFinales.spo2"
+            :paciente="pacienteActivo"
+          />
+        </div>
+
         <!-- RF22: cómo se obtuvieron el BPM y la SpO₂ de esta medición -->
-        <details class="explicacion-obtencion" open>
+        <details class="explicacion-obtencion">
           <summary>¿Cómo se obtuvieron estos resultados?</summary>
           <ExplicacionResultados
             tipo="ambos"
@@ -686,20 +703,6 @@
             :ratioR="monitorSpo2.stats.ratioR"
           />
         </details>
-
-        <!-- Comparación Cuantitativa y Visual de Resultados con el Rango Fisiológico (RF20) -->
-        <ComparadorRangoCard
-          :bpm="resultadosFinales.bpm"
-          :spo2="resultadosFinales.spo2"
-          :paciente="pacienteActivo"
-        />
-
-        <!-- Interpretación textual de los resultados y causas de variación (RF23) -->
-        <InterpretacionResultados
-          :bpm="resultadosFinales.bpm"
-          :spo2="resultadosFinales.spo2"
-          :paciente="pacienteActivo"
-        />
 
         <!-- Tarjeta de Clasificación del Ritmo Cardíaco (RF18 AHA / Mayo Clinic) -->
         <div 
@@ -1714,6 +1717,21 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.85rem;
   margin-bottom: 1.25rem;
+}
+
+.resultados-analisis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .resultados-analisis-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 }
 
 .valor-box {
