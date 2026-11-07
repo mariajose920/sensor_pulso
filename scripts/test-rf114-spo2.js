@@ -9,6 +9,7 @@
  * ============================================================================
  */
 
+import fs from 'fs'
 import {
   esSpo2Valido,
   calcularRatioR,
@@ -206,11 +207,30 @@ if (canalesOk !== 5) {
 }
 
 // ----------------------------------------------------------------------------
+// Prueba 8: Integración visual de SpO₂ y BPM en Osciloscopio con filtros independientes (RF114)
+// ----------------------------------------------------------------------------
+console.log('\n▶ [Prueba 8] Visualización integrada de SpO₂ junto a BPM en Osciloscopio (HUD + Filtros)...')
+const oscCode = fs.readFileSync('src/components/OsciloscopioCanvas.vue', 'utf8')
+const medCode = fs.readFileSync('src/views/MedicionView.vue', 'utf8')
+
+const tieneFiltroBpm = oscCode.includes('toggle-bpm') && oscCode.includes('mostrarBpm')
+const tieneFiltroSpo2 = oscCode.includes('toggle-spo2') && oscCode.includes('mostrarSpo2')
+const tieneHudOverlay = oscCode.includes('scope-hud-overlay') && oscCode.includes('hud-spo2')
+const medicionPasaProps = medCode.includes(':bpm=') && medCode.includes(':spo2=')
+
+if (!tieneFiltroBpm || !tieneFiltroSpo2 || !tieneHudOverlay || !medicionPasaProps) {
+  console.error('❌ Error: Falta integración de filtros o HUD de BPM y SpO2 en el osciloscopio')
+  errores++
+} else {
+  console.log('✅ Filtros interactivos y HUD clínico integrados en OsciloscopioCanvas (RF114)')
+}
+
+// ----------------------------------------------------------------------------
 // Resumen Final
 // ----------------------------------------------------------------------------
 console.log('\n================================================================')
 if (errores === 0) {
-  console.log('🎉 TODAS LAS PRUEBAS DE RF114 (7/7) PASARON SATISFACTORIAMENTE')
+  console.log('🎉 TODAS LAS PRUEBAS DE RF114 (8/8) PASARON SATISFACTORIAMENTE')
   console.log('   Algoritmo MAX30102, física óptica dual, Razón R, PI% y')
   console.log('   monitoreo de hasta 5 canales simultáneos completamente funcionales.')
   console.log('================================================================')

@@ -95,6 +95,21 @@
           <span class="marker-icon">🏷️</span>
           <span>Morfología</span>
         </label>
+
+        <!-- Filtros interactivos para mostrar u ocultar BPM y SpO2 (RF114) -->
+        <span class="toolbar-sep">|</span>
+
+        <label class="toggle-trace toggle-bpm" title="Mostrar u ocultar Frecuencia Cardíaca (BPM) dentro del gráfico (RF114)">
+          <input type="checkbox" v-model="mostrarBpm" />
+          <span class="color-dot dot-bpm"></span>
+          <span class="filter-label-bold">BPM</span>
+        </label>
+
+        <label class="toggle-trace toggle-spo2" title="Mostrar u ocultar Saturación de Oxígeno (SpO₂) dentro del gráfico (RF114)">
+          <input type="checkbox" v-model="mostrarSpo2" />
+          <span class="color-dot dot-spo2"></span>
+          <span class="filter-label-bold">SpO₂</span>
+        </label>
       </div>
 
       <div class="export-actions">
@@ -114,6 +129,39 @@
       @mouseleave="onMouseLeave"
     >
       <canvas ref="canvasRef" class="oscilloscope-canvas"></canvas>
+
+      <!-- HUD de Biomarcadores en Tiempo Real: BPM y SpO2 dentro del Gráfico (RF114) -->
+      <div v-if="mostrarBpm || mostrarSpo2" class="scope-hud-overlay">
+        <!-- Tarjeta HUD de BPM -->
+        <div v-if="mostrarBpm" class="hud-pill hud-bpm" :class="{ 'hud-pulsing': activo && valorBpmActual > 0 }">
+          <div class="hud-pill-top">
+            <span class="hud-icon">❤️</span>
+            <span class="hud-lbl">FRECUENCIA</span>
+          </div>
+          <div class="hud-pill-main font-mono">
+            {{ valorBpmActual > 0 ? valorBpmActual.toFixed(1) : '--' }}
+            <span class="hud-unit">BPM</span>
+          </div>
+          <div class="hud-badge" :class="claseRangoBpm">
+            {{ etiquetaRangoBpm }}
+          </div>
+        </div>
+
+        <!-- Tarjeta HUD de SpO2 -->
+        <div v-if="mostrarSpo2" class="hud-pill hud-spo2">
+          <div class="hud-pill-top">
+            <span class="hud-icon">💧</span>
+            <span class="hud-lbl">OXÍGENO</span>
+          </div>
+          <div class="hud-pill-main font-mono">
+            {{ valorSpo2Actual > 0 ? valorSpo2Actual.toFixed(1) : '--' }}
+            <span class="hud-unit">% SpO₂</span>
+          </div>
+          <div class="hud-badge" :class="claseRangoSpo2">
+            {{ etiquetaRangoSpo2 }}
+          </div>
+        </div>
+      </div>
 
       <!-- Overlay si no hay señal conectada ni simulada -->
       <div v-if="!activo && muestrasIr.length === 0" class="no-signal-overlay">
@@ -195,6 +243,14 @@ const props = defineProps({
   frecuenciaHz: {
     type: Number,
     default: 50
+  },
+  bpm: {
+    type: Number,
+    default: 0
+  },
+  spo2: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -204,6 +260,50 @@ const mostrarRojo = ref(true)
 const filtroActivo = ref(true)
 const mostrarMarcadores = ref(true)
 const pausado = ref(false)
+
+// RF114: Filtros interactivos para mostrar u ocultar BPM y SpO2 en la gráfica
+const mostrarBpm = ref(true)
+const mostrarSpo2 = ref(true)
+
+const valorBpmActual = computed(() => {
+  return typeof props.bpm === 'number' && props.bpm > 0 ? props.bpm : 0
+})
+
+const valorSpo2Actual = computed(() => {
+  return typeof props.spo2 === 'number' && props.spo2 > 0 ? props.spo2 : 0
+})
+
+const etiquetaRangoBpm = computed(() => {
+  const b = valorBpmActual.value
+  if (!b || b <= 0) return 'Sin datos'
+  if (b < 60) return 'Bradicardia (<60)'
+  if (b <= 100) return 'Normal (60-100)'
+  return 'Taquicardia (>100)'
+})
+
+const claseRangoBpm = computed(() => {
+  const b = valorBpmActual.value
+  if (!b || b <= 0) return 'tag-espera'
+  if (b < 60) return 'tag-warning'
+  if (b <= 100) return 'tag-success'
+  return 'tag-danger'
+})
+
+const etiquetaRangoSpo2 = computed(() => {
+  const s = valorSpo2Actual.value
+  if (!s || s <= 0) return 'Sin datos'
+  if (s >= 95) return 'Normoxemia (≥95%)'
+  if (s >= 90) return 'Hipoxia Leve (90-94%)'
+  return 'Hipoxia Severa (<90%)'
+})
+
+const claseRangoSpo2 = computed(() => {
+  const s = valorSpo2Actual.value
+  if (!s || s <= 0) return 'tag-espera'
+  if (s >= 95) return 'tag-success'
+  if (s >= 90) return 'tag-warning'
+  return 'tag-danger'
+})
 const modoVisualizacion = ref('barrido') // 'barrido' | 'scroll'
 const ventanaSegundos = ref(5.0)
 const ganancia = ref('auto')
@@ -859,5 +959,129 @@ onBeforeUnmount(() => {
 
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Filtros y HUD de BPM y SpO2 dentro del Osciloscopio (RF114) */
+.toolbar-sep {
+  color: #334155;
+  font-size: 0.9rem;
+  margin: 0 0.15rem;
+  user-select: none;
+}
+
+.filter-label-bold {
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.dot-bpm {
+  background: #ec4899;
+  box-shadow: 0 0 6px #ec4899;
+}
+
+.dot-spo2 {
+  background: #06b6d4;
+  box-shadow: 0 0 6px #06b6d4;
+}
+
+.scope-hud-overlay {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: flex;
+  gap: 0.65rem;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hud-pill {
+  background: rgba(11, 16, 26, 0.9);
+  backdrop-filter: blur(8px);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 115px;
+  transition: all 0.2s ease;
+}
+
+.hud-bpm {
+  border: 1px solid rgba(236, 72, 153, 0.45);
+}
+
+.hud-spo2 {
+  border: 1px solid rgba(6, 182, 212, 0.45);
+}
+
+.hud-pill-top {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.hud-pill-main {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0.15rem 0;
+}
+
+.hud-bpm .hud-pill-main {
+  color: #f472b6;
+}
+
+.hud-spo2 .hud-pill-main {
+  color: #22d3ee;
+}
+
+.hud-unit {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-left: 0.2rem;
+}
+
+.hud-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.2rem;
+  line-height: 1.2;
+}
+
+.tag-espera {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+}
+
+.tag-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.tag-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.tag-danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+@keyframes pulseBpm {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); border-color: rgba(236, 72, 153, 0.85); box-shadow: 0 0 10px rgba(236, 72, 153, 0.3); }
+  100% { transform: scale(1); }
+}
+
+.hud-pulsing {
+  animation: pulseBpm 1.2s infinite ease-in-out;
 }
 </style>

@@ -96,13 +96,15 @@
       />
     </div>
 
-    <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
+    <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi (RF06, RF114) -->
     <OsciloscopioCanvas
       :canal="canalSeleccionado"
       :activo="esp32State.conectado"
       :muestrasIr="senalBuffer.ir"
       :muestrasRojo="senalBuffer.rojo"
       :frecuenciaHz="esp32State.frecuenciaHz"
+      :bpm="canalActivoData?.bpm || monitorBpm.stats.instantBpm || 0"
+      :spo2="canalActivoData?.spo2 || monitorSpo2.stats.instantSpo2 || 0"
     />
 
     <!-- Grid de los 5 Canales Fisiológicos Simultáneos (RF08, RF12) -->
