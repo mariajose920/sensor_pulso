@@ -17,7 +17,8 @@
     "generar:iconos": "node scripts/generar-iconos.mjs",
     "verificar:despliegue": "node scripts/verificar-despliegue.mjs",
     "test:rf55": "node scripts/test-rf55-cifrado.js",
-    "test:rf27": "node scripts/test-rf27-cargar-senales.js"
+    "test:rf27": "node scripts/test-rf27-cargar-senales.js",
+    "test:rf47": "node scripts/test-rf47-contrastar-datasets.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
