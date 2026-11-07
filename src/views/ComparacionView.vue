@@ -57,6 +57,20 @@
           </svg>
           Mediciones Propias o Públicas
         </button>
+
+        <button
+          type="button"
+          class="tab-btn"
+          :class="{ active: pestañaActiva === 'senales' }"
+          @click="pestañaActiva = 'senales'"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Carga de Señales (RF27)
+        </button>
       </div>
     </div>
 
@@ -121,6 +135,16 @@
         :measurementName="selectedMeasurementName"
       />
     </template>
+
+    <!-- ===================================================================== -->
+    <!-- MODO 4: CARGA DE SEÑALES POR CSV, SIMULADA, DATASET O VALIDADA (RF27) -->
+    <!-- ===================================================================== -->
+    <template v-else-if="pestañaActiva === 'senales'">
+      <CargaSenalesCard
+        @seleccionar-senal="onSenalSeleccionada"
+        @usar-medicion="onUsarMedicionExterna"
+      />
+    </template>
   </div>
 </template>
 
@@ -136,6 +160,7 @@ import OscilloscopeCanvas from '../components/OscilloscopeCanvas.vue'
 import TemplateComparator from '../components/TemplateComparator.vue'
 import ComparadorPatologiasCard from '../components/ComparadorPatologiasCard.vue'
 import ComparadorMedicionesCard from '../components/ComparadorMedicionesCard.vue'
+import CargaSenalesCard from '../components/CargaSenalesCard.vue'
 
 const route = useRoute()
 
@@ -143,6 +168,7 @@ const route = useRoute()
 const pestañaActiva = ref('guardadas')
 
 const etiquetaPestaña = computed(() => {
+  if (pestañaActiva.value === 'senales') return 'Carga de Bioseñales Externas (RF27)'
   if (pestañaActiva.value === 'guardadas') return 'Comparación Histórica y Pública'
   if (pestañaActiva.value === 'patologias') return 'Patologías y Arritmias Precargadas'
   return 'Plantilla Normal de Reposo'
@@ -155,6 +181,8 @@ onMounted(() => {
     pestañaActiva.value = 'patologias'
   } else if (route.query.modo === 'guardadas' || route.query.modo === 'propias' || route.query.modo === 'publicas') {
     pestañaActiva.value = 'guardadas'
+  } else if (route.query.modo === 'senales' || route.query.modo === 'csv' || route.query.modo === 'dataset') {
+    pestañaActiva.value = 'senales'
   }
 })
 
@@ -167,6 +195,19 @@ const selectedMeasurementName = ref('Medición Tomada')
 const currentIntervalMs = computed(() => {
   return Math.round(60000 / Math.max(30, selectedBpm.value))
 })
+
+function onSenalSeleccionada(datos) {
+  selectedBpm.value = datos.bpm
+  selectedAmplitude.value = datos.amplitude || 100
+  selectedMeasurementName.value = datos.nombre || 'Señal Cargada (RF27)'
+  pestañaActiva.value = 'reposo'
+}
+
+function onUsarMedicionExterna(datos) {
+  selectedBpm.value = datos.bpm
+  selectedAmplitude.value = datos.amplitude || 100
+  selectedMeasurementName.value = datos.nombre || 'Señal Externa (RF27)'
+}
 </script>
 
 <style scoped>
