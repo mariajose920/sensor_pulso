@@ -61,6 +61,20 @@
         <button
           type="button"
           class="tab-btn"
+          :class="{ active: pestañaActiva === 'datasets' }"
+          @click="pestañaActiva = 'datasets'"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+          </svg>
+          Datasets Públicos (RF47)
+        </button>
+
+        <button
+          type="button"
+          class="tab-btn"
           :class="{ active: pestañaActiva === 'senales' }"
           @click="pestañaActiva = 'senales'"
         >
@@ -137,7 +151,19 @@
     </template>
 
     <!-- ===================================================================== -->
-    <!-- MODO 4: CARGA DE SEÑALES POR CSV, SIMULADA, DATASET O VALIDADA (RF27) -->
+    <!-- MODO 4: CONTRASTE CON DATASETS PÚBLICOS INTERNACIONALES (RF47)       -->
+    <!-- ===================================================================== -->
+    <template v-else-if="pestañaActiva === 'datasets'">
+      <ComparadorDatasetsCard
+        :currentBpm="selectedBpm"
+        :lastIntervalMs="currentIntervalMs"
+        :amplitude="selectedAmplitude"
+        :measurementName="selectedMeasurementName"
+      />
+    </template>
+
+    <!-- ===================================================================== -->
+    <!-- MODO 5: CARGA DE SEÑALES POR CSV, SIMULADA, DATASET O VALIDADA (RF27) -->
     <!-- ===================================================================== -->
     <template v-else-if="pestañaActiva === 'senales'">
       <CargaSenalesCard
@@ -160,14 +186,16 @@ import OscilloscopeCanvas from '../components/OscilloscopeCanvas.vue'
 import TemplateComparator from '../components/TemplateComparator.vue'
 import ComparadorPatologiasCard from '../components/ComparadorPatologiasCard.vue'
 import ComparadorMedicionesCard from '../components/ComparadorMedicionesCard.vue'
+import ComparadorDatasetsCard from '../components/ComparadorDatasetsCard.vue'
 import CargaSenalesCard from '../components/CargaSenalesCard.vue'
 
 const route = useRoute()
 
-// Pestaña activa: 'guardadas', 'patologias' o 'reposo'
+// Pestaña activa: 'guardadas', 'patologias', 'reposo', 'datasets' o 'senales'
 const pestañaActiva = ref('guardadas')
 
 const etiquetaPestaña = computed(() => {
+  if (pestañaActiva.value === 'datasets') return 'Contraste con Datasets Públicos (RF47)'
   if (pestañaActiva.value === 'senales') return 'Carga de Bioseñales Externas (RF27)'
   if (pestañaActiva.value === 'guardadas') return 'Comparación Histórica y Pública'
   if (pestañaActiva.value === 'patologias') return 'Patologías y Arritmias Precargadas'
@@ -181,7 +209,9 @@ onMounted(() => {
     pestañaActiva.value = 'patologias'
   } else if (route.query.modo === 'guardadas' || route.query.modo === 'propias' || route.query.modo === 'publicas') {
     pestañaActiva.value = 'guardadas'
-  } else if (route.query.modo === 'senales' || route.query.modo === 'csv' || route.query.modo === 'dataset') {
+  } else if (route.query.modo === 'datasets' || route.query.modo === 'dataset' || route.query.modo === 'rf47') {
+    pestañaActiva.value = 'datasets'
+  } else if (route.query.modo === 'senales' || route.query.modo === 'csv') {
     pestañaActiva.value = 'senales'
   }
 })
