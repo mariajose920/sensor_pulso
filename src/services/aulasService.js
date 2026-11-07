@@ -1,6 +1,6 @@
-import { supabase } from './supabase'
-import { validarCorreoInstitucional } from '../utils/validators'
-import { enviarCorreoInvitacion } from './emailService'
+import { supabase } from './supabase.js'
+import { validarCorreoInstitucional } from '../utils/validators.js'
+import { enviarCorreoInvitacion } from './emailService.js'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -20,6 +20,7 @@ const STORAGE_CURSOS = 'sensor_pulso_cursos_locales'
 const STORAGE_CURSO_ESTUDIANTES = 'sensor_pulso_curso_estudiantes_locales'
 const STORAGE_INVITACIONES = 'sensor_pulso_invitaciones_aulas_locales'
 const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
+const STORAGE_INTENTOS_EVALUACIONES = 'sensor_pulso_intentos_evaluaciones_locales'
 
 function cargarDeStorage(key, porDefecto) {
   if (typeof window === 'undefined' || !window.localStorage) return porDefecto
@@ -107,6 +108,72 @@ let evaluacionesLocales = cargarDeStorage(STORAGE_EVALUACIONES, [
     activa: true,
     preguntas_count: 8,
     creada_en: '2026-11-03T14:30:00Z'
+  }
+])
+
+// Intentos de evaluaciones (RF117: Visibilidad docente sin datos de salud)
+let intentosEvaluacionesLocales = cargarDeStorage(STORAGE_INTENTOS_EVALUACIONES, [
+  {
+    id: 'intento-001',
+    aula_id: 'aula-001',
+    evaluacion_id: 'eval-001',
+    usuario_id: '00000000-0000-0000-0000-000000000003',
+    estudiante_nombre: 'Constanza Morales',
+    estudiante_correo: 'cmorales@alu.unach.cl',
+    puntaje: 90.0,
+    puntaje_maximo: 100.0,
+    porcentaje: 90.0,
+    nivel: 'logrado',
+    inicio: '2026-11-04T11:00:00Z',
+    fin: '2026-11-04T11:35:00Z',
+    respuestas: [
+      { pregunta_id: 'p-1', pregunta: 'Longitud de onda infrarroja del sensor MAX30102', respuesta: '880 nm', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-2', pregunta: 'Componente que absorbe mayor luz infrarroja', respuesta: 'Oxihemoglobina (HbO2)', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-3', pregunta: 'Calculo del indice de perfusion (PI)', respuesta: 'Relacion entre componente pulsatil AC y continuo DC', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-4', pregunta: 'Rango normocardico segun la AHA en reposo', respuesta: '60 a 100 BPM', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-5', pregunta: 'Definicion de hipoxia leve en SpO2', respuesta: '90% a 94%', es_correcta: false, puntaje: 10 }
+    ],
+    medicion: {
+      id: 'med-eval-001',
+      bpm: 72.5,
+      spo2: 98.2,
+      indicePerfusion: 4.8,
+      dentroDeRango: true,
+      fecha: '2026-11-04T11:20:00Z',
+      frecuenciaHz: 100,
+      muestrasPpg: [0.15, 0.25, 0.55, 0.9, 0.98, 0.75, 0.45, 0.3, 0.38, 0.25, 0.18, 0.15]
+    }
+  },
+  {
+    id: 'intento-002',
+    aula_id: 'aula-001',
+    evaluacion_id: 'eval-001',
+    usuario_id: '00000000-0000-0000-0000-000000000004',
+    estudiante_nombre: 'Matias Silva',
+    estudiante_correo: 'msilva@alu.unach.cl',
+    puntaje: 70.0,
+    puntaje_maximo: 100.0,
+    porcentaje: 70.0,
+    nivel: 'medianamente_logrado',
+    inicio: '2026-11-04T11:05:00Z',
+    fin: '2026-11-04T11:38:00Z',
+    respuestas: [
+      { pregunta_id: 'p-1', pregunta: 'Longitud de onda infrarroja del sensor MAX30102', respuesta: '880 nm', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-2', pregunta: 'Componente que absorbe mayor luz infrarroja', respuesta: 'Hemoglobina desoxigenada (Hb)', es_correcta: false, puntaje: 0 },
+      { pregunta_id: 'p-3', pregunta: 'Calculo del indice de perfusion (PI)', respuesta: 'Relacion entre componente pulsatil AC y continuo DC', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-4', pregunta: 'Rango normocardico segun la AHA en reposo', respuesta: '60 a 100 BPM', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-5', pregunta: 'Definicion de hipoxia leve en SpO2', respuesta: 'Menor a 85%', es_correcta: false, puntaje: 10 }
+    ],
+    medicion: {
+      id: 'med-eval-002',
+      bpm: 76.0,
+      spo2: 97.0,
+      indicePerfusion: 4.2,
+      dentroDeRango: true,
+      fecha: '2026-11-04T11:35:00Z',
+      frecuenciaHz: 100,
+      muestrasPpg: [0.12, 0.22, 0.5, 0.88, 0.95, 0.72, 0.42, 0.28, 0.36, 0.22, 0.16, 0.13]
+    }
   }
 ])
 
@@ -729,5 +796,163 @@ export async function retirarEstudiantesAula({ aulaId, estudiantesIds, profesorI
     success: true,
     count: estudiantesIds.length,
     message: `Se retiró exitosamente a ${estudiantesIds.length} estudiante(s) del aula.`
+  }
+}
+
+/**
+ * RF117: Visibilidad del profesor sobre evaluaciones asignadas.
+ * Ve de cada estudiante de su aula SOLO:
+ * - Nombre del estudiante
+ * - Calificacion (puntaje y porcentaje)
+ * - Nivel de logro (logrado, medianamente_logrado, no_logrado)
+ * - Respuestas de la evaluacion asignada
+ * - Mediciones asignadas a la evaluacion (BPM, SpO2, senal PPG)
+ *
+ * RESTRICCIONES DE SEGURIDAD (RF116/RF117):
+ * - NUNCA incluye datos personales o de salud declarados (estres, sueno, cafeina, medicacion).
+ * - Si un estudiante fue retirado del aula (RF102), el profesor pierde de inmediato el acceso.
+ */
+export async function obtenerIntentosEvaluacionAula(aulaId, evaluacionId) {
+  if (!aulaId || !evaluacionId) return { success: true, data: [] }
+
+  // 1. Obtener los estudiantes actualmente activos en el aula (RF102/RF117)
+  const resEstudiantes = await obtenerEstudiantesAula(aulaId)
+  const estudiantesActivos = resEstudiantes.data || []
+  const idsActivos = new Set(estudiantesActivos.map(e => e.usuario_id))
+
+  // 2. Intentar consultar en Supabase
+  try {
+    const { data, error } = await supabase
+      .from('intentos_evaluacion')
+      .select(`
+        id,
+        evaluacion_id,
+        usuario_id,
+        puntaje,
+        puntaje_maximo,
+        porcentaje,
+        nivel,
+        inicio,
+        fin,
+        perfiles:usuario_id(id, nombre, correo),
+        mediciones:medicion_id(id, bpm, spo2, creado_en, dentro_de_rango),
+        respuestas(id, pregunta_id, respuesta, es_correcta, puntaje, preguntas(texto))
+      `)
+      .eq('evaluacion_id', evaluacionId)
+
+    if (!error && data && data.length > 0) {
+      // Filtrar estrictamente solo estudiantes que sigan activos en el aula (RF102/RF117)
+      const filtrados = data
+        .filter(intento => idsActivos.has(intento.usuario_id))
+        .map(intento => ({
+          id: intento.id,
+          evaluacion_id: intento.evaluacion_id,
+          usuario_id: intento.usuario_id,
+          estudiante_nombre: intento.perfiles?.nombre || 'Estudiante',
+          estudiante_correo: intento.perfiles?.correo || '',
+          puntaje: Number(intento.puntaje) || 0,
+          puntaje_maximo: Number(intento.puntaje_maximo) || 100,
+          porcentaje: Number(intento.porcentaje) || 0,
+          nivel: intento.nivel || 'no_logrado',
+          inicio: intento.inicio,
+          fin: intento.fin,
+          respuestas: (intento.respuestas || []).map(r => ({
+            pregunta_id: r.pregunta_id,
+            pregunta: r.preguntas?.texto || 'Pregunta de evaluacion',
+            respuesta: typeof r.respuesta === 'object' ? JSON.stringify(r.respuesta) : String(r.respuesta),
+            es_correcta: Boolean(r.es_correcta),
+            puntaje: Number(r.puntaje) || 0
+          })),
+          medicion: intento.mediciones ? {
+            id: intento.mediciones.id,
+            bpm: intento.mediciones.bpm,
+            spo2: intento.mediciones.spo2,
+            dentroDeRango: intento.mediciones.dentro_de_rango,
+            fecha: intento.mediciones.creado_en
+          } : null
+        }))
+
+      return { success: true, data: filtrados }
+    }
+  } catch (_) {}
+
+  // 3. Fallback local offline/demostracion
+  const locales = intentosEvaluacionesLocales.filter(
+    i => i.aula_id === aulaId && i.evaluacion_id === evaluacionId && idsActivos.has(i.usuario_id)
+  ).map(i => {
+    // Sanitizacion estricta: asegurar que nunca viajen campos de salud del RF116
+    const { datos_cifrados, condicionSalud, medicacion, sueno, cafeina, estres, ...limpio } = i
+    return limpio
+  })
+
+  return { success: true, data: locales }
+}
+
+/**
+ * RF117: Estadisticas agregadas del aula sobre datos no cifrados, sin identificar a la persona.
+ */
+export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
+  const resIntentos = await obtenerIntentosEvaluacionAula(aulaId, evaluacionId)
+  const intentos = resIntentos.data || []
+
+  const resEst = await obtenerEstudiantesAula(aulaId)
+  const totalEstudiantes = (resEst.data || []).length
+  const totalEvaluados = intentos.length
+
+  if (totalEvaluados === 0) {
+    return {
+      success: true,
+      data: {
+        totalEstudiantes,
+        totalEvaluados: 0,
+        promedioCalificacion: 0,
+        tasaAprobacion: 0,
+        distribucionNiveles: {
+          logrado: 0,
+          medianamente_logrado: 0,
+          no_logrado: 0
+        },
+        promedioBpm: null,
+        promedioSpo2: null
+      }
+    }
+  }
+
+  const sumaNotas = intentos.reduce((acc, i) => acc + (i.porcentaje || 0), 0)
+  const promedioCalificacion = parseFloat((sumaNotas / totalEvaluados).toFixed(1))
+
+  const niveles = {
+    logrado: intentos.filter(i => i.nivel === 'logrado').length,
+    medianamente_logrado: intentos.filter(i => i.nivel === 'medianamente_logrado').length,
+    no_logrado: intentos.filter(i => i.nivel === 'no_logrado').length
+  }
+
+  const tasaAprobacion = parseFloat(
+    (((niveles.logrado + niveles.medianamente_logrado) / totalEvaluados) * 100).toFixed(1)
+  )
+
+  const medicionesConBpm = intentos.filter(i => i.medicion && i.medicion.bpm > 0)
+  const sumaBpm = medicionesConBpm.reduce((acc, i) => acc + i.medicion.bpm, 0)
+  const promedioBpm = medicionesConBpm.length > 0
+    ? parseFloat((sumaBpm / medicionesConBpm.length).toFixed(1))
+    : null
+
+  const medicionesConSpo2 = intentos.filter(i => i.medicion && i.medicion.spo2 > 0)
+  const sumaSpo2 = medicionesConSpo2.reduce((acc, i) => acc + i.medicion.spo2, 0)
+  const promedioSpo2 = medicionesConSpo2.length > 0
+    ? parseFloat((sumaSpo2 / medicionesConSpo2.length).toFixed(1))
+    : null
+
+  return {
+    success: true,
+    data: {
+      totalEstudiantes,
+      totalEvaluados,
+      promedioCalificacion,
+      tasaAprobacion,
+      distribucionNiveles: niveles,
+      promedioBpm,
+      promedioSpo2
+    }
   }
 }

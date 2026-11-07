@@ -1,4 +1,4 @@
-import { validarCorreoInstitucional } from '../utils/validators'
+import { validarCorreoInstitucional } from '../utils/validators.js'
 
 /**
  * RF100: Servicio de envío real de invitaciones por correo electrónico.
