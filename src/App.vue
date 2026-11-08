@@ -110,6 +110,7 @@ const manejarCerrarOtrasSesiones = async () => {
 const enlaces = computed(() => {
   const lista = [...enlacesBase]
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
+  if (isAdmin.value || isProfesor.value) lista.push({ to: '/evaluaciones', texto: 'Evaluaciones', corto: 'Evaluar', icono: 'aulas' })   // RF106
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
   else if (isProfesor.value) {
     lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
