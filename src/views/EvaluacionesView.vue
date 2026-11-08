@@ -1,11 +1,14 @@
 <template>
   <div class="evaluaciones-container">
     <div class="card">
-      <h1 class="card-title">📋 Evaluaciones</h1>
-      <p class="header-desc">
-        Elige el tipo de evaluación: preguntas o un ejercicio aplicado (medir pulso, medir SpO₂ o comparar señales).
-        Las preguntas y la asignación a estudiantes se agregan en otras tareas (RF104 y RF105).
-      </p>
+      <div class="header-flex">
+        <div>
+          <h1 class="card-title">📋 Gestión de Evaluaciones</h1>
+          <p class="header-desc">
+            Crea una evaluación desde cero o utiliza una plantilla precargada oficial para tu aula (RF105).
+          </p>
+        </div>
+      </div>
 
       <AvisoEducativo compacto />
 
@@ -14,48 +17,202 @@
       <template v-else>
         <p v-if="!aulas.length" class="alert alert-info">Primero crea un aula en la sección Aulas.</p>
 
-        <form v-else class="nueva" novalidate @submit.prevent="guardar">
-          <div class="form-group">
-            <label class="form-label" for="eval-aula">Aula</label>
-            <select id="eval-aula" v-model="aulaId" class="form-select" data-testid="eval-aula" @change="cargarLista">
-              <option v-for="a in aulas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
-            </select>
+        <div v-else>
+          <!-- Selector de Modo: Crear desde Cero o Usar Plantilla Precargada -->
+          <div class="modo-tabs">
+            <button 
+              type="button" 
+              class="modo-tab-btn" 
+              :class="{ activo: modoCreacion === 'cero' }"
+              @click="seleccionarModo('cero')"
+            >
+              ✍️ Crear Evaluación desde Cero
+            </button>
+            <button 
+              type="button" 
+              class="modo-tab-btn" 
+              :class="{ activo: modoCreacion === 'precargada' }"
+              @click="seleccionarModo('precargada')"
+            >
+              📦 Usar Plantilla Precargada ({{ plantillasPrecargadas.length }})
+            </button>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="eval-titulo">Título</label>
-            <input id="eval-titulo" v-model="titulo" class="form-input" maxlength="120" data-testid="eval-titulo" />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="eval-desc">Descripción (opcional)</label>
-            <textarea id="eval-desc" v-model="descripcion" class="form-input" rows="2" />
-          </div>
-
-          <TipoEvaluacionForm v-model="modelo" :mostrar-errores="intentado" />
-
-          <p v-if="mensaje" class="alert" :class="mensajeError ? 'alert-error' : 'alert-success'" role="status" data-testid="eval-mensaje">
-            {{ mensaje }}
-          </p>
-
-          <button type="submit" class="btn btn-primary" data-testid="eval-guardar" :disabled="guardando">
-            {{ guardando ? 'Guardando…' : 'Guardar evaluación' }}
-          </button>
-        </form>
-
-        <section v-if="aulas.length" class="lista" aria-label="Evaluaciones del aula">
-          <h2 class="lista-titulo">Evaluaciones del aula</h2>
-          <p v-if="!evaluaciones.length" class="header-desc">Todavía no hay evaluaciones en esta aula.</p>
-          <ul v-else class="lista-items">
-            <li v-for="e in evaluaciones" :key="e.id" class="lista-item" data-testid="eval-item">
-              <div class="lista-cabecera">
-                <strong>{{ e.titulo }}</strong>
-                <span v-if="e.origen === 'local'" class="badge badge-local" title="Guardada solo en este navegador">Solo en este navegador</span>
+          <!-- CATÁLOGO DE EVALUACIONES PRECARGADAS (RF105) -->
+          <div v-if="modoCreacion === 'precargada'" class="catalogo-precargadas">
+            <h3 class="seccion-subtitulo">Selecciona una plantilla oficial para cargar en el formulario:</h3>
+            <div class="grid-plantillas">
+              <div 
+                v-for="p in plantillasPrecargadas" 
+                :key="p.id" 
+                class="plantilla-card"
+                :class="{ seleccionada: plantillaSeleccionadaId === p.id }"
+              >
+                <div class="plantilla-top">
+                  <span class="badge badge-tipo">{{ p.tipo === 'ejercicio_aplicado' ? 'Ejercicio Práctico' : 'Preguntas Teóricas' }}</span>
+                  <span class="badge badge-preguntas">📝 {{ (p.preguntas || []).length }} preguntas</span>
+                </div>
+                <h4 class="plantilla-titulo">{{ p.titulo }}</h4>
+                <p class="plantilla-desc">{{ p.descripcion }}</p>
+                
+                <div class="plantilla-footer">
+                  <TipoEvaluacionBadge :tipo="p.tipo" :ejercicio="p.ejercicio" :criterio="p.criterio" />
+                  <button 
+                    type="button" 
+                    class="btn btn-secondary btn-sm"
+                    @click="cargarPlantillaEnFormulario(p)"
+                  >
+                    Usar esta plantilla
+                  </button>
+                </div>
               </div>
-              <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" />
-            </li>
-          </ul>
-        </section>
+            </div>
+          </div>
+
+          <!-- FORMULARIO DE EVALUACIÓN (RF105) -->
+          <form class="nueva" novalidate @submit.prevent="guardar">
+            <div v-if="plantillaSeleccionadaId" class="banner-precargada">
+              <span>✓ Plantilla cargada en el formulario. Puedes personalizar el título, criterios y preguntas antes de guardar.</span>
+              <button type="button" class="btn-link" @click="limpiarPlantilla">Restablecer formulario</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="eval-aula">Aula Destino *</label>
+              <select id="eval-aula" v-model="aulaId" class="form-select" data-testid="eval-aula" @change="cargarLista">
+                <option v-for="a in aulas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="eval-titulo">Título de la Evaluación *</label>
+              <input 
+                id="eval-titulo" 
+                v-model="titulo" 
+                class="form-input" 
+                placeholder="Ej: Control 1: Medición de Pulso y Saturación" 
+                maxlength="120" 
+                data-testid="eval-titulo" 
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="eval-desc">Descripción (opcional)</label>
+              <textarea 
+                id="eval-desc" 
+                v-model="descripcion" 
+                class="form-input" 
+                placeholder="Instrucciones generales para el estudiante..." 
+                rows="2" 
+              />
+            </div>
+
+            <!-- TIPO DE EVALUACIÓN (RF106) -->
+            <TipoEvaluacionForm v-model="modelo" :mostrar-errores="intentado" />
+
+            <!-- SECCIÓN DE PREGUNTAS (RF105) -->
+            <div class="seccion-preguntas">
+              <div class="preguntas-header">
+                <div>
+                  <h3 class="preguntas-titulo">📝 Preguntas de la Evaluación ({{ preguntas.length }})</h3>
+                  <p class="preguntas-desc">Agrega preguntas con alternativas o enunciados para complementar la evaluación.</p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" @click="agregarPreguntaVacia">
+                  + Agregar Pregunta
+                </button>
+              </div>
+
+              <div v-if="preguntas.length === 0" class="preguntas-vacio">
+                <p>No has agregado preguntas todavía. Puedes añadir preguntas opcionales o pulsar "+ Agregar Pregunta".</p>
+              </div>
+
+              <div v-else class="preguntas-lista">
+                <div v-for="(preg, idx) in preguntas" :key="idx" class="pregunta-box">
+                  <div class="pregunta-top">
+                    <span class="pregunta-numero">Pregunta #{{ idx + 1 }}</span>
+                    <button type="button" class="btn-borrar-pregunta" @click="eliminarPregunta(idx)" title="Eliminar pregunta">✕</button>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Enunciado de la pregunta *</label>
+                    <input 
+                      v-model="preg.enunciado" 
+                      class="form-input" 
+                      placeholder="Ej: ¿Cuál es el rango normal de BPM en reposo?" 
+                      required 
+                    />
+                  </div>
+
+                  <div class="fila-puntaje-tipo">
+                    <div class="form-group" style="flex: 1;">
+                      <label class="form-label">Tipo de Pregunta</label>
+                      <select v-model="preg.tipo" class="form-select">
+                        <option value="opcion_multiple">Opción Múltiple</option>
+                        <option value="verdadero_falso">Verdadero / Falso</option>
+                        <option value="abierta">Respuesta Abierta</option>
+                      </select>
+                    </div>
+                    <div class="form-group" style="width: 140px;">
+                      <label class="form-label">Puntaje</label>
+                      <input v-model.number="preg.puntaje" type="number" min="1" max="100" class="form-input" />
+                    </div>
+                  </div>
+
+                  <!-- Alternativas para Opción Múltiple -->
+                  <div v-if="preg.tipo === 'opcion_multiple'" class="opciones-box">
+                    <label class="form-label">Alternativas (selecciona la correcta):</label>
+                    <div v-for="(op, opIdx) in preg.opciones" :key="opIdx" class="opcion-item">
+                      <input 
+                        type="radio" 
+                        :name="'correcta-' + idx" 
+                        :value="op.id" 
+                        v-model="preg.respuesta_correcta" 
+                        title="Marcar como respuesta correcta"
+                      />
+                      <span class="opcion-letra">{{ op.id.toUpperCase() }})</span>
+                      <input v-model="op.texto" class="form-input form-input-sm" placeholder="Texto de la alternativa..." />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="mensaje" class="alert" :class="mensajeError ? 'alert-error' : 'alert-success'" role="status" data-testid="eval-mensaje">
+              {{ mensaje }}
+            </p>
+
+            <button type="submit" class="btn btn-primary btn-block" data-testid="eval-guardar" :disabled="guardando">
+              {{ guardando ? 'Guardando…' : 'Guardar Evaluación' }}
+            </button>
+          </form>
+
+          <!-- LISTADO DE EVALUACIONES CREADAS EN EL AULA (RF105) -->
+          <section class="lista" aria-label="Evaluaciones del aula">
+            <h2 class="lista-titulo">Evaluaciones asignadas a esta aula</h2>
+            <p v-if="!evaluaciones.length" class="header-desc">Todavía no hay evaluaciones en esta aula.</p>
+            <ul v-else class="lista-items">
+              <li v-for="e in evaluaciones" :key="e.id" class="lista-item" data-testid="eval-item">
+                <div class="lista-cabecera">
+                  <strong>{{ e.titulo }}</strong>
+                  <span v-if="e.precargadaBaseId" class="badge badge-precargada">Basada en plantilla precargada</span>
+                  <span v-else class="badge badge-personalizada">Personalizada</span>
+                  <span v-if="e.origen === 'local'" class="badge badge-local" title="Guardada en este navegador">Local</span>
+                </div>
+                <p v-if="e.descripcion" class="lista-item-desc">{{ e.descripcion }}</p>
+                <div class="lista-footer">
+                  <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" />
+                  <button 
+                    type="button" 
+                    class="btn btn-secondary btn-sm"
+                    @click="duplicarExistente(e)"
+                    title="Crear una copia de esta evaluación"
+                  >
+                    📑 Duplicar
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </div>
       </template>
     </div>
   </div>
@@ -68,12 +225,15 @@ import TipoEvaluacionForm from '../components/TipoEvaluacionForm.vue'
 import TipoEvaluacionBadge from '../components/TipoEvaluacionBadge.vue'
 import { useAuth } from '../composables/useAuth'
 import { obtenerAulas } from '../services/aulasService'
-import { crearEvaluacion, obtenerEvaluacionesAula } from '../services/evaluacionesService'
+import { 
+  crearEvaluacion, 
+  obtenerEvaluacionesAula, 
+  obtenerEvaluacionesPrecargadas, 
+  duplicarEvaluacion 
+} from '../services/evaluacionesService'
 import { modeloVacio, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
 
 const { currentUserId, currentUserEmail, isAdmin, isProfesor, can } = useAuth()
-
-// RF52: solo profesor del aula o administrador (la RLS `evaluaciones_crear` lo exige también en la base)
 const puedeGestionar = computed(() => isAdmin.value || isProfesor.value || can('GESTIONAR_EVALUACIONES'))
 
 const aulas = ref([])
@@ -87,6 +247,56 @@ const guardando = ref(false)
 const mensaje = ref('')
 const mensajeError = ref(false)
 
+// RF105: Evaluaciones precargadas y modo
+const modoCreacion = ref('cero') // 'cero' | 'precargada'
+const plantillasPrecargadas = ref([])
+const plantillaSeleccionadaId = ref(null)
+const preguntas = ref([])
+
+function seleccionarModo(modo) {
+  modoCreacion.value = modo
+}
+
+function agregarPreguntaVacia() {
+  preguntas.value.push({
+    enunciado: '',
+    tipo: 'opcion_multiple',
+    opciones: [
+      { id: 'a', texto: '' },
+      { id: 'b', texto: '' },
+      { id: 'c', texto: '' },
+      { id: 'd', texto: '' }
+    ],
+    respuesta_correcta: 'a',
+    puntaje: 10
+  })
+}
+
+function eliminarPregunta(idx) {
+  preguntas.value.splice(idx, 1)
+}
+
+function cargarPlantillaEnFormulario(p) {
+  plantillaSeleccionadaId.value = p.id
+  titulo.value = p.titulo
+  descripcion.value = p.descripcion || ''
+  modelo.value = {
+    tipo: p.tipo,
+    ejercicio: p.ejercicio,
+    criterio: p.criterio ? JSON.parse(JSON.stringify(p.criterio)) : null
+  }
+  preguntas.value = p.preguntas ? JSON.parse(JSON.stringify(p.preguntas)) : []
+  modoCreacion.value = 'cero' // Volver al formulario para editarla
+}
+
+function limpiarPlantilla() {
+  plantillaSeleccionadaId.value = null
+  titulo.value = ''
+  descripcion.value = ''
+  modelo.value = modeloVacio()
+  preguntas.value = []
+}
+
 async function cargarLista() {
   if (!aulaId.value) return
   const res = await obtenerEvaluacionesAula(aulaId.value)
@@ -97,6 +307,12 @@ async function guardar() {
   intentado.value = true
   mensaje.value = ''
   if (validarTipoEvaluacion(modelo.value).length) return
+  if (!titulo.value.trim()) {
+    mensaje.value = 'El título de la evaluación es obligatorio.'
+    mensajeError.value = true
+    return
+  }
+
   guardando.value = true
   const res = await crearEvaluacion({
     aulaId: aulaId.value,
@@ -104,47 +320,233 @@ async function guardar() {
     titulo: titulo.value,
     descripcion: descripcion.value,
     modelo: modelo.value,
+    preguntas: preguntas.value,
+    precargadaBaseId: plantillaSeleccionadaId.value,
     puedeGestionar: puedeGestionar.value
   })
   guardando.value = false
   mensajeError.value = !res.success
+
   if (!res.success) {
     mensaje.value = res.error
     return
   }
+
   mensaje.value = res.origen === 'local'
-    ? 'Evaluación guardada solo en este navegador: no hay sesión con la base de datos.'
-    : 'Evaluación guardada.'
-  titulo.value = ''
-  descripcion.value = ''
-  modelo.value = modeloVacio()
+    ? 'Evaluación guardada localmente.'
+    : '¡Evaluación guardada exitosamente en la base de datos!'
+
+  limpiarPlantilla()
   intentado.value = false
   await cargarLista()
 }
 
+async function duplicarExistente(ev) {
+  guardando.value = true
+  const res = await duplicarEvaluacion({
+    evaluacionOriginalId: ev.id,
+    aulaId: aulaId.value,
+    creadorId: currentUserId.value,
+    puedeGestionar: puedeGestionar.value
+  })
+  guardando.value = false
+  if (res.success) {
+    mensaje.value = `¡Evaluación "${ev.titulo}" duplicada con éxito!`
+    mensajeError.value = false
+    await cargarLista()
+  } else {
+    mensaje.value = res.error
+    mensajeError.value = true
+  }
+}
+
 onMounted(async () => {
   if (!puedeGestionar.value) return
-  const res = await obtenerAulas({
+  
+  // 1. Cargar Aulas
+  const resAulas = await obtenerAulas({
     usuarioId: currentUserId.value,
     usuarioCorreo: currentUserEmail.value,
     esAdmin: isAdmin.value,
     esProfesor: isProfesor.value
   })
-  aulas.value = res.data || []
+  aulas.value = resAulas.data || []
   if (aulas.value.length) {
     aulaId.value = aulas.value[0].id
     await cargarLista()
   }
+
+  // 2. Cargar Evaluaciones Precargadas
+  const resPre = await obtenerEvaluacionesPrecargadas()
+  plantillasPrecargadas.value = resPre.data || []
 })
 </script>
 
 <style scoped>
-.evaluaciones-container { max-width: 800px; margin: 0 auto; }
+.evaluaciones-container { max-width: 900px; margin: 0 auto; }
 .header-desc { color: var(--color-muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
-.lista { margin-top: 2rem; }
-.lista-titulo { font-size: 1.1rem; margin: 0 0 0.75rem; }
-.lista-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
-.lista-item { padding: 0.75rem 1rem; border: 1px solid var(--color-border); border-radius: 8px; display: grid; gap: 0.35rem; }
+
+/* Selector de Modos */
+.modo-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: 0.5rem;
+}
+.modo-tab-btn {
+  background: none;
+  border: none;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+.modo-tab-btn.activo {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+/* Catálogo de Precargadas */
+.catalogo-precargadas {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.seccion-subtitulo {
+  font-size: 1rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #1e293b;
+}
+.grid-plantillas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1rem;
+}
+.plantilla-card {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.5rem;
+  transition: border-color 0.2s;
+}
+.plantilla-card:hover {
+  border-color: #6366f1;
+}
+.plantilla-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.badge-tipo { background: #e0f2fe; color: #0369a1; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
+.badge-preguntas { background: #f1f5f9; color: #475569; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
+.plantilla-titulo { margin: 0.25rem 0; font-size: 1rem; color: #0f172a; }
+.plantilla-desc { font-size: 0.85rem; color: #64748b; margin: 0; flex: 1; }
+.plantilla-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.banner-precargada {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+/* Sección Preguntas */
+.seccion-preguntas {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+.preguntas-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.preguntas-titulo { font-size: 1.05rem; margin: 0; }
+.preguntas-desc { font-size: 0.85rem; color: var(--color-muted); margin: 0.2rem 0 0; }
+.preguntas-vacio {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 6px;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+.pregunta-box {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.pregunta-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.pregunta-numero { font-weight: 600; font-size: 0.9rem; color: #475569; }
+.btn-borrar-pregunta {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+.btn-borrar-pregunta:hover { background: #fee2e2; }
+.fila-puntaje-tipo { display: flex; gap: 1rem; }
+.opciones-box {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+.opcion-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.opcion-letra { font-weight: 600; width: 22px; font-size: 0.85rem; color: #64748b; }
+.form-input-sm { padding: 0.35rem 0.5rem; font-size: 0.85rem; }
+
+/* Listado de Evaluaciones */
+.lista { margin-top: 2.5rem; }
+.lista-titulo { font-size: 1.15rem; margin: 0 0 1rem; }
+.lista-items { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+.lista-item { padding: 1rem 1.25rem; border: 1px solid var(--color-border); border-radius: 8px; display: grid; gap: 0.5rem; background: #fff; }
 .lista-cabecera { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-.badge-local { background: #fef3c7; color: #92400e; }
+.lista-item-desc { font-size: 0.85rem; color: #64748b; margin: 0; }
+.lista-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem; }
+.badge-precargada { background: #e0e7ff; color: #3730a3; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
+.badge-personalizada { background: #f1f5f9; color: #334155; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
+.badge-local { background: #fef3c7; color: #92400e; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
+.btn-block { width: 100%; margin-top: 1rem; }
 </style>
