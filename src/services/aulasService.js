@@ -227,22 +227,49 @@ export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
 }
 
 /**
- * RF103: Obtener evaluaciones asociadas al aula (datos reales de Supabase / locales)
+ * RF103 / RF105: Obtener evaluaciones asociadas al aula (datos reales de Supabase / creadas)
  */
 export async function obtenerEvaluacionesAula(aulaId) {
   if (!aulaId) return { success: true, data: [] }
+  
+  // 1. Consultar en Supabase por el aulaId real
   try {
     const { data, error } = await supabase
       .from('evaluaciones')
       .select('*')
-      .or(`aula_id.eq.${aulaId},aula_id.is.null`)
-      .order('creada_en', { ascending: false })
+      .eq('aula_id', aulaId)
+      .order('creado_en', { ascending: false })
 
     if (!error && data && data.length > 0) {
-      return { success: true, data }
+      return { 
+        success: true, 
+        data: data.map(e => ({
+          ...e,
+          activa: e.estado ? e.estado !== 'borrador' : true,
+          creada_en: e.creado_en
+        }))
+      }
     }
   } catch (_) {}
 
+  // 2. Si no están en Supabase o es modo local, buscar en el almacenamiento de evaluaciones
+  const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
+  let locales = []
+  try {
+    locales = JSON.parse(localStorage.getItem(STORAGE_EVALUACIONES) || '[]')
+  } catch (_) {}
+
+  const evalsLocales = locales.filter(e => e.aula_id === aulaId).map(e => ({
+    ...e,
+    activa: true,
+    creada_en: e.creado_en || e.creada_en
+  }))
+
+  if (evalsLocales.length > 0) {
+    return { success: true, data: evalsLocales }
+  }
+
+  // 3. Fallback de muestra para aulas demo
   const evals = evaluacionesLocales.filter(e => !e.aula_id || e.aula_id === aulaId)
   return { success: true, data: evals }
 }

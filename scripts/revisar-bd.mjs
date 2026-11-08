@@ -176,6 +176,28 @@ async function revisarBaseDeDatos() {
     })))
   }
 
+  // 8. EVALUACIONES (RF105)
+  const { data: evals, error: errEvals } = await supabase
+    .from('evaluaciones')
+    .select('id, aula_id, titulo, tipo, ejercicio, creado_en')
+    .order('creado_en', { ascending: false })
+
+  console.log('\n📌 6. TABLA EVALUACIONES (RF105):')
+  if (errEvals) {
+    console.error('   ❌ Error al consultar evaluaciones:', errEvals.message)
+  } else if (!evals || evals.length === 0) {
+    console.log('   ℹ️  No hay evaluaciones guardadas todavía en la base de datos.')
+  } else {
+    console.log(`   ✓ Total de evaluaciones en la BD: ${evals.length}`)
+    console.table(evals.map(e => ({
+      'Título': e.titulo,
+      'Tipo': e.tipo,
+      'Ejercicio': e.ejercicio || 'N/A (Teórica)',
+      'Aula ID': e.aula_id,
+      'Fecha': new Date(e.creado_en).toLocaleString('es-CL')
+    })))
+  }
+
   console.log('\n=============================================================\n')
 }
 
