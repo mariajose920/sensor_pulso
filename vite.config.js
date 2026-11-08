@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
           id: '/',
           name: 'sensor_pulso',
           short_name: 'sensor_pulso',
-          description: 'Plataforma educativa para medir, visualizar, comparar e interpretar la frecuencia cardíaca y la SpO₂ con un ESP32.',
+          description: 'Plataforma educativa para medir, visualizar, comparar e interpretar la frecuencia cardíaca y la SpO₂ con un ESP32. No es un dispositivo médico certificado ni entrega diagnósticos.',
           lang: 'es-CL',
           start_url: '/',
           scope: '/',

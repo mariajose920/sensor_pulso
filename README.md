@@ -2,6 +2,8 @@
 
 Plataforma web educativa, responsiva e instalable (PWA) para medir, visualizar, comparar e interpretar la frecuencia cardíaca y SpO₂ con un ESP32 (hasta 5 sensores) conectado por WiFi.
 
+> **Aviso (RF94):** sensor pulso es una plataforma educativa y de laboratorio. **No es un dispositivo médico certificado ni entrega diagnósticos.** Sus resultados son orientativos y no sustituyen la evaluación de un profesional de la salud. El sensor con ESP32 (MAX30102) es un instrumento didáctico. Cuando un valor se parece a un patrón de referencia (por ejemplo, de taquicardia), es un ejercicio de aprendizaje, no una conclusión sobre la salud de nadie.
+
 Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** — Universidad Adventista de Chile (UNACH).  
 **Líder de proyecto:** Darío Sandoval.
 

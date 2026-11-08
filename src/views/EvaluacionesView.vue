@@ -10,6 +10,8 @@
         </div>
       </div>
 
+      <AvisoEducativo compacto />
+
       <p v-if="!puedeGestionar" class="alert alert-error">Solo los profesores y administradores pueden crear evaluaciones.</p>
 
       <template v-else>
@@ -217,6 +219,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted } from 'vue'
 import TipoEvaluacionForm from '../components/TipoEvaluacionForm.vue'
 import TipoEvaluacionBadge from '../components/TipoEvaluacionBadge.vue'

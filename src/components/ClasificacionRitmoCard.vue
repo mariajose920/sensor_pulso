@@ -5,14 +5,14 @@
       <div>
         <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
           <h2 class="card-title" style="margin: 0; font-size: 1.15rem;">
-            Clasificación del Ritmo Cardíaco (RF18)
+            Simulación de diagnóstico del ritmo cardíaco (RF18)
           </h2>
           <span class="badge badge-subtle font-mono" style="font-size: 0.72rem;">
             AHA & Mayo Clinic
           </span>
         </div>
         <p style="color: var(--color-muted); font-size: 0.85rem; margin-top: 0.25rem; margin-bottom: 0;">
-          Diagnóstico de ritmo en tiempo real (Normal, Taquicardia, Bradicardia o Irregular) y justificación fisiológica fundamentada.
+          Simulación de diagnóstico de ritmo en tiempo real, con fines de aprendizaje: muestra a cuál patrón de referencia (Normal, Taquicardia, Bradicardia o Irregular) se parece tu señal y por qué. No es un diagnóstico.
         </p>
       </div>
 
@@ -49,7 +49,7 @@
             :style="{ backgroundColor: clasificacion.colorHex }"
           ></span>
           <span class="ritmo-titulo" :style="{ color: clasificacion.colorHex }">
-            {{ clasificacion.nombre }}
+            {{ clasificacion.id !== 'sin_datos' ? 'Se parece a: ' : '' }}{{ clasificacion.nombre }}
           </span>
           <span
             class="badge font-mono"
@@ -169,7 +169,7 @@ const props = defineProps({
   regularityLevel: { type: String, default: 'normal' },
   totalBeats: { type: Number, default: 0 },
   paciente: { type: Object, default: null },
-  // RF16: calidad de la señal (RF15). Con 'mala' no se clasifica. Sin dato, se clasifica como antes.
+  // RF16: calidad de la señal (RF15). Con 'mala' no se simula. Sin dato, se simula como antes.
   calidad: { type: String, default: 'buena' }
 })
 

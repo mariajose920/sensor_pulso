@@ -204,9 +204,9 @@ const estadoRitmo = computed(() => evaluacion.value.estado)
 
 const etiquetaEstadoRitmo = computed(() => {
   if (!tieneLecturaValida.value) return 'Sin señal'
-  if (estadoRitmo.value === 'taquicardia') return 'Taquicardia (>100)'
-  if (estadoRitmo.value === 'bradicardia') return 'Bradicardia (<60)'
-  return 'Normocardia (Normal)'
+  if (estadoRitmo.value === 'taquicardia') return 'Rango de taquicardia (>100)'
+  if (estadoRitmo.value === 'bradicardia') return 'Rango de bradicardia (<60)'
+  return 'Rango normal (normocardia)'
 })
 
 // Animación de latido sincronizada con el valor en BPM
