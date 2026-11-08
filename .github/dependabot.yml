@@ -1,0 +1,18 @@
+# ISO 27001 A.8.8: revisión semanal de dependencias con vulnerabilidades conocidas.
+# Dependabot abre PR hacia develop; se revisan con el mismo flujo que cualquier cambio.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: [dependencias]
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels: [dependencias]

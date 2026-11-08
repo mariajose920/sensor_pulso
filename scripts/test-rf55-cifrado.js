@@ -4,6 +4,12 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { cifradoService } from '../src/utils/cifradoService.js'
 
+// El cifrado vive solo en el servidor (api/_lib/cifradoSalud.js). Clave de prueba, nunca la de producción.
+process.env.CLAVE_CIFRADO_CAMPOS = (await import('node:crypto')).randomBytes(24).toString('base64') // aleatoria en cada ejecución
+const { cifrarFactores, descifrarSobre, versionDeSobre } = await import('../api/_lib/cifradoSalud.js')
+const cifrarHex = async (obj, version) => (await cifrarFactores(obj, version ? { version } : {})).hex
+const recuperar = async (hex, version) => { try { return await descifrarSobre(hex, version ? { version } : {}) } catch { return {} } }
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, '..')
@@ -131,7 +137,7 @@ async function ejecutarPruebas() {
       condicionSalud: 'Ninguna conocida'
     }
 
-    const hexCifrado = await cifradoService.cifrarFactoresSalud(factoresOriginales)
+    const hexCifrado = await cifrarHex(factoresOriginales)
     assert(typeof hexCifrado === 'string', 'El resultado debe ser una cadena')
     assert(hexCifrado.startsWith('\\x535043'), 'El sobre cifrado debe iniciar con cabecera mágica SPC (\\x535043)')
 
@@ -143,7 +149,7 @@ async function ejecutarPruebas() {
     assert(cifradoService.esDatoCifrado(hexCifrado), 'Debe reconocer el sobre cifrado como dato cifrado válido')
 
     // Descifrado
-    const factoresRecuperados = await cifradoService.descifrarFactoresSalud(hexCifrado)
+    const factoresRecuperados = await recuperar(hexCifrado)
     assert.strictEqual(factoresRecuperados.nivelEstres, factoresOriginales.nivelEstres)
     assert.strictEqual(factoresRecuperados.suenoHoras, factoresOriginales.suenoHoras)
     assert.strictEqual(factoresRecuperados.cafeina, factoresOriginales.cafeina)
@@ -152,7 +158,7 @@ async function ejecutarPruebas() {
 
   await testAsync('cifradoService: Detección de alteración (Tamper Detection) con fallo de autenticación GCM', async () => {
     const factores = { sensible: 'paciente_confidencial_unach' }
-    const hexCifrado = await cifradoService.cifrarFactoresSalud(factores)
+    const hexCifrado = await cifrarHex(factores)
 
     // Alterar 1 bit en el texto cifrado
     const bytes = hexCifrado.split('')
@@ -161,7 +167,7 @@ async function ejecutarPruebas() {
     const hexAlterado = bytes.join('')
 
     // Al estar alterado, GCM debe fallar en la verificación del tag y retornar objeto vacío (rechazado)
-    const recuperado = await cifradoService.descifrarFactoresSalud(hexAlterado)
+    const recuperado = await recuperar(hexAlterado)
     assert.deepStrictEqual(recuperado, {}, 'Un sobre manipulado debe ser rechazado por autenticación GCM')
   })
 
@@ -171,7 +177,7 @@ async function ejecutarPruebas() {
     const hexAntiguo = '\\x' + Buffer.from(jsonAntiguo, 'utf8').toString('hex')
 
     assert(!cifradoService.esDatoCifrado(hexAntiguo), 'Un dato legacy no debe identificarse con cabecera SPC')
-    const recuperado = await cifradoService.descifrarFactoresSalud(hexAntiguo)
+    const recuperado = await recuperar(hexAntiguo)
     assert.strictEqual(recuperado.suenoHoras, '5_6')
     assert.strictEqual(recuperado.cafeina, 'moderada')
   })
@@ -181,7 +187,7 @@ async function ejecutarPruebas() {
     assert.strictEqual(estado.rf55, 'cumplido')
     assert.strictEqual(estado.enTransito.esp32Tls, true)
     assert.strictEqual(estado.enTransito.supabaseTls, true)
-    assert.strictEqual(estado.enReposo.versionClave, 1)
+    assert.strictEqual(estado.enReposo.claveEnElNavegador, 'Ninguna: el navegador no tiene claves')
     assert.strictEqual(estado.enReposo.clasificacionDatos, 'sensible_salud (ISO 27001)')
   })
 

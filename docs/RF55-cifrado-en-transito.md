@@ -78,7 +78,7 @@ El requerimiento **RF55** garantiza la confidencialidad, autenticidad e integrid
      - **Persistencia PostgreSQL:** Almacenado en formato hexadecimal compatible con la columna `bytea` (`\x53504301...`).
      - **Detección de Manipulación (Tamper Detection):** Cualquier alteración en los bytes almacenados provoca el rechazo automático en la verificación del tag de autenticación.
      - **Retrocompatibilidad:** Capacidad de decodificar de forma transparente registros previos no cifrados o en formato JSON crudo sin pérdida de datos.
-     - **Rotación de Claves:** Soporta claves versionadas (`clave_version`) vinculadas a la variable de entorno `CLAVE_CIFRADO_CAMPOS` o `VITE_ENCRYPTION_KEY`.
+     - **Rotación de Claves:** Soporta claves versionadas (`clave_version`) vinculadas a variables de entorno **solo del servidor** (`CLAVE_CIFRADO_CAMPOS`, `SALUD_ENCRYPTION_KEY_V<n>`). El cifrado y el descifrado ocurren en `api/declaraciones/` (RF88/ISO 27001 A.8.24); el navegador no tiene claves y no existe clave por defecto.
 
 3. **Clasificación en Catálogo de Base de Datos:**
    - La tabla `clasificacion_datos` cataloga explícitamente:
