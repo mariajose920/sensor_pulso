@@ -19,24 +19,25 @@
         >{{ e.texto }}</router-link>
       </nav>
 
-      <!-- Estado de sesión (RF02) -->
-            <!-- Estado de sesión (RF02 y RF51) -->
-      <template v-if="isAuthenticated">
-        <span class="user-chip">👤 {{ currentUserName }} <small>({{ roleLabel }})</small></span>
-        <button 
-          type="button" 
-          class="btn btn-secondary btn-acceso btn-otras-sesiones" 
-          @click="manejarCerrarOtrasSesiones" 
-          title="Cerrar las demás sesiones abiertas en otros navegadores o dispositivos"
-        >
-          Otras Sesiones
-        </button>
-        <button type="button" class="btn btn-secondary btn-acceso" @click="logout">Salir</button>
-      </template>
-      <router-link v-else to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
-        <NavIcon name="usuario" class="solo-movil" />
-        <span class="btn-acceso-texto">Acceso</span>
-      </router-link>
+      <!-- Estado de sesión (RF02 y RF51) -->
+      <div class="nav-acciones">
+        <template v-if="isAuthenticated">
+          <span class="user-chip" :title="`${currentUserName} (${roleLabel})`">👤 <span class="user-chip-nombre">{{ currentUserName }}</span> <small>({{ roleLabel }})</small></span>
+          <button
+            type="button"
+            class="btn btn-secondary btn-acceso btn-otras-sesiones"
+            @click="manejarCerrarOtrasSesiones"
+            title="Cerrar las demás sesiones abiertas en otros navegadores o dispositivos"
+          >
+            Otras Sesiones
+          </button>
+          <button type="button" class="btn btn-secondary btn-acceso" @click="logout">Salir</button>
+        </template>
+        <router-link v-else to="/login" class="btn btn-secondary btn-acceso btn-login" aria-label="Acceso">
+          <NavIcon name="usuario" class="solo-movil" />
+          <span class="btn-acceso-texto">Acceso</span>
+        </router-link>
+      </div>
     </header>
 
     <!-- RNF03: aviso sin conexión y opción de instalar la app -->
@@ -49,6 +50,10 @@
     <footer class="footer">
       <p>sensor_pulso — Plataforma Educativa de Monitoreo de Frecuencia Cardíaca y SpO₂ (UNACH)</p>
       <p class="footer-aviso" data-testid="aviso-pie">{{ AVISO_EDUCATIVO_CORTO }}</p>
+      <p>
+        <router-link to="/privacidad" data-testid="enlace-privacidad">Política de privacidad</router-link>
+        <template v-if="isAuthenticated"> · <router-link to="/mis-datos" data-testid="enlace-mis-datos">Mis datos y derechos</router-link></template>
+      </p>
     </footer>
 
     <!-- Barra inferior (solo móvil): íconos con texto, fácil de tocar con el pulgar. -->
@@ -111,6 +116,7 @@ const enlaces = computed(() => {
   const lista = [...enlacesBase]
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
+  if (isAdmin.value) lista.push({ to: '/admin/seguridad', texto: 'Seguridad', corto: 'Seguridad', icono: 'usuario' })
   else if (isProfesor.value) {
     lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
     lista.push({ to: '/contenidos', texto: 'Contenidos', corto: 'Contenidos', icono: 'comparacion' })   // RF46
@@ -191,17 +197,41 @@ main.container {
   padding-right: max(1.5rem, env(safe-area-inset-right));
   transition: transform 0.2s ease;
 }
-.nav-links { flex: 1; justify-content: center; flex-wrap: wrap; row-gap: 0; }
-.nav-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.35rem; }
+/* Por defecto (< 1360px): dos filas. Fila 1 = marca + acciones; fila 2 = enlaces a todo el ancho. */
+.navbar { flex-wrap: wrap; row-gap: 0; }
+.nav-brand { order: 1; flex-shrink: 0; }
+.nav-acciones {
+  order: 2;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.nav-links {
+  order: 3;
+  flex: 1 1 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+.nav-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.35rem; white-space: nowrap; }
 .nav-link.activo { color: var(--color-primary); box-shadow: inset 0 -2px 0 var(--color-primary); }
 .btn-acceso { padding: 0.35rem 0.85rem; font-size: 0.85rem; min-height: 44px; text-decoration: none; }
 
 .bottom-nav { display: none; }
 
-/* Tablet: los enlaces caben, pero más juntos */
+/* Escritorio ancho: todo en una sola fila */
+@media (min-width: 1360px) {
+  .navbar { flex-wrap: nowrap; }
+  .nav-links { order: 2; flex: 1; border-top: 0; gap: 0 1rem; }
+  .nav-acciones { order: 3; margin-left: 0; }
+}
+
+/* Tablet */
 @media (max-width: 1024px) {
-  .navbar { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); gap: 0.5rem; }
-  .nav-links { gap: 0.5rem; }
+  .navbar { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
   .nav-link { font-size: 0.9rem; }
 }
 
@@ -216,6 +246,9 @@ main.container {
   .navbar.oculto { transform: translateY(-100%); }
   .nav-links { display: none; }
   .nav-brand { flex: 1; min-width: 0; font-size: 1.1rem; }
+  .nav-acciones { gap: 0.35rem; flex-shrink: 0; }
+  .user-chip { max-width: 34vw; }
+  .btn-otras-sesiones { margin-right: 0; padding: 0 0.6rem; }
   .btn-acceso { padding: 0 0.75rem; }
 
   .bottom-nav {
@@ -262,9 +295,27 @@ main.container {
 }
 
 /* Móvil muy pequeño: solo el ícono en el botón de acceso */
+@media (max-width: 520px) {
+  .nav-brand { overflow: hidden; }
+  .nav-brand-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-chip small { display: none; }
+  .user-chip { padding: 0.35rem 0.5rem; max-width: 28vw; }
+  .btn-otras-sesiones { font-size: 0.75rem; padding: 0 0.5rem; }
+}
+
+@media (max-width: 440px) {
+  .nav-brand-texto { display: none; }
+}
+
+/* Pantallas muy angostas: el chip queda solo con el ícono (el nombre sigue en el title) */
+@media (max-width: 360px) {
+  .user-chip-nombre { display: none; }
+  .nav-acciones { gap: 0.25rem; }
+}
+
 @media (max-width: 400px) {
   .btn-acceso-texto { display: none; }
-  .btn-acceso { width: 44px; padding: 0; }
+  .btn-login { width: 44px; padding: 0; }
   .nav-brand-texto { font-size: 1rem; }
 }
 
@@ -277,7 +328,7 @@ main.container {
 }
 
 .btn-otras-sesiones {
-  margin-right: 0.35rem;
+  white-space: nowrap;
   font-size: 0.8rem;
   padding: 0.4rem 0.65rem;
 }

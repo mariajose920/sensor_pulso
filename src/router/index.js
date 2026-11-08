@@ -14,10 +14,33 @@ import RangosView from '../views/RangosView.vue'
 import ContenidosView from '../views/ContenidosView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import HistorialView from '../views/HistorialView.vue'
+import PrivacidadView from '../views/PrivacidadView.vue'
+import MisDatosView from '../views/MisDatosView.vue'
+import SeguridadAdminView from '../views/SeguridadAdminView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 
 const routes = [
+  {
+    // RF88: política de privacidad, pública (se lee antes de crear la cuenta)
+    path: '/privacidad',
+    name: 'Privacidad',
+    component: PrivacidadView
+  },
+  {
+    // RF89/RF90: cada persona ve y gestiona solo sus propios datos
+    path: '/mis-datos',
+    name: 'MisDatos',
+    component: MisDatosView,
+    meta: { requiresAuth: true }
+  },
+  {
+    // RF89/RF92: solicitudes de derechos, incidentes y brechas; solo administrador (la RLS también lo exige)
+    path: '/admin/seguridad',
+    name: 'SeguridadAdmin',
+    component: SeguridadAdminView,
+    meta: { requiresAuth: true, roles: [ROLES.ADMIN] }
+  },
   {
     path: '/',
     name: 'Home',

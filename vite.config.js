@@ -2,70 +2,35 @@ import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
+import fs from 'fs'
+import { pathToFileURL } from 'url'
 
-// Plugin para simular los endpoints de la API de Vercel (/api/esp32/telemetria e /api/invitaciones/enviar) en desarrollo local
+// Plugin para simular en desarrollo local las funciones de Vercel de la carpeta /api (/api/<carpeta>/<archivo>).
+// Los archivos o carpetas que empiezan con «_» son internos y no se exponen.
 function apiDevPlugin() {
   return {
     name: 'api-dev-plugin',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const url = req.url || ''
-        if (url === '/api/esp32/telemetria' || url.startsWith('/api/esp32/telemetria?')) {
-          let body = ''
-          req.on('data', chunk => {
-            body += chunk
-          })
-          req.on('end', async () => {
-            req.body = body
-            try {
-              const { default: handler } = await import('./api/esp32/telemetria.js')
-              await handler(req, res)
-            } catch (err) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ ok: false, error: err.message }))
-            }
-          })
-          return
-        }
-
-                if (url === '/api/declaraciones/descifrar' || url.startsWith('/api/declaraciones/descifrar?')) {
-          let body = ''
-          req.on('data', chunk => { body += chunk })
-          req.on('end', async () => {
-            req.body = body
-            try {
-              const { default: handler } = await import('./api/declaraciones/descifrar.js')
-              await handler(req, res)
-            } catch (err) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ ok: false, error: err.message }))
-            }
-          })
-          return
-        }
-
-        if (url === '/api/invitaciones/enviar' || url.startsWith('/api/invitaciones/enviar?')) {
-          let body = ''
-          req.on('data', chunk => {
-            body += chunk
-          })
-          req.on('end', async () => {
-            req.body = body
-            try {
-              const { default: handler } = await import('./api/invitaciones/enviar.js')
-              await handler(req, res)
-            } catch (err) {
-              res.statusCode = 500
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ ok: false, error: err.message }))
-            }
-          })
-          return
-        }
-
-        next()
+        const coincide = /^\/api\/([a-z0-9-]+)\/([a-z0-9-]+)(?:\?.*)?$/i.exec(req.url || '')
+        if (!coincide) return next()
+        const [, carpeta, archivo] = coincide
+        const ruta = path.resolve(process.cwd(), 'api', carpeta, `${archivo}.js`)
+        if (!fs.existsSync(ruta)) return next()
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', async () => {
+          req.body = body
+          try {
+            const { default: handler } = await import(pathToFileURL(ruta).href)
+            await handler(req, res)
+          } catch (err) {
+            console.error('[api-dev]', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: false, error: 'Error interno.' }))
+          }
+        })
       })
     }
   }

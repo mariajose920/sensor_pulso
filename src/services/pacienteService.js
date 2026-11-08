@@ -5,7 +5,7 @@
  * - Datos obligatorios: nombre, edad (18-120, solo mayores de edad) y nivel de estrés.
  * - Factores que afectan la medición: sueño, cafeína, medicación, actividad previa y condición de salud.
  * - Persistencia en Supabase (tabla declaraciones_paciente con bytea para datos_cifrados)
- * - Persistencia en localStorage para soporte sin conexión (RNF03 - PWA offline).
+ * - Copia de trabajo solo en la pestaña (sessionStorage), borrada al cerrar sesión (ISO 27001 A.8.1).
  */
 import { supabase } from './supabase.js'
 import { ACTIVIDADES_CANONICAS, normalizarActividadId, obtenerNombreActividad } from './actividadesService.js'
@@ -120,25 +120,36 @@ export const CONDICIONES_SALUD_COMUNES = [
 const LOCAL_STORAGE_KEY = 'sensor_paciente_declaracion_rf03'
 
 /**
- * Convierte un objeto a formato hex cifrado (AES-256-GCM) para la columna bytea de PostgreSQL (RF55, RF116)
+ * Copia de trabajo de la ficha en el dispositivo (ISO 27001 A.8.1, riesgo R8).
+ * Es dato de salud: vive solo en la pestaña (sessionStorage), no sobrevive al cierre del navegador y se borra
+ * al cerrar sesión. Antes estaba en localStorage, donde quedaba legible para quien usara el mismo equipo después.
  */
-async function encodeObjectToByteaHex(obj) {
-  try {
-    return await cifradoService.cifrarFactoresSalud(obj)
-  } catch {
-    return '\\x7b7d'
-  }
+const almacenFicha = {
+  getItem: (k) => { try { return sessionStorage.getItem(k) } catch { return null } },
+  setItem: (k, v) => { try { sessionStorage.setItem(k, v) } catch { /* sin almacenamiento */ } },
+  removeItem: (k) => { try { sessionStorage.removeItem(k) } catch { /* sin almacenamiento */ } }
+}
+
+// Borra la copia antigua que versiones anteriores dejaron en localStorage
+try { localStorage.removeItem(LOCAL_STORAGE_KEY) } catch { /* sin almacenamiento */ }
+
+/**
+ * Cifra los factores de salud EN EL SERVIDOR (RF55, RF116). Lanza error si no se puede: nunca se guarda en claro.
+ */
+async function cifrarEnServidor(obj, token) {
+  return cifradoService.cifrarFactoresSalud(obj, { token })
 }
 
 /**
- * Decodifica y descifra una cadena hex bytea (\x...) de PostgreSQL a un objeto JavaScript (RF55, RF116)
+ * Descifra una declaración en el servidor, solo para su titular (RF116). Los registros antiguos en texto plano se leen sin servidor.
  */
-async function decodeByteaHexToObject(byteaStr, claveVersion = 1, declaracionId = null, token = null, usuarioId = null) {
-  if (!byteaStr) return {}
+async function descifrarDeclaracion(fila, token) {
+  if (!fila?.datos_cifrados) return {}
+  if (!cifradoService.esDatoCifrado(fila.datos_cifrados)) return cifradoService.leerSinCifrar(fila.datos_cifrados)
   try {
-    return await cifradoService.descifrarFactoresSaludEnServidor({ declaracionId, datosCifrados: byteaStr, claveVersion, token, usuarioId })
+    return await cifradoService.descifrarDeclaracion({ declaracionId: fila.id, token })
   } catch (e) {
-    console.warn('No se pudo descifrar datos_cifrados de la declaración:', e)
+    console.warn('No se pudo descifrar la declaración:', e.message)
     return {}
   }
 }
@@ -218,7 +229,7 @@ export const pacienteService = {
 
     // 1. Guardar siempre en localStorage (para uso sin conexión o sin sesión iniciada)
     try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(declaracionNormalizada))
+      almacenFicha.setItem(LOCAL_STORAGE_KEY, JSON.stringify(declaracionNormalizada))
     } catch (e) {
       console.warn('Error guardando paciente en localStorage:', e)
     }
@@ -228,7 +239,8 @@ export const pacienteService = {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user?.id) {
-        const byteaHex = await encodeObjectToByteaHex(factoresSalud)
+        // El cifrado ocurre en el servidor; si falla, los datos de salud NO se envían a la base (quedan solo en el dispositivo)
+        const { datosCifrados, claveVersion } = await cifrarEnServidor(factoresSalud, session.access_token)
 
         const { data, error } = await supabase
           .from('declaraciones_paciente')
@@ -236,8 +248,8 @@ export const pacienteService = {
             usuario_id: session.user.id,
             nombre: declaracionNormalizada.nombre,
             edad: declaracionNormalizada.edad,
-            datos_cifrados: byteaHex,
-            clave_version: cifradoService.obtenerVersionActiva()
+            datos_cifrados: datosCifrados,
+            clave_version: claveVersion
           })
           .select('id, creado_en')
           .single()
@@ -248,7 +260,7 @@ export const pacienteService = {
           declaracionId = data.id
           declaracionNormalizada.id = data.id
           declaracionNormalizada.creadoEn = data.creado_en
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(declaracionNormalizada))
+          almacenFicha.setItem(LOCAL_STORAGE_KEY, JSON.stringify(declaracionNormalizada))
         }
       }
     } catch (err) {
@@ -279,7 +291,7 @@ export const pacienteService = {
           .maybeSingle()
 
         if (!error && data) {
-          const factores = await decodeByteaHexToObject(data.datos_cifrados, data.clave_version, data.id, session.access_token, session.user.id)
+          const factores = await descifrarDeclaracion(data, session.access_token)
           const consolidado = {
             id: data.id,
             nombre: data.nombre,
@@ -291,7 +303,7 @@ export const pacienteService = {
             actualizadoEn: data.creado_en,
             origen: 'supabase'
           }
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(consolidado))
+          almacenFicha.setItem(LOCAL_STORAGE_KEY, JSON.stringify(consolidado))
           return consolidado
         }
       }
@@ -301,7 +313,7 @@ export const pacienteService = {
 
     // 2. Si no hay conexión o no está en Supabase, cargar de localStorage
     try {
-      const guardado = localStorage.getItem(LOCAL_STORAGE_KEY)
+      const guardado = almacenFicha.getItem(LOCAL_STORAGE_KEY)
       if (guardado) {
         const parsed = JSON.parse(guardado)
         parsed.origen = parsed.id ? 'supabase_cache' : 'local'
@@ -319,7 +331,7 @@ export const pacienteService = {
    */
   obtenerUltimaDeclaracion() {
     try {
-      const guardado = localStorage.getItem(LOCAL_STORAGE_KEY)
+      const guardado = almacenFicha.getItem(LOCAL_STORAGE_KEY)
       return guardado ? JSON.parse(guardado) : null
     } catch (e) {
       return null
@@ -328,7 +340,7 @@ export const pacienteService = {
 
   limpiarDeclaracionLocal() {
     try {
-      localStorage.removeItem(LOCAL_STORAGE_KEY)
+      almacenFicha.removeItem(LOCAL_STORAGE_KEY)
       return true
     } catch (e) {
       return false

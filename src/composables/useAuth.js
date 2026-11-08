@@ -152,7 +152,7 @@ export function useAuth() {
     }
   }
 
-  const register = async (email, password, nombreCompleto) => {
+  const register = async (email, password, nombreCompleto, politicaVersion = null) => {
     authError.value = null
     const validacion = validarCorreoInstitucional(email)
     if (!validacion.valido) return { success: false, error: validacion.error }
@@ -164,6 +164,7 @@ export function useAuth() {
         options: {
           data: {
             nombre_completo: nombreCompleto,
+            politica_version: politicaVersion, // RF88: política de privacidad que la persona aceptó
             rol: validacion.rol,
             tipo_cuenta: validacion.tipo
           }

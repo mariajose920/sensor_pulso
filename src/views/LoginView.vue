@@ -67,6 +67,9 @@
 
       <!-- RF75: aviso educativo antes de usar la plataforma -->
       <AvisoEducativo compacto />
+      <p class="nota-privacidad" style="font-size: 0.85rem; margin: 0 0 0.75rem;">
+        Al usar la plataforma tratamos tus datos según la <router-link to="/privacidad" data-testid="enlace-privacidad-login">política de privacidad</router-link>.
+      </p>
 
       <!-- Formulario de Autenticación -->
       <form @submit.prevent="handleSubmit">
@@ -150,10 +153,15 @@
           </div>
         </div>
 
+        <label v-if="mode === 'register'" class="acepta-politica" style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.88rem; margin: 0 0 1rem;">
+          <input v-model="aceptaPolitica" type="checkbox" data-testid="acepta-politica" style="margin-top: 0.2rem;" />
+          <span>He leído y acepto la <router-link to="/privacidad" target="_blank">política de privacidad</router-link>.</span>
+        </label>
+
         <button 
           type="submit" 
           class="btn btn-primary w-full"
-          :disabled="loading || (mode === 'login' && cuentaBloqueada) || (mode === 'register' && !fuerzaPassword.valida)"
+          :disabled="loading || (mode === 'login' && cuentaBloqueada) || (mode === 'register' && (!fuerzaPassword.valida || !aceptaPolitica))"
         >
           {{ loading ? 'Procesando...' : (mode === 'login' ? (cuentaBloqueada ? 'Cuenta Bloqueada' : 'Iniciar Sesión') : 'Crear Cuenta') }}
         </button>
@@ -209,6 +217,7 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
@@ -222,6 +231,7 @@ const { login, register, resendConfirmationEmail, loading, solicitarRecuperacion
 
 const mode = ref('login')
 const nombre = ref('')
+const aceptaPolitica = ref(false)
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
@@ -326,7 +336,12 @@ const handleSubmit = async () => {
       return
     }
 
-    const res = await register(email.value, password.value, nombre.value)
+    if (!aceptaPolitica.value) {
+      errorMessage.value = 'Para crear la cuenta debes aceptar la política de privacidad.'
+      return
+    }
+
+    const res = await register(email.value, password.value, nombre.value, POLITICA_VERSION)
     if (res.success) {
       successMessage.value = 'Cuenta creada correctamente. Te hemos enviado un enlace a tu correo institucional para activar tu cuenta.'
       needsEmailConfirmation.value = true
