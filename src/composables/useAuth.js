@@ -92,8 +92,35 @@ export function useAuth() {
       }
     }
 
-    // 2. Detección directa del Administrador Inicial definido en código (RF44)
+    // 2. Detección del Administrador Inicial (RF44) con sesión real en Supabase
     if (email === PRIMER_ADMIN.email && password === PRIMER_ADMIN.password) {
+      // Intentar autenticación real en Supabase para obtener JWT y permisos RLS en la base de datos
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+        if (!error && data?.user) {
+          await registrarIntentoLogin({ correo: email, exitoso: true })
+          user.value = data.user
+          session.value = data.session
+          localStorage.setItem('sensor_user', JSON.stringify(data.user))
+          await cargarPerfilDesdeBD(data.user.id)
+          if (!profile.value) {
+            profile.value = {
+              id: data.user.id,
+              correo: email,
+              nombre: PRIMER_ADMIN.nombreCompleto,
+              rol: 'profesor',
+              es_admin: true
+            }
+            localStorage.setItem('sensor_profile', JSON.stringify(profile.value))
+          } else {
+            profile.value.es_admin = true
+          }
+          loading.value = false
+          return { success: true, data }
+        }
+      } catch (_) {}
+
+      // Respaldo local seguro si Supabase está offline
       await registrarIntentoLogin({ correo: email, exitoso: true })
       const adminUser = {
         id: '00000000-0000-0000-0000-000000000001',
@@ -158,11 +185,27 @@ export function useAuth() {
     if (!validacion.valido) return { success: false, error: validacion.error }
     loading.value = true
     try {
+      // 1. Verificar primero si el correo ya existe en perfiles de la base de datos
+      const { data: perfilExistente } = await supabase
+        .from('perfiles')
+        .select('id')
+        .eq('correo', email.trim().toLowerCase())
+        .maybeSingle()
+
+      if (perfilExistente) {
+        return { 
+          success: false, 
+          error: 'Este correo institucional ya se encuentra registrado. Inicia sesión o recupera tu contraseña.' 
+        }
+      }
+
+      // 2. Intentar registrar en Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
+                options: {
           data: {
+            nombre: nombreCompleto,
             nombre_completo: nombreCompleto,
             politica_version: politicaVersion, // RF88: política de privacidad que la persona aceptó
             rol: validacion.rol,
@@ -171,9 +214,22 @@ export function useAuth() {
         }
       })
       if (error) throw error
+
+      // 3. Supabase devuelve identities vacío cuando el correo ya existía previamente en auth.users
+      if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+        return { 
+          success: false, 
+          error: 'Este correo institucional ya se encuentra registrado. Inicia sesión o recupera tu contraseña.' 
+        }
+      }
+
       return { success: true, data }
     } catch (err) {
-      return { success: false, error: err.message }
+      let mensaje = err.message
+      if (mensaje.includes('User already registered') || mensaje.includes('already registered')) {
+        mensaje = 'Este correo institucional ya se encuentra registrado. Inicia sesión o recupera tu contraseña.'
+      }
+      return { success: false, error: mensaje }
     } finally {
       loading.value = false
     }

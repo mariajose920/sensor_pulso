@@ -17,6 +17,7 @@ import HistorialView from '../views/HistorialView.vue'
 import PrivacidadView from '../views/PrivacidadView.vue'
 import MisDatosView from '../views/MisDatosView.vue'
 import SeguridadAdminView from '../views/SeguridadAdminView.vue'
+import EvaluacionesView from '../views/EvaluacionesView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 
@@ -82,6 +83,13 @@ const routes = [
     path: '/aulas/:id',
     name: 'AulaDetalle',
     component: AulaDetalleView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
+  },
+  {
+    // RF106: tipos de evaluación; solo profesor o administrador (la RLS también lo exige)
+    path: '/evaluaciones',
+    name: 'Evaluaciones',
+    component: EvaluacionesView,
     meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {
