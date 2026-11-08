@@ -229,6 +229,9 @@ export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
 /**
  * RF103 / RF105: Obtener evaluaciones asociadas al aula (datos reales de Supabase / creadas)
  */
+/**
+ * RF103 / RF104: Obtener evaluaciones asociadas al aula con sus asignaciones reales
+ */
 export async function obtenerEvaluacionesAula(aulaId) {
   if (!aulaId) return { success: true, data: [] }
   
@@ -241,12 +244,24 @@ export async function obtenerEvaluacionesAula(aulaId) {
       .order('creado_en', { ascending: false })
 
     if (!error && data && data.length > 0) {
+      // Consultar asignaciones reales para estas evaluaciones
+      const evalIds = data.map(e => e.id)
+      let asignaciones = []
+      try {
+        const { data: asigData } = await supabase
+          .from('evaluacion_asignaciones')
+          .select('*')
+          .in('evaluacion_id', evalIds)
+        if (asigData) asignaciones = asigData
+      } catch (_) {}
+
       return { 
         success: true, 
         data: data.map(e => ({
           ...e,
           activa: e.estado ? e.estado !== 'borrador' : true,
-          creada_en: e.creado_en
+          creada_en: e.creado_en,
+          asignaciones: asignaciones.filter(a => a.evaluacion_id === e.id)
         }))
       }
     }
@@ -259,10 +274,17 @@ export async function obtenerEvaluacionesAula(aulaId) {
     locales = JSON.parse(localStorage.getItem(STORAGE_EVALUACIONES) || '[]')
   } catch (_) {}
 
+  const STORAGE_ASIG = 'sensor_pulso_evaluacion_asignaciones'
+  let asigLocales = []
+  try {
+    asigLocales = JSON.parse(localStorage.getItem(STORAGE_ASIG) || '[]')
+  } catch (_) {}
+
   const evalsLocales = locales.filter(e => e.aula_id === aulaId).map(e => ({
     ...e,
     activa: true,
-    creada_en: e.creado_en || e.creada_en
+    creada_en: e.creado_en || e.creada_en,
+    asignaciones: asigLocales.filter(a => a.evaluacion_id === e.id)
   }))
 
   if (evalsLocales.length > 0) {

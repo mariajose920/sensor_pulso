@@ -108,7 +108,7 @@
           class="tab-btn" 
           :class="{ 'tab-btn-active': tabActiva === 'evaluaciones' }"
         >
-          Evaluaciones <span class="tab-badge">{{ evaluaciones.length }}</span>
+          Evaluaciones <span class="tab-badge">{{ evaluacionesVisibles.length }}</span>
         </button>
       </div>
 
@@ -290,40 +290,60 @@
         </div>
       </div>
 
-      <!-- ======================================================== -->
-      <!-- PESTAÑA 3: EVALUACIONES                                 -->
+            <!-- ======================================================== -->
+      <!-- PESTAÑA 3: EVALUACIONES (RF103, RF104, RF117)             -->
       <div v-if="tabActiva === 'evaluaciones'" class="tab-panel">
-        <!-- Vista 1: Lista de Evaluaciones (cuando no hay ninguna seleccionada) -->
+        <!-- Vista 1: Lista de Evaluaciones -->
         <div v-if="!evaluacionSeleccionada" class="evaluaciones-list-view">
-          <div class="panel-header mb-4">
+          <div class="panel-header mb-4" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
             <div>
               <h2 class="panel-title">Evaluaciones y Controles Prácticos</h2>
               <p class="panel-desc">
-                Evaluaciones asignadas a esta aula. Selecciona una para supervisar el desempeño general, revisar respuestas y examinar las bioseñales de tus estudiantes.
+                {{ isAdmin || isProfesor ? 'Asigna y administra evaluaciones al aula, por cursos o estudiantes individuales (RF104).' : 'Evaluaciones asignadas para ti en este espacio académico.' }}
               </p>
             </div>
+            <!-- Botón de asignación rápida para el Docente -->
+            <button 
+              v-if="isAdmin || isProfesor" 
+              @click="abrirModalAsignar()" 
+              class="btn btn-primary"
+            >
+              🎯 Asignar Evaluación
+            </button>
           </div>
 
-          <div v-if="evaluaciones.length === 0" class="empty-state card">
+          <!-- Estado vacío -->
+          <div v-if="evaluacionesVisibles.length === 0" class="empty-state card">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.75" style="margin: 0 auto 0.75rem auto; display: block;">
               <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
             </svg>
-            <p style="font-weight: 600; color: #334155;">No hay evaluaciones asignadas a esta aula actualmente.</p>
-            <small style="color: #64748b;">Aquí se listarán las pruebas y controles teóricos/prácticos para tus estudiantes.</small>
+            <p style="font-weight: 600; color: #334155;">
+              {{ isAdmin || isProfesor ? 'No hay evaluaciones registradas en esta aula.' : 'No tienes evaluaciones asignadas a ti en esta aula actualmente.' }}
+            </p>
+            <small style="color: #64748b;">
+              {{ isAdmin || isProfesor ? 'Usa el botón "Asignar Evaluación" o crea una en la sección de Evaluaciones.' : 'Cuando tu profesor te asigne un control práctico o teórico aparecerá aquí.' }}
+            </small>
           </div>
 
+          <!-- Cuadrícula de Evaluaciones con Badge de Asignación RF104 -->
           <div v-else class="evaluaciones-grid">
-            <div v-for="ev in evaluaciones" :key="ev.id" class="eval-card-modern">
+            <div v-for="ev in evaluacionesVisibles" :key="ev.id" class="eval-card-modern">
               <div class="eval-card-top">
                 <div class="eval-card-badge-row">
                   <span class="eval-status-pill" :class="ev.activa ? 'status-activa' : 'status-borrador'">
                     <span class="status-dot"></span>
                     {{ ev.activa ? 'Activa' : 'Borrador' }}
                   </span>
-                  <span class="eval-tag-tipo">Práctica Clínica</span>
+                  
+                  <!-- Badge del Alcance RF104 -->
+                  <span class="badge-asignacion" :class="'badge-asig-' + (ev.asignaciones && ev.asignaciones.length ? ev.asignaciones[0].alcance : 'ninguno')">
+                    🎯 {{ obtenerTextoAsignacion(ev) }}
+                  </span>
+
+                  <span class="eval-tag-tipo">{{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico' }}</span>
                 </div>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
-                <p class="eval-card-desc">{{ ev.descripcion }}</p>
+                <p class="eval-card-desc">{{ ev.descripcion || 'Sin instrucciones adicionales especificadas.' }}</p>
               </div>
 
               <div class="eval-card-meta-chips">
@@ -331,13 +351,13 @@
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                   </svg>
-                  <span>{{ ev.tiempo_limite_minutos }} min</span>
+                  <span>{{ ev.tiempo_limite_s ? Math.round(ev.tiempo_limite_s / 60) : 30 }} min</span>
                 </div>
                 <div class="meta-chip">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
                   </svg>
-                  <span>{{ ev.preguntas_count || (ev.preguntas ? ev.preguntas.length : 2) }} preguntas</span>
+                  <span>{{ ev.preguntas ? ev.preguntas.length : 5 }} preguntas</span>
                 </div>
                 <div class="meta-chip">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -347,15 +367,39 @@
                 </div>
               </div>
 
-              <div class="eval-card-footer">
+              <div class="eval-card-footer" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <!-- Botón Docente 1: Ver Desempeño (RF117) -->
                 <button 
+                  v-if="isAdmin || isProfesor"
                   @click="seleccionarEvaluacionParaVer(ev)" 
                   class="btn-eval-accion"
+                  style="flex: 2;"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M2 12h5l3 8 4-16 3 8h5"/>
                   </svg>
-                  <span>Ver Desempeño y Calificaciones</span>
+                  <span>Ver Desempeño</span>
+                </button>
+
+                <!-- Botón Docente 2: Asignar / Cambiar Alcance (RF104) -->
+                <button 
+                  v-if="isAdmin || isProfesor"
+                  @click="abrirModalAsignar(ev)" 
+                  class="btn-eval-accion btn-secundario-eval"
+                  style="flex: 1; background: #f8fafc; color: #0284c7; border: 1px solid #bae6fd;"
+                  title="Configurar a quién se asigna esta evaluación"
+                >
+                  <span>🎯 Asignar</span>
+                </button>
+
+                <!-- Botón Estudiante: Rendir Evaluación -->
+                <button 
+                  v-if="!isAdmin && !isProfesor"
+                  class="btn-eval-accion"
+                  style="background: #10b981;"
+                  @click="mostrarFeedback(true, 'Iniciando evaluación asignada para tu perfil...')"
+                >
+                  <span>📝 Rendir Evaluación</span>
                 </button>
               </div>
             </div>
@@ -1056,12 +1100,128 @@
         </div>
       </div>
     </div>
+        <!-- ======================================================== -->
+    <!-- MODAL ASIGNAR EVALUACIÓN (RF104: AULA, CURSO, ESTUDIANTE) -->
+    <!-- ======================================================== -->
+    <div v-if="modalAsignarEvaluacionAbierto" class="modal-backdrop" @click.self="modalAsignarEvaluacionAbierto = false">
+      <div class="modal-card modal-card-lg">
+        <h3 class="modal-title">🎯 Asignar Evaluación al Aula</h3>
+        <p class="modal-subtitle">
+          Configura a quiénes estará dirigida esta evaluación en <strong>{{ aula?.nombre }}</strong>.
+        </p>
+
+        <form @submit.prevent="guardarAsignacionEvaluacion">
+          <!-- 1. Selección de Evaluación -->
+          <div class="form-group mb-3">
+            <label class="form-label">Evaluación a Asignar *</label>
+            <select v-model="evaluacionParaAsignarId" class="form-select" required>
+              <option disabled value="">-- Selecciona una evaluación --</option>
+              <option v-for="ev in evaluaciones" :key="ev.id" :value="ev.id">
+                {{ ev.titulo }} ({{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica' }})
+              </option>
+            </select>
+          </div>
+
+          <!-- 2. Selección de Alcance (Las 3 modalidades del RF104) -->
+          <div class="form-group mb-3">
+            <label class="form-label">Modalidad de Asignación (Alcance) *</label>
+            <div class="alcance-options-grid">
+              <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'aula' }">
+                <input type="radio" value="aula" v-model="alcanceSeleccionado" name="alcance" />
+                <div class="alcance-info">
+                  <strong>🏫 Toda el Aula</strong>
+                  <p>Todos los estudiantes activos inscritos en esta aula tendrán acceso.</p>
+                </div>
+              </label>
+
+              <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'curso' }">
+                <input type="radio" value="curso" v-model="alcanceSeleccionado" name="alcance" />
+                <div class="alcance-info">
+                  <strong>👥 Por Curso / Sección</strong>
+                  <p>Solo los estudiantes inscritos en una sección específica podrán rendirla.</p>
+                </div>
+              </label>
+
+              <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'estudiante' }">
+                <input type="radio" value="estudiante" v-model="alcanceSeleccionado" name="alcance" />
+                <div class="alcance-info">
+                  <strong>👤 Estudiantes Específicos</strong>
+                  <p>Selecciona manualmente uno o varios estudiantes concretos del aula.</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 3A. Si el alcance es 'curso' -->
+          <div v-if="alcanceSeleccionado === 'curso'" class="form-group mb-3 alcance-subseccion">
+            <label class="form-label">Selecciona el Curso / Sección *</label>
+            <div v-if="cursos.length === 0" class="alert alert-warning" style="font-size: 0.85rem;">
+              No hay cursos creados en esta aula. Crea un curso en la pestaña "Cursos (Secciones)" primero.
+            </div>
+            <select v-else v-model="cursoAsignacionId" class="form-select" required>
+              <option disabled value="">-- Selecciona una sección --</option>
+              <option v-for="c in cursos" :key="c.id" :value="c.id">
+                {{ c.nombre }} ({{ (c.estudiantes_ids || []).length }} alumnos)
+              </option>
+            </select>
+          </div>
+
+          <!-- 3B. Si el alcance es 'estudiante' -->
+          <div v-if="alcanceSeleccionado === 'estudiante'" class="form-group mb-3 alcance-subseccion">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <label class="form-label" style="margin: 0;">Selecciona Estudiantes Concretos *</label>
+              <button 
+                type="button" 
+                @click="alternarTodosEstudiantesAsignacion" 
+                style="font-size: 0.8rem; background: none; border: none; color: #0284c7; cursor: pointer; text-decoration: underline;"
+              >
+                {{ estudiantesAsignacionIds.length === estudiantes.length ? 'Deseleccionar todos' : 'Seleccionar todos' }}
+              </button>
+            </div>
+            <div v-if="estudiantes.length === 0" class="alert alert-warning" style="font-size: 0.85rem;">
+              No hay estudiantes inscritos en el aula actualmente.
+            </div>
+            <div v-else class="students-checkbox-list" style="max-height: 180px; overflow-y: auto;">
+              <label 
+                v-for="est in estudiantes" 
+                :key="est.usuario_id" 
+                class="checkbox-item"
+              >
+                <input 
+                  type="checkbox" 
+                  :value="est.usuario_id" 
+                  v-model="estudiantesAsignacionIds" 
+                />
+                <div>
+                  <strong>{{ est.nombre }}</strong>
+                  <p><code>{{ est.correo }}</code></p>
+                </div>
+              </label>
+            </div>
+            <small v-if="estudiantesAsignacionIds.length" style="color: #0284c7; font-weight: 600; display: block; margin-top: 0.35rem;">
+              ✓ {{ estudiantesAsignacionIds.length }} estudiante(s) seleccionado(s)
+            </small>
+          </div>
+
+          <!-- Botones de Acción -->
+          <div class="modal-actions mt-4">
+            <button type="button" @click="modalAsignarEvaluacionAbierto = false" class="btn btn-secondary" :disabled="guardandoAsignacionEval">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-primary" :disabled="guardandoAsignacionEval">
+              {{ guardandoAsignacionEval ? 'Guardando Asignación...' : 'Confirmar Asignación' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { asignarEvaluacion } from '../services/evaluacionesService'
 import {
   obtenerAulaPorId,
   obtenerEstudiantesAula,
@@ -1501,6 +1661,126 @@ const confirmarRetirarEstudiantes = async () => {
     mostrarFeedback(false, res.error)
   }
 }
+
+// ============================================================================
+// RF104: ASIGNACIÓN DE EVALUACIONES (AULA, CURSO, ESTUDIANTE)
+// ============================================================================
+const modalAsignarEvaluacionAbierto = ref(false)
+const evaluacionParaAsignarId = ref('')
+const alcanceSeleccionado = ref('aula') // 'aula' | 'curso' | 'estudiante'
+const cursoAsignacionId = ref('')
+const estudiantesAsignacionIds = ref([])
+const guardandoAsignacionEval = ref(false)
+
+const abrirModalAsignar = (ev = null) => {
+  if (ev) {
+    evaluacionParaAsignarId.value = ev.id
+    if (ev.asignaciones && ev.asignaciones.length > 0) {
+      const primera = ev.asignaciones[0]
+      alcanceSeleccionado.value = primera.alcance
+      if (primera.alcance === 'curso') {
+        cursoAsignacionId.value = primera.curso_id || ''
+      } else if (primera.alcance === 'estudiante') {
+        estudiantesAsignacionIds.value = ev.asignaciones.map(a => a.usuario_id).filter(Boolean)
+      }
+    } else {
+      alcanceSeleccionado.value = 'aula'
+      cursoAsignacionId.value = ''
+      estudiantesAsignacionIds.value = []
+    }
+  } else {
+    evaluacionParaAsignarId.value = evaluaciones.value[0]?.id || ''
+    alcanceSeleccionado.value = 'aula'
+    cursoAsignacionId.value = ''
+    estudiantesAsignacionIds.value = []
+  }
+  modalAsignarEvaluacionAbierto.value = true
+}
+
+const alternarTodosEstudiantesAsignacion = () => {
+  if (estudiantesAsignacionIds.value.length === estudiantes.value.length) {
+    estudiantesAsignacionIds.value = []
+  } else {
+    estudiantesAsignacionIds.value = estudiantes.value.map(e => e.usuario_id)
+  }
+}
+
+const guardarAsignacionEvaluacion = async () => {
+  if (!evaluacionParaAsignarId.value) {
+    mostrarFeedback(false, 'Selecciona una evaluación para asignar.')
+    return
+  }
+  if (alcanceSeleccionado.value === 'curso' && !cursoAsignacionId.value) {
+    mostrarFeedback(false, 'Debes seleccionar un curso o sección.')
+    return
+  }
+  if (alcanceSeleccionado.value === 'estudiante' && estudiantesAsignacionIds.value.length === 0) {
+    mostrarFeedback(false, 'Debes seleccionar al menos un estudiante.')
+    return
+  }
+
+  guardandoAsignacionEval.value = true
+  const res = await asignarEvaluacion({
+    evaluacionId: evaluacionParaAsignarId.value,
+    aulaId,
+    alcance: alcanceSeleccionado.value,
+    cursoId: cursoAsignacionId.value || null,
+    estudiantesIds: estudiantesAsignacionIds.value,
+    puedeGestionar: isAdmin.value || isProfesor.value
+  })
+  guardandoAsignacionEval.value = false
+
+  if (res.success) {
+    modalAsignarEvaluacionAbierto.value = false
+    const textoAlcance = alcanceSeleccionado.value === 'aula' 
+      ? 'a toda el aula'
+      : (alcanceSeleccionado.value === 'curso' ? 'a la sección seleccionada' : `a ${estudiantesAsignacionIds.value.length} estudiante(s)`)
+    mostrarFeedback(true, `¡Éxito! Evaluación asignada ${textoAlcance}.`)
+    
+    // Recargar evaluaciones del aula para actualizar inmediatamente los badges
+    const resEv = await obtenerEvaluacionesAula(aulaId)
+    evaluaciones.value = resEv.data || []
+  } else {
+    mostrarFeedback(false, res.error || 'Error al guardar asignación.')
+  }
+}
+
+const obtenerTextoAsignacion = (ev) => {
+  const asigs = ev.asignaciones || []
+  if (!asigs.length) return 'Sin asignar'
+  const primera = asigs[0]
+  if (primera.alcance === 'aula') return 'Toda el Aula'
+  if (primera.alcance === 'curso') {
+    const c = cursos.value.find(cur => cur.id === primera.curso_id)
+    return `Curso: ${c ? c.nombre : 'Sección'}`
+  }
+  if (primera.alcance === 'estudiante') {
+    return `${asigs.length} Estudiante${asigs.length > 1 ? 's' : ''}`
+  }
+  return 'Personalizada'
+}
+
+// RF104 Criterio de Aceptación 2: El estudiante ve SOLO las evaluaciones que le corresponden
+const evaluacionesVisibles = computed(() => {
+  if (isAdmin.value || isProfesor.value) {
+    return evaluaciones.value
+  }
+  // Rol Estudiante: aislar estrictamente las que le tocan
+  const misCursosIds = cursos.value
+    .filter(c => (c.estudiantes_ids || []).includes(currentUserId.value))
+    .map(c => c.id)
+
+  return evaluaciones.value.filter(ev => {
+    const asigs = ev.asignaciones || []
+    if (!asigs.length) return false
+    return asigs.some(a => {
+      if (a.alcance === 'aula') return true
+      if (a.alcance === 'curso' && misCursosIds.includes(a.curso_id)) return true
+      if (a.alcance === 'estudiante' && a.usuario_id === currentUserId.value) return true
+      return false
+    })
+  })
+})
 </script>
 
 <style scoped>
@@ -2967,5 +3247,78 @@ const confirmarRetirarEstudiantes = async () => {
   font-family: monospace;
   margin-top: 0.4rem;
   padding: 0 0.25rem;
+}
+
+/* RF104: Estilos para asignaciones de evaluaciones */
+.alcance-options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+.alcance-option-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.alcance-option-card:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.alcance-option-card.activo {
+  border-color: #0284c7;
+  background: #f0f9ff;
+}
+.alcance-info strong {
+  display: block;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+.alcance-info p {
+  margin: 0.15rem 0 0 0;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+.alcance-subseccion {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+  margin-top: 0.5rem;
+}
+.badge-asignacion {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.badge-asig-aula {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.badge-asig-curso {
+  background: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+.badge-asig-estudiante {
+  background: #fdf2f8;
+  color: #be185d;
+  border: 1px solid #fbcfe8;
+}
+.badge-asig-ninguno {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 </style>
