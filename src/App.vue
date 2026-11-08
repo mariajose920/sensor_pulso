@@ -31,7 +31,7 @@
         >
           Otras Sesiones
         </button>
-        <button type="button" class="btn btn-secondary btn-acceso" @click="logout">Salir</button>
+        <button type="button" class="btn btn-secondary btn-acceso" @click="manejarLogout">Salir</button>
       </template>
       <router-link v-else to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
         <NavIcon name="usuario" class="solo-movil" />
@@ -76,6 +76,7 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
 import { AVISO_EDUCATIVO_CORTO } from './data/avisoEducativo.js'
 import { computed } from 'vue'
 import EstadoPwa from './components/EstadoPwa.vue'
@@ -93,6 +94,13 @@ const enlacesBase = [
   { to: '/aulas', texto: 'Aulas', corto: 'Aulas', icono: 'aulas' },
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
+
+const router = useRouter()
+
+const manejarLogout = async () => {
+  await logout()
+  router.push('/')
+}
 
 // En la desestructuración de useAuth() agrega cerrarOtrasSesiones:
 const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout, cerrarOtrasSesiones } = useAuth()
