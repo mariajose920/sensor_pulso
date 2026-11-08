@@ -350,7 +350,7 @@ function ecgComplejoQrsAncho(phase) {
 }
 
 /**
- * Evalúa cuantitativa y clínicamente la comparación entre una medición real y la patología precargada.
+ * Compara de forma educativa una medición real con el ritmo de referencia precargado (no es un diagnóstico).
  *
  * @param {object} params
  * @param {number} params.medicionBpm - BPM medido del paciente
@@ -375,45 +375,45 @@ export function calcularMetricasComparacionPatologia({
   const difRelativa = Math.abs(bpmMedido - patologia.bpm) / Math.max(bpmMedido, patologia.bpm)
   const similitudFrecuencia = Math.max(10, Math.min(100, Math.round((1 - difRelativa) * 100)))
 
-  // Diagnóstico de compatibilidad
+  // Parecido con el ritmo de referencia (ejercicio educativo, no es un diagnóstico)
   let compatibilidad = 'baja'
   let conclusionClinica = ''
 
   if (patologia.id === 'sinusal_normal') {
     if (Math.abs(deltaBpm) <= 12) {
       compatibilidad = 'alta'
-      conclusionClinica = 'Tu medición presenta concordancia cercana con el ritmo sinusal normal de reposo.'
+      conclusionClinica = 'Tu medición se parece mucho al ritmo sinusal normal de reposo de referencia.'
     } else {
       compatibilidad = 'media'
-      conclusionClinica = `Tu frecuencia (${bpmMedido} BPM) difiere del estándar basal (72 BPM) en ${Math.abs(deltaBpm)} BPM.`
+      conclusionClinica = `Tu frecuencia (${bpmMedido} BPM) se aleja ${Math.abs(deltaBpm)} BPM del valor de referencia del ritmo sinusal normal (72 BPM).`
     }
   } else if (patologia.id === 'taquicardia_sinusal') {
     if (bpmMedido > 100) {
       compatibilidad = 'alta'
-      conclusionClinica = `Tu frecuencia elevada (${bpmMedido} BPM) coincide con el patrón taquicárdico de referencia.`
+      conclusionClinica = `Tu frecuencia (${bpmMedido} BPM) se parece a los parámetros del patrón taquicárdico de referencia (más de 100 BPM): tiende a ese rango, sin que esto sea un diagnóstico.`
     } else {
       compatibilidad = 'baja'
-      conclusionClinica = `Tu frecuencia en reposo (${bpmMedido} BPM) descarta taquicardia sinusal sostenida.`
+      conclusionClinica = `Tu frecuencia en reposo (${bpmMedido} BPM) no se parece a los parámetros de la taquicardia sinusal de referencia.`
     }
   } else if (patologia.id === 'bradicardia_sinusal') {
     if (bpmMedido < 60) {
       compatibilidad = 'alta'
-      conclusionClinica = `Tu frecuencia reducida (${bpmMedido} BPM) es concordante con el patrón bradicárdico.`
+      conclusionClinica = `Tu frecuencia (${bpmMedido} BPM) se parece a los parámetros del patrón bradicárdico de referencia (menos de 60 BPM): tiende a ese rango, sin que esto sea un diagnóstico.`
     } else {
       compatibilidad = 'baja'
-      conclusionClinica = `Frecuencia normocardíaca (${bpmMedido} BPM): no se observa bradicardia de reposo.`
+      conclusionClinica = `Tu frecuencia (${bpmMedido} BPM) está en el rango normocárdico: no se parece al patrón bradicárdico de referencia.`
     }
   } else if (patologia.id === 'fibrilacion_auricular') {
     if (Math.abs(deltaBpm) <= 18) {
       compatibilidad = 'media'
-      conclusionClinica = 'Frecuencia similar pero se requiere evaluar la regularidad de intervalos para distinguir de AFib.'
+      conclusionClinica = 'La frecuencia se parece a la del ejemplo de fibrilación auricular (AFib) de referencia; para distinguirlos hay que mirar la regularidad de los intervalos, algo que aquí solo se muestra de forma educativa.'
     } else {
       compatibilidad = 'baja'
-      conclusionClinica = 'El ritmo isócrono y la presencia de muesca dícrota en tu medición descartan Fibrilación Auricular.'
+      conclusionClinica = 'En tu medición el ritmo es regular y se ve la muesca dícrota: características que no se parecen al ejemplo de fibrilación auricular de referencia.'
     }
   } else {
     compatibilidad = similitudFrecuencia > 80 ? 'media' : 'baja'
-    conclusionClinica = `Comparación docente activa: analizando morfología dícrota y PTT respecto a ${patologia.nombre}.`
+    conclusionClinica = `Comparación educativa activa: analizando morfología dícrota y PTT respecto a ${patologia.nombre}.`
   }
 
   return {

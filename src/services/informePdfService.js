@@ -56,7 +56,7 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(12)
   doc.setTextColor(15, 23, 42) // #0f172a
-  doc.text('INFORME DE EVALUACIÓN CLÍNICA Y RITMO CARDÍACO', margin, 36)
+  doc.text('INFORME EDUCATIVO DE RITMO CARDÍACO Y SpO₂', margin, 36)
   if (sesion && sesion.id) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8.5)
@@ -67,7 +67,13 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   doc.setDrawColor(226, 232, 240) // #e2e8f0
   doc.line(margin, 39, pageWidth - margin, 39)
 
-  let currentY = 44
+  // RF94: el aviso va al comienzo, no solo al final
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(7.5)
+  doc.setTextColor(71, 85, 105)
+  doc.text(AVISO_EDUCATIVO_CORTO, margin, 43)
+
+  let currentY = 49
 
   // =========================================================================
   // 1. DATOS DEL PARTICIPANTE (RF03)

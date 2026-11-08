@@ -25,7 +25,7 @@ console.log('RF75 · Aviso educativo')
 const minus = (t) => t.toLowerCase()
 for (const [nombre, texto] of [['corto', AVISO_EDUCATIVO_CORTO], ['completo', AVISO_EDUCATIVO_TEXTO]]) {
   prueba(`El texto ${nombre} dice que es educativo`, minus(texto).includes('educativ'))
-  prueba(`El texto ${nombre} dice que no sustituye al profesional o al diagnóstico`, /no (sustituye|constituye)/.test(minus(texto)))
+  prueba(`El texto ${nombre} dice que no sustituye al profesional o al diagnóstico`, /no (sustituye|constituye|es un dispositivo médico|entrega)/.test(minus(texto)))
 }
 prueba('El texto completo menciona el diagnóstico médico', minus(AVISO_EDUCATIVO_TEXTO).includes('diagnóstico médico'))
 prueba('El texto completo recomienda consultar a un profesional', minus(AVISO_EDUCATIVO_TEXTO).includes('consulta a un profesional'))

@@ -4,6 +4,7 @@
       <template v-if="compacto"><strong>Aviso:</strong> {{ AVISO_EDUCATIVO_CORTO }}</template>
       <template v-else><strong>{{ AVISO_EDUCATIVO_TITULO }}.</strong> {{ AVISO_EDUCATIVO_TEXTO }}</template>
     </p>
+    <p v-if="dispositivo" class="aviso-texto aviso-dispositivo" data-testid="aviso-dispositivo">{{ AVISO_DISPOSITIVO }}</p>
   </aside>
 </template>
 
@@ -12,10 +13,12 @@
  * Recuadro con el aviso educativo (RF75). Se usa en las pantallas donde hay resultados de salud.
  * `compacto` muestra solo la frase corta, para espacios reducidos.
  */
-import { AVISO_EDUCATIVO_CORTO, AVISO_EDUCATIVO_TEXTO, AVISO_EDUCATIVO_TITULO } from '../data/avisoEducativo.js'
+import { AVISO_DISPOSITIVO, AVISO_EDUCATIVO_CORTO, AVISO_EDUCATIVO_TEXTO, AVISO_EDUCATIVO_TITULO } from '../data/avisoEducativo.js'
 
 defineProps({
-  compacto: { type: Boolean, default: false }
+  compacto: { type: Boolean, default: false },
+  /** Agrega la nota de que el sensor ESP32 es didáctico y no un dispositivo médico (RF94). */
+  dispositivo: { type: Boolean, default: false }
 })
 </script>
 
@@ -33,6 +36,7 @@ defineProps({
   color: #1e3a8a;
 }
 .aviso-educativo.compacto { padding: 0.5rem 0.75rem; font-size: 0.85rem; }
+.aviso-dispositivo { margin-top: 0.4rem; }
 .aviso-icono { flex-shrink: 0; line-height: 1.5; }
 .aviso-texto { margin: 0; font-size: 0.9rem; line-height: 1.5; }
 .compacto .aviso-texto { font-size: 0.85rem; }

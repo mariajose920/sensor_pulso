@@ -57,6 +57,7 @@
         <p class="alerta-diagnostico-desc">
           {{ diagnosticoTexto }}
         </p>
+        <p class="alerta-aviso" data-testid="alerta-aviso">{{ AVISO_ALERTA }}</p>
 
         <!-- Cuantificación Biométrica de la Desviación -->
         <div class="alerta-metricas-line">
@@ -177,6 +178,7 @@ import {
   alternarHabilitacionSonido
 } from '../utils/alertaSonora.js'
 import { registrarAlerta, obtenerMetadatosAlerta } from '../services/alertasService.js'
+import { AVISO_ALERTA } from '../data/avisoEducativo.js'
 
 const props = defineProps({
   alertaActiva: {
@@ -226,10 +228,10 @@ const tipoAlerta = computed(() => props.tipo || 'bpm_alto')
 const metadatos = computed(() => obtenerMetadatosAlerta(tipoAlerta.value))
 
 const tituloAlerta = computed(() => {
-  if (tipoAlerta.value === 'bpm_alto') return 'Alerta Fisiológica: Taquicardia Detectada'
-  if (tipoAlerta.value === 'bpm_bajo') return 'Alerta Fisiológica: Bradicardia Detectada'
-  if (tipoAlerta.value === 'spo2_bajo') return 'Alerta Crítica: Desaturación Arterial de Oxígeno'
-  return 'Alerta Biomédica Fuera de Rango'
+  if (tipoAlerta.value === 'bpm_alto') return 'Alerta educativa: valores que tienden a los parámetros de taquicardia'
+  if (tipoAlerta.value === 'bpm_bajo') return 'Alerta educativa: valores que tienden a los parámetros de bradicardia'
+  if (tipoAlerta.value === 'spo2_bajo') return 'Alerta educativa: valores que tienden a los parámetros de desaturación de oxígeno'
+  return 'Alerta educativa: valor fuera del rango de referencia'
 })
 
 const etiquetaTipo = computed(() => metadatos.value.titulo)
@@ -472,6 +474,13 @@ function probarTono() {
   border: 1px solid #cbd5e1;
 }
 
+.alerta-aviso {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  font-style: italic;
+  opacity: 0.85;
+}
+
 .alerta-diagnostico-desc {
   margin: 0.15rem 0 0.5rem;
   font-size: 0.88rem;
@@ -479,7 +488,14 @@ function probarTono() {
   color: #7f1d1d;
 }
 
-.severidad-media .alerta-diagnostico-desc {
+.severidad-media .alerta-aviso {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.alerta-diagnostico-desc {
   color: #78350f;
 }
 

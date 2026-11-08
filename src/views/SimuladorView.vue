@@ -16,6 +16,9 @@
       </div>
     </div>
 
+    <!-- RF94: el simulador muestra ritmos de ejemplo, no personas reales -->
+    <AvisoEducativo compacto />
+
     <!-- 1. Presets Rápidos de Casos Clínicos y Educativos -->
     <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
@@ -314,6 +317,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useSignalSimulator } from '../composables/useSignalSimulator.js'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'

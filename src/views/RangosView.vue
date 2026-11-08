@@ -5,12 +5,14 @@
       <p class="header-desc">
         Rangos de BPM y SpO₂ por actividad y edad. Puedes ajustarlos para tu cuenta o proponer un cambio para todos.
       </p>
+      <AvisoEducativo compacto />
       <RangosPanel :modo="isAdmin ? 'admin' : 'profesor'" :puede-editar="puedeEditar" :usuario-id="currentUserId" />
     </div>
   </div>
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted } from 'vue'
 import RangosPanel from '../components/RangosPanel.vue'
 import { useAuth } from '../composables/useAuth'

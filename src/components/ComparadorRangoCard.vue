@@ -202,9 +202,9 @@ const chipBpmTexto = computed(() => {
 
 const chipSpo2Texto = computed(() => {
   const s = evaluacion.value.spo2
-  if (s.dentro) return 'Normoxemia óptima'
-  if (s.estado === 'leve') return 'Hipoxia leve'
-  if (s.estado === 'severa') return 'Hipoxia severa'
+  if (s.dentro) return 'Rango de normoxemia'
+  if (s.estado === 'leve') return 'Tendencia a hipoxia leve'
+  if (s.estado === 'severa') return 'Tendencia a hipoxia severa'
   return 'Fuera de rango'
 })
 </script>
