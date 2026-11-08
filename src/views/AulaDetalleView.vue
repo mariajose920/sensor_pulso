@@ -20,6 +20,8 @@
 
     <!-- Contenido del Aula si está autorizado -->
     <div v-else-if="aula" class="aula-content">
+      <!-- RF94: los promedios de BPM y SpO₂ son material educativo, no un diagnóstico -->
+      <AvisoEducativo compacto />
       <!-- Barra superior / Breadcrumb -->
       <div class="top-nav-bar">
         <router-link to="/aulas" class="back-link">
@@ -735,7 +737,7 @@
           <div class="bioseñal-stat-card card-frecuencia">
             <div class="bioseñal-card-header">
               <span class="bioseñal-stat-label">Frecuencia Cardíaca</span>
-              <span class="badge badge-subtle-success">Normocardia</span>
+              <span class="badge badge-subtle-success">Rango normal</span>
             </div>
             <div class="bioseñal-stat-val text-dark">
               {{ intentoVerMedicion.medicion?.bpm }} <span class="unit-text">BPM</span>
@@ -746,7 +748,7 @@
           <div class="bioseñal-stat-card card-spo2">
             <div class="bioseñal-card-header">
               <span class="bioseñal-stat-label">Saturación SpO₂</span>
-              <span class="badge badge-subtle-info">Normoxemia</span>
+              <span class="badge badge-subtle-info">Rango normal</span>
             </div>
             <div class="bioseñal-stat-val text-blue">
               {{ intentoVerMedicion.medicion?.spo2 }} <span class="unit-text">%</span>
@@ -1059,6 +1061,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'

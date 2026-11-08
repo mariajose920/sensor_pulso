@@ -26,40 +26,40 @@ export const TIPOS_ALERTA_VALIDOS = [
 ]
 
 /**
- * Metadatos clínicos de los tipos de alerta según el estándar médico del sistema.
+ * Metadatos educativos de los tipos de alerta. Los títulos hablan de tendencia o parecido con un patrón de referencia, nunca de un diagnóstico (RF94).
  */
 export const METADATOS_ALERTAS = {
   bpm_alto: {
     clave: 'bpm_alto',
-    titulo: 'Taquicardia (BPM Alto)',
+    titulo: 'Tendencia a taquicardia (BPM alto)',
     parametro: 'Frecuencia Cardíaca',
     unidad: 'BPM',
     severidad: 'alta', // 'alta' | 'media' | 'baja'
-    descripcion: 'Frecuencia cardíaca por sobre el límite superior esperado para la edad y actividad.'
+    descripcion: 'Frecuencia cardíaca por sobre el límite superior de referencia para la edad y actividad: se parece a los parámetros de taquicardia (orientativo, no es un diagnóstico).'
   },
   bpm_bajo: {
     clave: 'bpm_bajo',
-    titulo: 'Bradicardia (BPM Bajo)',
+    titulo: 'Tendencia a bradicardia (BPM bajo)',
     parametro: 'Frecuencia Cardíaca',
     unidad: 'BPM',
     severidad: 'media',
-    descripcion: 'Frecuencia cardíaca por debajo del límite inferior esperado.'
+    descripcion: 'Frecuencia cardíaca por debajo del límite inferior de referencia: se parece a los parámetros de bradicardia (orientativo, no es un diagnóstico).'
   },
   spo2_bajo: {
     clave: 'spo2_bajo',
-    titulo: 'Desaturación de Oxígeno (SpO₂)',
+    titulo: 'Tendencia a desaturación de oxígeno (SpO₂ baja)',
     parametro: 'Saturación de Oxígeno',
     unidad: '%',
     severidad: 'alta',
-    descripcion: 'Saturación periférica de oxígeno bajo el umbral normoxémico mínimo (95%).'
+    descripcion: 'Saturación periférica de oxígeno bajo el umbral de referencia (95%): se parece a los parámetros de desaturación (orientativo, no es un diagnóstico).'
   },
   irregular: {
     clave: 'irregular',
-    titulo: 'Ritmo Irregular / Disritmia',
+    titulo: 'Tendencia a ritmo irregular (variabilidad R-R)',
     parametro: 'Ritmo Cardíaco',
     unidad: '',
     severidad: 'media',
-    descripcion: 'Variabilidad anormal detectada en los intervalos entre latidos (RR).'
+    descripcion: 'Variabilidad alta entre los intervalos de los latidos (R-R): se parece a un ritmo irregular (orientativo, no es un diagnóstico).'
   },
   senal_mala: {
     clave: 'senal_mala',

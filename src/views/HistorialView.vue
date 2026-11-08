@@ -147,9 +147,9 @@
             <label for="filtro-tipo-alerta" class="form-label">Tipo de Alerta</label>
             <select id="filtro-tipo-alerta" v-model="filtroTipoAlerta" class="form-input filtro-select">
               <option value="todos">Todas las alertas</option>
-              <option value="bpm_alto">Taquicardia (BPM Alto)</option>
-              <option value="bpm_bajo">Bradicardia (BPM Bajo)</option>
-              <option value="spo2_bajo">Desaturación SpO₂</option>
+              <option value="bpm_alto">Tendencia a taquicardia (BPM alto)</option>
+              <option value="bpm_bajo">Tendencia a bradicardia (BPM bajo)</option>
+              <option value="spo2_bajo">Tendencia a desaturación (SpO₂ baja)</option>
               <option value="irregular">Ritmo Irregular</option>
               <option value="senal_mala">Señal Deficiente</option>
             </select>

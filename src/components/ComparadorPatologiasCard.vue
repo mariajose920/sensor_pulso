@@ -1,14 +1,15 @@
 <template>
   <div class="comparador-patologias-card card">
-    <!-- Encabezado de la Sección Comparativa de Patologías (RF25) -->
+    <!-- Encabezado de la sección de ritmos de referencia (RF25, RF94) -->
     <div class="card-head-bar">
       <div>
         <h3 class="card-title">
-          Comparación contra Ritmos Precargados de Patologías y Arritmias
+          Comparación con ritmos de referencia: patologías y arritmias para aprender
         </h3>
         <p class="card-desc">
-          Contraste de la morfología fotopletismográfica (PPG) medida contra una biblioteca clínica de arritmias con trazado electrocardiográfico (ECG) equivalente de referencia.
+          Compara la forma de tu señal fotopletismográfica (PPG) con una biblioteca de ritmos de referencia (con su trazado electrocardiográfico, ECG, equivalente) para entender cómo se ve cada patología o arritmia.
         </p>
+        <p class="card-desc aviso-referencia" data-testid="aviso-referencia"><strong>Material educativo:</strong> {{ AVISO_REFERENCIA }}</p>
       </div>
       <div class="view-mode-buttons">
         <button
@@ -310,12 +311,12 @@
         </div>
       </div>
 
-      <!-- Métrica 4: Correlación Clínica Diagnóstica -->
+      <!-- Métrica 4: Parecido con el ritmo de referencia (educativo, no diagnóstico) -->
       <div class="metric-comp-card">
-        <span class="m-comp-title">Correlación Clínica (RF25)</span>
+        <span class="m-comp-title">Parecido con el ritmo de referencia (RF25)</span>
         <div class="m-comp-value-row">
           <span class="m-comp-val font-mono" style="color: #2563eb;">{{ metricas.similitudFrecuencia }}%</span>
-          <span class="m-comp-sub">Similitud global</span>
+          <span class="m-comp-sub">Parecido de la frecuencia (educativo)</span>
         </div>
         <div class="m-comp-delta text-conclusion">
           {{ metricas.conclusionClinica }}
@@ -421,6 +422,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { AVISO_REFERENCIA } from '../data/avisoEducativo.js'
 import {
   RITMOS_PATOLOGIAS,
   obtenerRitmoPatologia,

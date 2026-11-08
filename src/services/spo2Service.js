@@ -211,36 +211,36 @@ export function evaluarEstadoSpo2(spo2) {
       etiqueta: 'Normal / Óptima',
       severidad: 'success',
       descripcion: 'Saturación arterial en rango fisiológico saludable (≥95%)',
-      accionRecomendada: 'Monitoreo habitual. Ventilación y perfusión adecuadas.'
+      accionRecomendada: 'Valor dentro del rango de referencia.'
     }
   }
 
   if (spo2 >= SPO2_UMBRAL_HIPOXIA_LEVE) {
     return {
       estado: 'hipoxia_leve',
-      etiqueta: 'Hipoxia Leve',
+      etiqueta: 'Tendencia a hipoxia leve',
       severidad: 'warning',
-      descripcion: 'Saturación arterial levemente reducida (90% - 94%)',
-      accionRecomendada: 'Verificar posición del paciente, patrón respiratorio y factores ambientales.'
+      descripcion: 'Saturación por debajo del rango de referencia (90% - 94%): se parece a los parámetros de hipoxia leve',
+      accionRecomendada: 'Sugerencia educativa: revisa la posición, la respiración y el ambiente, y repite la medición.'
     }
   }
 
   if (spo2 >= SPO2_UMBRAL_HIPOXIA_MODERADA) {
     return {
       estado: 'hipoxia_moderada',
-      etiqueta: 'Hipoxia Moderada',
+      etiqueta: 'Tendencia a hipoxia moderada',
       severidad: 'danger',
-      descripcion: 'Desaturación significativa (85% - 89%)',
-      accionRecomendada: 'Precaución clínica: verificar vías aéreas y suministro de oxígeno.'
+      descripcion: 'Saturación bastante por debajo del rango de referencia (85% - 89%): se parece a los parámetros de hipoxia moderada',
+      accionRecomendada: 'Sugerencia educativa: repite la medición con el sensor bien colocado. Si el valor se mantiene o te sientes mal, consulta a un profesional de la salud.'
     }
   }
 
   return {
     estado: 'hipoxia_severa',
-    etiqueta: 'Hipoxia Severa / Crítica',
+    etiqueta: 'Tendencia a hipoxia severa',
     severidad: 'danger',
-    descripcion: 'Alerta crítica de hipoxemia (<85%)',
-    accionRecomendada: 'Intervención médica de emergencia inmediata requerida.'
+    descripcion: 'Saturación muy por debajo del rango de referencia (<85%): se parece a los parámetros de hipoxemia severa. Puede deberse a una mala lectura del sensor',
+    accionRecomendada: 'Esta plataforma no diagnostica. Repite la medición con el sensor bien colocado; si el valor se mantiene o tienes síntomas, busca atención de salud.'
   }
 }
 
