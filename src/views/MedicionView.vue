@@ -1,5 +1,10 @@
 <template>
   <div class="medicion-view">
+    <!-- Estado discreto del guardado de la ficha en segundo plano (RF03): no bloquea el avance de pasos -->
+    <div v-if="avisoFichaVisible" class="ficha-toast" :class="'ficha-toast-' + estadoGuardadoFicha.estado" role="status" aria-live="polite" data-testid="ficha-toast">
+      <span>{{ estadoGuardadoFicha.mensaje }}</span>
+      <button v-if="estadoGuardadoFicha.estado === 'error'" type="button" class="ficha-toast-btn" @click="reintentarGuardadoFicha">Reintentar</button>
+    </div>
     <!-- RF01: lo primero que se ve es quién está identificado (docente, administrador, etc.) -->
     <UserIdentifier />
 
@@ -855,7 +860,7 @@ import { sesionState } from '../services/sesionMedicionService'
 import { crearMonitorEstadisticasBpm } from '../services/bpmService'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
-import { pacienteService } from '../services/pacienteService'
+import { pacienteService, estadoGuardadoFicha } from '../services/pacienteService'
 import { clasificarRitmo } from '../services/ritmoService'
 import { descargarInformeClinicoPdf } from '../services/informePdfService'
 import {
@@ -1028,10 +1033,30 @@ function onPacienteActualizado(datos) {
   errorPacientePaso2.value = ''
 }
 
+// Guardado de la ficha en segundo plano: el aviso discreto sale de estadoGuardadoFicha (Guardando… / Guardada / error)
+const avisoFichaVisible = ref(false)
+let temporizadorAvisoFicha = null
+watch(() => estadoGuardadoFicha.value.estado, (estado) => {
+  clearTimeout(temporizadorAvisoFicha)
+  avisoFichaVisible.value = estado === 'guardando' || estado === 'guardado' || estado === 'error'
+  if (estado === 'guardado') temporizadorAvisoFicha = setTimeout(() => { avisoFichaVisible.value = false }, 2500)
+})
+// Cuando el servidor confirma, la ficha activa recibe el id de su fila (lo usa «Terminar» para ligar la medición)
+watch(() => estadoGuardadoFicha.value.ficha, (f) => {
+  if (f?.id && pacienteActivo.value && !pacienteActivo.value.id) {
+    pacienteActivo.value = { ...pacienteActivo.value, id: f.id, creadoEn: f.creadoEn, origen: f.origen, pendienteSync: Boolean(f.pendienteSync) }
+  }
+})
+function reintentarGuardadoFicha() {
+  pacienteService.reintentarSincronizacion()
+}
+
 async function confirmarPaso2() {
   errorPacientePaso2.value = ''
 
-  // 1. Si la tarjeta está en modo edición, le ordenamos guardar los datos ingresados
+  // 1. Si la tarjeta está en modo edición, le ordenamos guardar los datos ingresados. La tarjeta valida y guarda la copia
+  //    de la pestaña al instante y envía al servidor en segundo plano: aquí NO se espera a la red (la interfaz no se congela).
+  //    Si el usuario no cambió nada, no se vuelve a guardar.
   if (pacienteCardRef.value?.modoEdicion) {
     const guardadoExitoso = await pacienteCardRef.value.guardar()
     if (!guardadoExitoso) {
@@ -1388,6 +1413,11 @@ onMounted(async () => {
   if (dec) {
     pacienteActivo.value = dec
   }
+  // Tras volver a iniciar sesión la copia de la pestaña está vacía: se carga la ficha guardada en segundo plano (sin esperar)
+  // y ya queda descifrada en memoria cuando se llegue al paso 2.
+  pacienteService.obtenerDeclaracionActiva().then((activo) => {
+    if (activo && !activo.incompleta && !pacienteActivo.value) pacienteActivo.value = activo
+  }).catch(() => { /* la tarjeta de la ficha muestra el motivo si no se pudo leer */ })
 
   iniciarSondeoWiFi(1000)
   if (miCanalAsignado.value) {
@@ -1403,6 +1433,31 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.ficha-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.5rem;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.ficha-toast-error { background: #92400e; }
+.ficha-toast-btn {
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
 .medicion-view {
   padding-bottom: 2rem;
 }
