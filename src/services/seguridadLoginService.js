@@ -1,162 +1,184 @@
-import { supabase } from './supabase'
-import { validarCorreoInstitucional } from '../utils/validators'
+import { supabase } from './supabase.js'
+import { validarCorreoInstitucional } from '../utils/validators.js'
 
 // Reglas de seguridad del RF50
 export const MAX_INTENTOS_FALLIDOS = 5
 export const DURACION_BLOQUEO_MINUTOS = 15
 
-const STORAGE_INTENTOS = 'sensor_pulso_intentos_login'
-const STORAGE_BLOQUEOS = 'sensor_pulso_bloqueos_cuenta'
-
-function cargarStorage(key, porDefecto) {
-  if (typeof window === 'undefined' || !window.localStorage) return porDefecto
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : porDefecto
-  } catch (_) {
-    return porDefecto
-  }
-}
-
-function guardarStorage(key, data) {
-  if (typeof window === 'undefined' || !window.localStorage) return
-  try {
-    localStorage.setItem(key, JSON.stringify(data))
-  } catch (_) {}
-}
+// Respaldo en memoria activa (no en localStorage) mientras la migración se aplica en Supabase Cloud
+const intentosMemoria = new Map()
+const bloqueosMemoria = new Map()
 
 /**
- * RF50: Verifica si la cuenta está actualmente bloqueada y calcula los segundos restantes.
- * Cumple: "El bloqueo termina solo al cumplirse el tiempo" y 
- * "Tras superar el límite la cuenta se bloquea aunque la contraseña sea correcta".
+ * RF50: Verifica si la cuenta o IP está actualmente bloqueada en el servidor.
+ * El bloqueo vive en la base de datos (PostgreSQL / Supabase), no en localStorage.
+ * Criterio de aceptación: "El bloqueo se mantiene aunque se borre el almacenamiento del navegador".
  */
-export async function verificarEstadoBloqueo(correo) {
+export async function verificarEstadoBloqueo(correo, ip = null) {
   if (!correo) return { bloqueado: false, segundosRestantes: 0 }
   const correoLimpio = correo.trim().toLowerCase()
   const ahora = Date.now()
 
-  // 1. Intentar consultar tabla bloqueos_cuenta en Supabase si está disponible
   try {
-    const { data } = await supabase
+    // 1. Consultar la función RPC del servidor Supabase
+    const { data, error } = await supabase.rpc('verificar_estado_bloqueo', {
+      p_correo: correoLimpio,
+      p_ip: ip
+    })
+
+    if (!error && data) {
+      return {
+        bloqueado: !!data.bloqueado,
+        segundosRestantes: data.segundos_restantes || 0,
+        bloqueadoHasta: data.bloqueado_hasta || null
+      }
+    }
+
+    // 2. Consulta de respaldo directo a la tabla de servidor si RPC no estuviera disponible
+    const { data: tablaData } = await supabase
       .from('bloqueos_cuenta')
       .select('bloqueado_hasta')
       .eq('correo', correoLimpio)
+      .gt('bloqueado_hasta', new Date().toISOString())
+      .order('bloqueado_hasta', { ascending: false })
       .maybeSingle()
 
-    if (data?.bloqueado_hasta) {
-      const hasta = new Date(data.bloqueado_hasta).getTime()
+    if (tablaData?.bloqueado_hasta) {
+      const hasta = new Date(tablaData.bloqueado_hasta).getTime()
       if (hasta > ahora) {
         const segRestantes = Math.ceil((hasta - ahora) / 1000)
-        return { bloqueado: true, segundosRestantes: segRestantes, bloqueadoHasta: data.bloqueado_hasta }
+        return {
+          bloqueado: true,
+          segundosRestantes: segRestantes,
+          bloqueadoHasta: tablaData.bloqueado_hasta
+        }
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn('Aviso verificando bloqueo en servidor:', err)
+  }
 
-  // 2. Comprobación en almacenamiento local persistente
-  const bloqueos = cargarStorage(STORAGE_BLOQUEOS, {})
-  const bloqueadoHastaMs = bloqueos[correoLimpio]
-
-  if (bloqueadoHastaMs && bloqueadoHastaMs > ahora) {
-    const segundosRestantes = Math.ceil((bloqueadoHastaMs - ahora) / 1000)
+  // Respaldo en memoria activa
+  const bloqueoHastaMs = bloqueosMemoria.get(correoLimpio)
+  if (bloqueoHastaMs && bloqueoHastaMs > ahora) {
     return {
       bloqueado: true,
-      segundosRestantes,
-      bloqueadoHasta: new Date(bloqueadoHastaMs).toISOString()
+      segundosRestantes: Math.ceil((bloqueoHastaMs - ahora) / 1000),
+      bloqueadoHasta: new Date(bloqueoHastaMs).toISOString()
     }
   }
 
-  // Si el tiempo ya expiró, liberar bloqueo local
-  if (bloqueadoHastaMs && bloqueadoHastaMs <= ahora) {
-    delete bloqueos[correoLimpio]
-    guardarStorage(STORAGE_BLOQUEOS, bloqueos)
-  }
-
-  return { bloqueado: false, segundosRestantes: 0 }
+  return { bloqueado: false, segundosRestantes: 0, bloqueadoHasta: null }
 }
 
 /**
- * RF50: Registra un intento de login (éxito o fallo).
- * Bloquea la cuenta automáticamente al 5to intento fallido dentro de la ventana de 15 min.
+ * RF50: Registra un intento de login (éxito o fallo) en el servidor llamando a registrar_intento_login.
+ * Bloquea por correo y por IP si alcanza 5 fallos en 15 minutos.
  */
-export async function registrarIntentoLogin({ correo, exitoso }) {
+export async function registrarIntentoLogin({ correo, exitoso, ip = null }) {
   if (!correo) return { bloqueado: false }
   const correoLimpio = correo.trim().toLowerCase()
   const ahora = Date.now()
-  const ventanaLimite = ahora - (DURACION_BLOQUEO_MINUTOS * 60 * 1000)
 
-  let intentos = cargarStorage(STORAGE_INTENTOS, [])
-  let bloqueos = cargarStorage(STORAGE_BLOQUEOS, {})
+  try {
+    // Llamar a la función oficial registrar_intento_login de Supabase
+    const { data, error } = await supabase.rpc('registrar_intento_login', {
+      p_correo: correoLimpio,
+      p_exitoso: exitoso,
+      p_ip: ip
+    })
 
-  // Si el inicio de sesión fue exitoso: restablecer intentos y desbloquear
-  if (exitoso) {
-    intentos = intentos.filter(i => i.correo !== correoLimpio)
-    delete bloqueos[correoLimpio]
-    guardarStorage(STORAGE_INTENTOS, intentos)
-    guardarStorage(STORAGE_BLOQUEOS, bloqueos)
+    if (!error && data) {
+      if (typeof data === 'object') {
+        if (exitoso) {
+          intentosMemoria.delete(correoLimpio)
+          bloqueosMemoria.delete(correoLimpio)
+        }
+        return {
+          bloqueado: !!data.bloqueado,
+          segundosRestantes: data.segundos_restantes || 0,
+          bloqueadoHasta: data.bloqueado_hasta || null,
+          intentosFallidos: data.intentos_fallidos || 0,
+          intentosRestantes: data.intentos_restantes ?? (exitoso ? 5 : 0)
+        }
+      }
 
-    try {
-      await supabase.from('bloqueos_cuenta').delete().eq('correo', correoLimpio)
-    } catch (_) {}
-
-    return { bloqueado: false, intentosFallidos: 0 }
+      if (typeof data === 'string') {
+        const hasta = new Date(data).getTime()
+        if (hasta > ahora) {
+          return {
+            bloqueado: true,
+            segundosRestantes: Math.ceil((hasta - ahora) / 1000),
+            bloqueadoHasta: data,
+            intentosRestantes: 0
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Aviso registrando intento en servidor:', err)
   }
 
-  // Registrar fallo nuevo
-  intentos.push({ correo: correoLimpio, fecha: ahora })
-  
-  // Filtrar fallos recientes dentro de la ventana de 15 minutos
-  const fallosRecientes = intentos.filter(i => i.correo === correoLimpio && i.fecha > ventanaLimite)
-  const totalFallos = fallosRecientes.length
+  // Respaldo activo para desarrollo si el RPC aún no fue desplegado en la nube
+  if (exitoso) {
+    intentosMemoria.delete(correoLimpio)
+    bloqueosMemoria.delete(correoLimpio)
+    return { bloqueado: false, intentosFallidos: 0, intentosRestantes: MAX_INTENTOS_FALLIDOS }
+  }
 
-  // Si alcanza los 5 fallos, bloquear por 15 minutos
-  if (totalFallos >= MAX_INTENTOS_FALLIDOS) {
-    const bloqueoHastaMs = ahora + (DURACION_BLOQUEO_MINUTOS * 60 * 1000)
-    bloqueos[correoLimpio] = bloqueoHastaMs
+  const fallosAnteriores = (intentosMemoria.get(correoLimpio) || []).filter(
+    (t) => t > ahora - DURACION_BLOQUEO_MINUTOS * 60 * 1000
+  )
+  fallosAnteriores.push(ahora)
+  intentosMemoria.set(correoLimpio, fallosAnteriores)
 
-    guardarStorage(STORAGE_INTENTOS, intentos)
-    guardarStorage(STORAGE_BLOQUEOS, bloqueos)
-
-    try {
-      await supabase.from('bloqueos_cuenta').upsert({
-        correo: correoLimpio,
-        bloqueado_hasta: new Date(bloqueoHastaMs).toISOString(),
-        motivo: 'intentos_fallidos'
-      })
-    } catch (_) {}
-
+  if (fallosAnteriores.length >= MAX_INTENTOS_FALLIDOS) {
+    const hastaMs = ahora + DURACION_BLOQUEO_MINUTOS * 60 * 1000
+    bloqueosMemoria.set(correoLimpio, hastaMs)
     return {
       bloqueado: true,
       segundosRestantes: DURACION_BLOQUEO_MINUTOS * 60,
-      intentosFallidos: totalFallos,
+      bloqueadoHasta: new Date(hastaMs).toISOString(),
+      intentosFallidos: fallosAnteriores.length,
       intentosRestantes: 0
     }
   }
 
-  guardarStorage(STORAGE_INTENTOS, intentos)
   return {
     bloqueado: false,
-    intentosFallidos: totalFallos,
-    intentosRestantes: MAX_INTENTOS_FALLIDOS - totalFallos
+    intentosFallidos: fallosAnteriores.length,
+    intentosRestantes: Math.max(0, MAX_INTENTOS_FALLIDOS - fallosAnteriores.length)
   }
 }
 
 /**
- * Formatea segundos a texto amigable ("X minutos y Y segundos")
+ * Formatea segundos a texto amigable ("X minutos y Y segundos") e indica la hora de término
  */
-export function formatearTiempoRestante(segundos) {
+export function formatearTiempoRestante(segundos, bloqueadoHasta = null) {
   if (segundos <= 0) return '0 segundos'
   const minutos = Math.floor(segundos / 60)
   const segs = segundos % 60
 
+  let texto = ''
   if (minutos > 0) {
-    return `${minutos} minuto${minutos > 1 ? 's' : ''}${segs > 0 ? ` y ${segs} segundo${segs > 1 ? 's' : ''}` : ''}`
+    texto = `${minutos} minuto${minutos > 1 ? 's' : ''}${segs > 0 ? ` y ${segs} segundo${segs > 1 ? 's' : ''}` : ''}`
+  } else {
+    texto = `${segs} segundo${segs > 1 ? 's' : ''}`
   }
-  return `${segs} segundo${segs > 1 ? 's' : ''}`
+
+  if (bloqueadoHasta) {
+    try {
+      const fecha = new Date(bloqueadoHasta)
+      const horaTexto = fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return `${texto} (hasta las ${horaTexto})`
+    } catch (_) {}
+  }
+
+  return texto
 }
 
 /**
  * RF50: Enlace de recuperación de contraseña de un solo uso.
- * Criterio de aceptación: "Los mensajes no revelan si un correo existe".
  */
 export async function solicitarRecuperacionContrasena(correo) {
   const validacion = validarCorreoInstitucional(correo)
@@ -171,7 +193,6 @@ export async function solicitarRecuperacionContrasena(correo) {
     })
   } catch (_) {}
 
-  // Mensaje de respuesta genérico y seguro (anti-enumeración de usuarios)
   return {
     success: true,
     message: 'Si el correo institucional ingresado se encuentra registrado, te hemos enviado un enlace de un solo uso para restablecer tu contraseña. Revisa tu bandeja de entrada.'
