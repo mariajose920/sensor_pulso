@@ -178,7 +178,7 @@ async function ejecutar(publicar) {
     if (!medicionGuardada) {
       const resp = await guardarMedicion({ ...props.registro.datos })
       if (!resp.ok) {
-        error.value = resp.mensaje
+        error.value = resp.detalle ? `${resp.mensaje} (Detalle: ${resp.detalle})` : resp.mensaje
         paso.value = 'guardar'
         return
       }

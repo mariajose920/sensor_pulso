@@ -15,6 +15,28 @@ import { clasificarErrorPublicacion, mensajeErrorPublicacion, MENSAJES_TERMINAR 
 
 export const TAMANO_PAGINA = 20
 
+/** ¿El error dice que la columna no existe en la tabla (base sin la migración que la crea)? */
+export function esErrorColumnaFaltante(error, columna) {
+  if (!error) return false
+  const texto = `${error.message || ''} ${error.details || ''}`.toLowerCase()
+  const codigo = String(error.code || '')
+  return (codigo === 'PGRST204' || codigo === '42703' || texto.includes('schema cache') || texto.includes('does not exist'))
+    && texto.includes(String(columna).toLowerCase())
+}
+
+/**
+ * Inserta una fila de medición. Si la base todavía no tiene la columna `id_cliente` (RF30, migración
+ * 20261102000100) se reintenta sin ella: la medición se guarda igual, solo sin la protección contra duplicados.
+ */
+async function insertarMedicion(fila) {
+  let r = await supabase.from('mediciones').insert(fila).select('id').single()
+  if (r.error && 'id_cliente' in fila && esErrorColumnaFaltante(r.error, 'id_cliente')) {
+    const { id_cliente: _omitido, ...sinIdCliente } = fila
+    r = await supabase.from('mediciones').insert(sinIdCliente).select('id').single()
+  }
+  return r
+}
+
 function nuevoIdCliente() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   // Respaldo para navegadores sin crypto.randomUUID
@@ -48,11 +70,7 @@ export async function guardarMedicion(datos) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('mediciones')
-      .insert(armada.fila)
-      .select('id')
-      .single()
+    const { data, error } = await insertarMedicion(armada.fila)
 
     if (error) throw error
     return { ok: true, estado: 'guardada', id: data?.id, mensaje: 'Medición guardada en tu historial.' }
@@ -69,7 +87,12 @@ export async function guardarMedicion(datos) {
         ? { ok: true, estado: 'pendiente', motivo, mensaje: MENSAJES_GUARDADO.conexion }
         : { ok: false, estado: 'rechazada', motivo: 'generico', mensaje: MENSAJES_GUARDADO.generico }
     }
-    return { ok: false, estado: 'rechazada', motivo, mensaje: MENSAJES_GUARDADO[motivo] || MENSAJES_GUARDADO.generico }
+    return {
+      ok: false, estado: 'rechazada', motivo,
+      mensaje: MENSAJES_GUARDADO[motivo] || MENSAJES_GUARDADO.generico,
+      // Para no esconder la causa real cuando el motivo es genérico (ayuda a quien administra la base)
+      detalle: motivo === 'generico' ? (error?.message || null) : null
+    }
   }
 }
 
@@ -102,7 +125,7 @@ export async function sincronizarPendientes() {
 
   let enviadas = 0
   for (const p of listarPendientes(usuarioId)) {
-    const { error } = await supabase.from('mediciones').insert(p.fila)
+    const { error } = await insertarMedicion(p.fila)
     const motivo = error ? clasificarErrorGuardado(error) : null
     if (!error || motivo === 'duplicada') {
       quitarPendiente(p.fila.id_cliente)

@@ -134,3 +134,9 @@ Pruebas: `scripts/test-medicion-flujo-docente.mjs`, `scripts/test-practica-evalu
 - **Antes:** el firmware usaba `110 − 25 × (rojo/infrarrojo)` con valores brutos (físicamente incorrecto), arrancaba en 98 % y casi nunca cambiaba.
 - **Ahora:** razón de razones `R = (AC_rojo/DC_rojo) / (AC_ir/DC_ir)` en ventanas de 2 s, con la recta empírica `110 − 25·R`, solo con dedo apoyado y señal pulsátil válida. Sin dedo, en calentamiento o con señal inservible el valor es **0 = sin lectura** y la app muestra «—». Nunca se inventa un valor.
 - **Límite:** sigue siendo una aproximación educativa **sin calibrar** contra un oxímetro de referencia; no es una medición clínica.
+
+### Por qué «No se pudo guardar la medición» (base sin la migración de RF30)
+
+- **Causa:** la web envía `id_cliente` al guardar (para no duplicar mediciones reenviadas) y a la base de la app le faltaba esa columna (migración `20261102000100_guardado_historial_mediciones.sql` sin aplicar). La base rechazaba el insert y la pantalla mostraba el mensaje genérico.
+- **Arreglo en la app:** si la columna no existe, `guardarMedicion` reintenta sin `id_cliente` (la medición se guarda igual) y los errores genéricos muestran su detalle.
+- **Recomendado:** aplicar esa migración (es idempotente) para recuperar la protección contra duplicados y la regla de la base «una medición con calidad mala no se guarda como válida» (RF16).
