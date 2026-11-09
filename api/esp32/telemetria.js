@@ -1,5 +1,6 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
+import { validarYSanitizarTelemetriaEsp32 } from '../../src/services/sanitizacionService.js'
 
 // Cache en memoria para almacenar la última telemetría recibida
 // Permite que la app web en tiempo real consulte o verifique el estado inmediato del ESP32
@@ -131,11 +132,25 @@ export default async function handler(req, res) {
         return res.end(JSON.stringify({ ok: false, error: 'Falta token de autenticación del dispositivo ESP32 (RF54)' }))
       }
 
-      // 3. Validación de token con Supabase o modo desarrollo
+      // 3. Validación y Sanitización Estricta de Entradas (RF65)
+      const validacion = validarYSanitizarTelemetriaEsp32(body)
+      if (!validacion.valido) {
+        res.statusCode = 422
+        res.setHeader('Content-Type', 'application/json')
+        return res.end(JSON.stringify({
+          ok: false,
+          error: validacion.error || 'Telemetría no cumple con las reglas de validación (RF65)',
+          advertencias: validacion.advertencias,
+          rf65: 'rechazado'
+        }))
+      }
+      const datosSeguros = validacion.datosSanitizados
+
+      // 4. Validación de token con Supabase o modo desarrollo
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
       let dispositivoValido = false
       let dispositivoId = null
-      let dispositivoNombre = body.dispositivo || 'ESP32-Generico'
+      let dispositivoNombre = datosSeguros.dispositivo || 'ESP32-Generico'
 
       const supabaseAdmin = getAdminSupabase()
       if (supabaseAdmin) {
@@ -179,19 +194,10 @@ export default async function handler(req, res) {
         }))
       }
 
-      // 4. Validar y procesar canales (RF05, RF08)
-      const canalesRecibidos = Array.isArray(body.canales) ? body.canales : []
-      const canalesProcesados = canalesRecibidos.map(ch => ({
-        canal: Number(ch.canal) || 1,
-        activo: ch.activo !== false,
-        bpm: Number(ch.bpm) || 0,
-        spo2: Number(ch.spo2) || 0,
-        calidad: ['buena', 'regular', 'mala', 'sin_dedo'].includes(ch.calidad) ? ch.calidad : 'buena',
-        ir: Array.isArray(ch.ir) ? ch.ir.slice(0, 100) : [],
-        rojo: Array.isArray(ch.rojo) ? ch.rojo.slice(0, 100) : []
-      }))
+      // 5. Asignar canales sanitizados y acotados fisiológicamente (RF05, RF08, RF65)
+      const canalesProcesados = datosSeguros.canales
 
-      // 5. Actualizar cache en memoria
+      // 6. Actualizar cache en memoria con datos completamente sanitizados
       const ahoraIso = new Date().toISOString()
       const ipCliente = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || body.ip || '127.0.0.1'
 
@@ -201,10 +207,10 @@ export default async function handler(req, res) {
         dispositivoId,
         dispositivo: dispositivoNombre,
         ip: ipCliente,
-        rssi: body.wifi_rssi ?? null,
-        paquete: Number(body.paquete) || (ultimaTelemetria.paquete + 1),
-        uptimeMs: Number(body.uptime_ms) || null,
-        frecuenciaHz: Number(body.frecuencia_hz) || 50,
+        rssi: datosSeguros.wifiRssi,
+        paquete: datosSeguros.paquete || (ultimaTelemetria.paquete + 1),
+        uptimeMs: datosSeguros.uptimeMs,
+        frecuenciaHz: datosSeguros.frecuenciaHz,
         canales: canalesProcesados
       }
 
@@ -217,7 +223,7 @@ export default async function handler(req, res) {
         bufferPaquetes.shift()
       }
 
-      // 6. Si Supabase admin está disponible, actualizar latido de sesión activa
+      // 7. Si Supabase admin está disponible, actualizar latido de sesión activa
       if (supabaseAdmin && dispositivoId) {
         try {
           await supabaseAdmin
@@ -230,7 +236,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // 7. Respuesta exitosa al ESP32 con metadatos de seguridad RF55
+      // 8. Respuesta exitosa al ESP32 con metadatos de seguridad RF55 y RF65
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json')
       return res.end(JSON.stringify({
@@ -241,7 +247,9 @@ export default async function handler(req, res) {
         paquete: ultimaTelemetria.paquete,
         canales_recibidos: canalesProcesados.length,
         timestamp: ahoraIso,
-        cifrado_transito: 'TLS_1_3'
+        cifrado_transito: 'TLS_1_3',
+        sanitizacion_entradas: 'RF65_CUMPLIDO',
+        advertencias: validacion.advertencias
       }))
 
     } catch (err) {
