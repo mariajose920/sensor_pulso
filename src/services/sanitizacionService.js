@@ -16,6 +16,22 @@
  * ============================================================================
  */
 
+import {
+  LIMITES_CSV,
+  detectarFormulaCsv,
+  detectarArchivoBinario,
+  validarLimitesArchivoCsv,
+  validarMetadatosArchivoCsv
+} from './limitesCsvService.js'
+
+export {
+  LIMITES_CSV,
+  detectarFormulaCsv,
+  detectarArchivoBinario,
+  validarLimitesArchivoCsv,
+  validarMetadatosArchivoCsv
+}
+
 // Límites de seguridad (RF65 / RF66)
 export const LIMITES_SEGURIDAD = {
   LONGITUD_MAX_TEXTO_DISPOSITIVO: 64,
@@ -28,8 +44,8 @@ export const LIMITES_SEGURIDAD = {
   BPM_MAX_FISIOLOGICO: 280,
   SPO2_MIN_FISIOLOGICO: 0.0,
   SPO2_MAX_FISIOLOGICO: 100.0,
-  MAX_LINEAS_CSV: 100000,
-  TAMANO_MAX_CSV_BYTES: 5 * 1024 * 1024 // 5 MB
+  MAX_LINEAS_CSV: LIMITES_CSV.MAX_FILAS,
+  TAMANO_MAX_CSV_BYTES: LIMITES_CSV.TAMANO_MAX_BYTES
 }
 
 export const ESTADOS_CALIDAD_VALIDOS = ['buena', 'regular', 'mala', 'sin_dedo']
