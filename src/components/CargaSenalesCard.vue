@@ -62,7 +62,7 @@
         <input
           ref="fileInputRef"
           type="file"
-          accept=".csv,text/csv,text/plain"
+          accept=".csv,text/csv"
           style="display: none;"
           @change="onFileSelected"
         />
@@ -73,7 +73,7 @@
             Arrastra tu archivo <strong>.CSV</strong> aquí o haz clic para examinar
           </p>
           <span class="dropzone-hint">
-            Formatos compatibles: columnas <code>tiempo, ir, rojo</code> o <code>t, ppg</code> (delimitadores: coma, punto y coma o tabulación). Límite: 5 MB (RF66).
+            Límites de seguridad (RF66): máximo 5 MB, hasta 50.000 filas, tipo estrictamente <code>.csv</code>. Se rechaza contenido binario o fórmulas (<code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>) antes de procesar.
           </span>
 
           <div style="display: flex; gap: 0.75rem; margin-top: 0.85rem; flex-wrap: wrap; justify-content: center;">
@@ -297,7 +297,8 @@ import {
   DATASETS_PUBLICOS_CATALOGO,
   SENALES_VALIDADAS_CATALOGO,
   PRESETS_SIMULACION,
-  generarCsvPlantillaEjemplo
+  generarCsvPlantillaEjemplo,
+  validarMetadatosArchivoCsv
 } from '../services/senalesService.js'
 import { esp32State, senalBuffer } from '../services/esp32Service.js'
 
@@ -355,15 +356,19 @@ function onDropArchivo(event) {
 
 function procesarArchivo(file) {
   errorCsv.value = ''
-  if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
-    errorCsv.value = 'El archivo debe tener extensión .csv o .txt'
+
+  // 1. Pre-validación de metadatos (tamaño y tipo .csv) antes de procesar (RF66)
+  const metaVal = validarMetadatosArchivoCsv(file)
+  if (!metaVal.valido) {
+    errorCsv.value = metaVal.error
     return
   }
 
   const reader = new FileReader()
   reader.onload = (e) => {
     const texto = e.target?.result
-    const res = senalesService.cargarDesdeCsv(texto, file.name)
+    // 2. Validación de límites, contenido binario y fórmulas con rechazo previo (RF66)
+    const res = senalesService.cargarDesdeCsv(texto, file.name, file.size)
     if (!res.valido) {
       errorCsv.value = res.error || 'Error al procesar el archivo CSV'
     } else {
