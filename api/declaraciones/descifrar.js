@@ -8,6 +8,7 @@
  */
 import { descifrarSobre, ErrorClave } from '../_lib/cifradoSalud.js'
 import { leerCuerpo, responder, verificarSesion } from '../_lib/sesion.js'
+import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -16,6 +17,18 @@ export function crearHandler({ verificar = verificarSesion, env = process.env } 
     if (req.method !== 'POST') return responder(res, 405, { ok: false, error: 'Solo se acepta POST.' })
     const sesion = await verificar(req, env)
     if (!sesion) return responder(res, 401, { ok: false, error: 'Se requiere una sesión válida.' })
+
+    // RF67: Limite de peticiones
+    const ip = extraerIp(req)
+    const claveRateLimit = `api:descifrar:${sesion.usuario?.id || ip}`
+    const permitido = await aplicarLimitePeticiones(req, res, {
+      clave: claveRateLimit,
+      maximo: LIMITES_PETICIONES_CONFIG.API_ESTANDAR_MAXIMO,
+      segundos: LIMITES_PETICIONES_CONFIG.API_ESTANDAR_SEGUNDOS,
+      env
+    })
+    if (!permitido) return
+
     const id = leerCuerpo(req)?.declaracionId
     if (!id || !UUID.test(String(id))) return responder(res, 400, { ok: false, error: 'Falta un declaracionId válido.' })
 

@@ -9,6 +9,7 @@
  */
 import { descifrarSobre, ErrorClave } from '../_lib/cifradoSalud.js'
 import { responder, verificarSesion } from '../_lib/sesion.js'
+import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 
 /** Campos del perfil que se entregan. Nada interno. */
 const CAMPOS_PERFIL = ['correo', 'nombre', 'rol', 'creado_en', 'politica_version', 'politica_aceptada_en']
@@ -63,6 +64,17 @@ export function crearHandler({ verificar = verificarSesion, env = process.env } 
     if (req.method !== 'POST') return responder(res, 405, { ok: false, error: 'Solo se acepta POST.' })
     const sesion = await verificar(req, env)
     if (!sesion) return responder(res, 401, { ok: false, error: 'Se requiere una sesión válida.' })
+
+    // RF67: Limite de peticiones para exportacion de datos
+    const ipCliente = extraerIp(req)
+    const claveRateLimit = `api:exportar:${sesion.usuario?.id || ipCliente}`
+    const permitido = await aplicarLimitePeticiones(req, res, {
+      clave: claveRateLimit,
+      maximo: LIMITES_PETICIONES_CONFIG.API_EXPORTAR_MAXIMO,
+      segundos: LIMITES_PETICIONES_CONFIG.API_EXPORTAR_SEGUNDOS,
+      env
+    })
+    if (!permitido) return
 
     const { data, error } = await sesion.db.rpc('exportar_mis_datos')
     if (error || !data) {
