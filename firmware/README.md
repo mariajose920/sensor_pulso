@@ -28,11 +28,11 @@ Abrir el archivo `firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino` y ajustar la
 const char* WIFI_SSID     = "MiRedWiFi";
 const char* WIFI_PASSWORD = "MiPasswordWiFi";
 
-// 2. URL del servidor
-// Para pruebas locales en la misma red WiFi:
-const char* SERVER_URL    = "http://192.168.1.100:5173/api/esp32/telemetria";
+// 2. URL del servidor (estrictamente https:// con TLS - RF55)
 // Para producción en Vercel:
-// const char* SERVER_URL = "https://tu-proyecto.vercel.app/api/esp32/telemetria";
+const char* SERVER_URL    = "https://sensorpulso.vercel.app/api/esp32/telemetria";
+// Para pruebas locales seguras:
+// const char* SERVER_URL = "https://192.168.1.100:5173/api/esp32/telemetria";
 
 // 3. Token propio del dispositivo (RF54)
 // Obtenido al registrar el ESP32 en el panel de administración
