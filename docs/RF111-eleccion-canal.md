@@ -126,5 +126,11 @@ Pruebas: `scripts/test-medicion-flujo-docente.mjs`, `scripts/test-practica-evalu
 
 - **Análisis:** la placa no perdía el WiFi; el parpadeo «conectado / sin conexión» venía de envíos HTTPS lentos (3 a 9 s, a veces mucho más si el handshake TLS se colgaba), de una ventana de «conectado» de 5 s y de una app que vaciaba los canales al primer hueco.
 - **App:** `utils/toleranciaConexion.js` — se conservan canales y «conectado» hasta 10 s sin datos nuevos, se descartan respuestas más viejas que lo mostrado y las consultas no se solapan. **Servidor:** ventana de «conectado» de 15 s (`api/esp32/telemetria.js`; aplica cuando se despliegue). **Firmware:** sin ahorro de energía del módem, tiempos máximos de 4–6 s en el envío (conexión, lectura y handshake TLS) y recuperación automática (a los 5 envíos fallidos seguidos reinicia el WiFi; a los 20 reinicia la placa).
-- **Botón «Terminar»** en cada gráfica: congela el canal y pregunta si guardar; si la persona puede publicar (admin, o profesor con el permiso de RF98) pregunta además si publicar de forma anónima (RF57). Código: `TerminarMedicionModal.vue`, `utils/terminarMedicion.js`. Con la sesión de demostración (sin sesión real en la base) el guardado se deshabilita y el diálogo lo explica.
+- **Botón «Terminar»** en cada gráfica: congela el canal y pregunta si guardar; si la persona puede publicar (admin, o profesor con el permiso de RF98) pregunta además si publicar de forma anónima (RF57). Código: `TerminarMedicionModal.vue`, `utils/terminarMedicion.js`. Sin una sesión de medición real en la base, la medición se guarda igual en la cuenta (sin ligarla a una sesión). Si el paciente se agregó con «Agregar canal», al publicar quien mide marca una casilla confirmando que el paciente autorizó la publicación anónima (su consentimiento no menciona publicar).
 - Pruebas: `scripts/test-tolerancia-conexion.mjs`, `scripts/test-terminar-medicion.mjs`.
+
+### SpO₂: cálculo corregido en el firmware
+
+- **Antes:** el firmware usaba `110 − 25 × (rojo/infrarrojo)` con valores brutos (físicamente incorrecto), arrancaba en 98 % y casi nunca cambiaba.
+- **Ahora:** razón de razones `R = (AC_rojo/DC_rojo) / (AC_ir/DC_ir)` en ventanas de 2 s, con la recta empírica `110 − 25·R`, solo con dedo apoyado y señal pulsátil válida. Sin dedo, en calentamiento o con señal inservible el valor es **0 = sin lectura** y la app muestra «—». Nunca se inventa un valor.
+- **Límite:** sigue siendo una aproximación educativa **sin calibrar** contra un oxímetro de referencia; no es una medición clínica.

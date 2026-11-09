@@ -28,9 +28,6 @@ export const PERMISO_PUBLICAR = 'publicar_galeria'
 export const CONSENTIMIENTO_PACIENTE_INCLUYE_PUBLICAR = false
 
 export const MENSAJES_TERMINAR = {
-  sesion_demo:
-    'Esta es una sesión de demostración y no está conectada a la base de datos: la medición no se puede guardar. ' +
-    'Inicia una sesión de medición real para poder guardarla.',
   sin_sesion: MENSAJES_GUARDADO.sin_sesion,
   sin_datos: 'Todavía no hay una medición con BPM válido para guardar. Puedes elegir «Medir de nuevo».',
   guardada: 'Medición guardada.',
@@ -83,10 +80,10 @@ export function evaluarPublicacion(e = {}) {
   if ((e.fuente || 'sensor') !== 'sensor') {
     return { puede: false, preguntar: false, codigo: 'simulador', nota: MENSAJES_TERMINAR.publicar_simulador }
   }
-  if (e.pacienteConConsentimientoPropio && !CONSENTIMIENTO_PACIENTE_INCLUYE_PUBLICAR) {
-    return { puede: false, preguntar: false, codigo: 'paciente_sin_consentimiento_publicar', nota: MENSAJES_TERMINAR.publicar_paciente }
-  }
-  return { puede: true, preguntar: true, codigo: 'ok', nota: null }
+  // El consentimiento de un paciente agregado con «Agregar canal» no menciona publicar: quien mide confirma, al publicar,
+  // que esa persona lo autorizó (casilla obligatoria en el diálogo)
+  const requiereAutorizacionPaciente = Boolean(e.pacienteConConsentimientoPropio) && !CONSENTIMIENTO_PACIENTE_INCLUYE_PUBLICAR
+  return { puede: true, preguntar: true, codigo: 'ok', nota: null, requiereAutorizacionPaciente }
 }
 
 /**
@@ -96,7 +93,6 @@ export function evaluarPublicacion(e = {}) {
  */
 export function evaluarGuardado({ haySesion, sesionReal, bpm, calidad = null } = {}) {
   if (!haySesion) return { puede: false, codigo: 'sin_sesion', mensaje: MENSAJES_TERMINAR.sin_sesion }
-  if (!sesionReal) return { puede: false, codigo: 'sesion_demo', mensaje: MENSAJES_TERMINAR.sesion_demo }
   if (!(Number(bpm) > 0)) return { puede: false, codigo: 'sin_datos', mensaje: MENSAJES_TERMINAR.sin_datos }
   if (calidad === 'mala') return { puede: false, codigo: 'calidad_mala', mensaje: MENSAJES_GUARDADO.calidad_mala }
   return { puede: true, codigo: null, mensaje: null }
@@ -146,6 +142,12 @@ export function duracionSegundos(inicio, fin) {
   return Math.round((b - a) / 1000)
 }
 
+const UUID_SESION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** ¿Es el id de una sesión real de la base? (la de demostración, «ses-demo-01», no lo es) */
+export function esUuidSesion(id) {
+  return typeof id === 'string' && UUID_SESION.test(id)
+}
+
 /**
  * Arma lo que se muestra en el diálogo y lo que recibe `guardarMedicion` para un canal terminado.
  * @param {{canal:number, paciente:object, metricas:object, calidadDispositivo?:string|null, fuente?:string,
@@ -188,7 +190,7 @@ export function armarRegistroTerminado({
       idCliente,
       fuente,
       canal,
-      sesionId: sesionId || undefined,
+      sesionId: esUuidSesion(sesionId) ? sesionId : undefined,
       bpm,
       spo2,
       rmssd: m.hrv?.rmssd ?? null,

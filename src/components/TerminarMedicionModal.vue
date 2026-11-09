@@ -58,12 +58,19 @@
             </ul>
             <p class="nota">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}).</p>
           </div>
+          <label v-if="evalPublicacion.requiereAutorizacionPaciente" class="autoriza" data-testid="terminar-autoriza">
+            <input v-model="autorizaPaciente" type="checkbox" data-testid="terminar-autoriza-casilla" />
+            <span>
+              <strong>{{ registro.resumen.paciente || 'El paciente' }}</strong> autorizó que su medición se publique de forma anónima
+              (sin su nombre ni datos que lo identifiquen) para que otras personas la vean y comparen.
+            </span>
+          </label>
           <p v-if="error" class="alerta alerta-error" role="alert" data-testid="terminar-error">{{ error }}</p>
 
           <div class="acciones">
             <button type="button" class="btn btn-secondary" :disabled="trabajando" @click="paso = 'guardar'">Atrás</button>
             <button type="button" class="btn btn-secondary" :disabled="trabajando" data-testid="terminar-solo-guardar" @click="ejecutar(false)">No, solo guardar</button>
-            <button ref="botonPublicar" type="button" class="btn btn-primary" :disabled="trabajando" data-testid="terminar-publicar" @click="ejecutar(true)">
+            <button ref="botonPublicar" type="button" class="btn btn-primary" :disabled="trabajando || (evalPublicacion.requiereAutorizacionPaciente && !autorizaPaciente)" data-testid="terminar-publicar" @click="ejecutar(true)">
               {{ trabajando ? 'Guardando…' : 'Sí, publicar' }}
             </button>
           </div>
@@ -89,7 +96,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { guardarMedicion, publicarMedicion } from '../services/medicionesService'
 import { obtenerPermisosProfesor } from '../services/adminService'
-import { esUuid } from '../services/canalesService'
 import {
   evaluarGuardado, evaluarPublicacion, vistaPreviaPublica, mensajeResultado,
   MENSAJES_TERMINAR
@@ -99,7 +105,7 @@ import {
 const props = defineProps({
   /** Resultado de armarRegistroTerminado() */
   registro: { type: Object, required: true },
-  /** Id de la sesión de medición; si no es un uuid de la base es de demostración y no se puede guardar */
+  /** Id de la sesión de medición; si no es un uuid de la base (sesión de demostración) la medición se guarda sin ligarla a una sesión */
   sesionId: { type: String, default: null }
 })
 const emit = defineEmits(['cerrar', 'resultado'])
@@ -111,6 +117,7 @@ const trabajando = ref(false)
 const error = ref('')
 const resultado = ref({ ok: false, titulo: '', detalle: '' })
 const permisos = ref(null)
+const autorizaPaciente = ref(false) // quien mide confirma que el paciente autorizó publicar (consentimiento propio del canal)
 const caja = ref(null)
 const tituloEl = ref(null)
 const botonGuardar = ref(null)
@@ -121,7 +128,6 @@ let enfocadoAntes = null
 
 const evalGuardado = computed(() => evaluarGuardado({
   haySesion: isAuthenticated.value,
-  sesionReal: esUuid(props.sesionId),
   bpm: props.registro.resumen.bpm,
   calidad: props.registro.resumen.calidad
 }))
@@ -181,7 +187,7 @@ async function ejecutar(publicar) {
     // 2) Publicar si se pidió y se puede
     let publicada = false
     let motivoPublicacion = null
-    if (publicar && evalPublicacion.value.preguntar) {
+    if (publicar && evalPublicacion.value.preguntar && (!evalPublicacion.value.requiereAutorizacionPaciente || autorizaPaciente.value)) {
       if (medicionGuardada.pendiente) motivoPublicacion = MENSAJES_TERMINAR.publicar_pendiente
       else if (!medicionGuardada.id) motivoPublicacion = MENSAJES_TERMINAR.publicar_sin_id
       else {
@@ -301,6 +307,8 @@ onBeforeUnmount(() => { try { enfocadoAntes?.focus?.() } catch { /* el elemento 
 .vista-previa { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 0.7rem 1rem; }
 .vista-previa ul { margin: 0.25rem 0 0.4rem 1.1rem; padding: 0; font-size: 0.9rem; }
 .vista-titulo { margin: 0; font-size: 0.85rem; font-weight: 600; color: #334155; }
+.autoriza { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0.9rem 0 0; padding: 0.7rem 0.9rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; font-size: 0.875rem; }
+.autoriza input { margin-top: 0.2rem; accent-color: var(--color-primary, #1e40af); }
 .acciones { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; flex-wrap: wrap; }
 .acciones .btn { min-height: var(--alto-tactil, 2.5rem); }
 @media (max-width: 600px) {

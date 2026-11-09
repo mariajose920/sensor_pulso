@@ -102,7 +102,23 @@ float anterior = 0;
 float amplitud = 100;
 unsigned long ultimoLatido = 0;
 volatile float bpmActual = 0;
-volatile float spo2Actual = 98.0;
+volatile float spo2Actual = 0.0;   // 0 = sin lectura válida (nunca se inventa un valor)
+
+// SpO2 por razón de razones: R = (AC_rojo / DC_rojo) / (AC_ir / DC_ir), con ventanas de 2 s
+float dcRojo = 0;
+float sumaAcRojo2 = 0;
+float sumaAcIr2 = 0;
+int muestrasSpo2 = 0;
+int ventanasSpo2Invalidas = 0;
+
+void reiniciarSpo2() {
+  spo2Actual = 0;
+  dcRojo = 0;
+  sumaAcRojo2 = 0;
+  sumaAcIr2 = 0;
+  muestrasSpo2 = 0;
+  ventanasSpo2Invalidas = 0;
+}
 volatile bool estadoSinDedo = true;
 volatile uint16_t valorGraficaActual = 2048;
 volatile uint16_t ultimoIRGlobal = 0;
@@ -182,6 +198,7 @@ void procesar(uint16_t ir, uint16_t rojo) {
 
   if (sinDedo) {
     bpmActual = 0;
+    reiniciarSpo2();
     dc = ir;
     filtrado = 0;
     maximo = 0;
@@ -192,6 +209,7 @@ void procesar(uint16_t ir, uint16_t rojo) {
     valor = 2048;
   } else if (!habiaDedo || (millis() - dedoDesde) < CALENTAMIENTO_MS) {
     if (!habiaDedo) { habiaDedo = true; dedoDesde = millis(); }
+    reiniciarSpo2();
     dc = ir;
     filtrado = 0;
     maximo = 0;
@@ -255,12 +273,39 @@ void procesar(uint16_t ir, uint16_t rojo) {
     float v = 2048.0f + filtrado * (1800.0f / amplitud);
     valor = (int)constrain(v, 0, 4095);
 
-    // Estimación SpO2
-    if (ir > 1000 && rojo > 1000) {
-      float r = ((float)rojo / (float)ir);
-      float calcSpO2 = 110.0f - 25.0f * r;
-      if (calcSpO2 >= 88.0f && calcSpO2 <= 100.0f) {
-        spo2Actual = 0.92f * spo2Actual + 0.08f * calcSpO2;
+    // Estimación de SpO2 (aproximación educativa, sin calibrar contra un oxímetro de referencia):
+    // razón de razones R = (AC_rojo/DC_rojo) / (AC_ir/DC_ir) y la recta empírica 110 - 25·R.
+    if (rojo > 1000) {
+      if (dcRojo == 0) dcRojo = rojo;
+      dcRojo += 0.02f * (rojo - dcRojo);          // DC lento del rojo (igual que el del infrarrojo)
+      float acRojo = rojo - dcRojo;
+      float acIr = ir - dc;
+      sumaAcRojo2 += acRojo * acRojo;
+      sumaAcIr2 += acIr * acIr;
+      muestrasSpo2++;
+
+      if (muestrasSpo2 >= 200) {                  // ventana de 2 s a 100 Hz
+        float rmsRojo = sqrtf(sumaAcRojo2 / muestrasSpo2);
+        float rmsIr = sqrtf(sumaAcIr2 / muestrasSpo2);
+        float indiceIr = (dc > 1) ? rmsIr / dc : 0;           // índice de perfusión del infrarrojo
+        float indiceRojo = (dcRojo > 1) ? rmsRojo / dcRojo : 0;
+        bool valida = false;
+        if (indiceIr > 0.001f && indiceIr < 0.2f && indiceRojo > 0) {
+          float r = indiceRojo / indiceIr;
+          float calc = 110.0f - 25.0f * r;
+          if (r >= 0.3f && r <= 3.0f && calc >= 70.0f && calc <= 100.0f) {
+            spo2Actual = (spo2Actual > 0) ? (0.7f * spo2Actual + 0.3f * calc) : calc;
+            valida = true;
+          }
+        }
+        if (valida) {
+          ventanasSpo2Invalidas = 0;
+        } else if (++ventanasSpo2Invalidas >= 3) {
+          spo2Actual = 0;                         // señal inservible: sin lectura en vez de un número inventado
+        }
+        sumaAcRojo2 = 0;
+        sumaAcIr2 = 0;
+        muestrasSpo2 = 0;
       }
     }
   }

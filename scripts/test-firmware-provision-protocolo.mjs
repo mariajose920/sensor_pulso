@@ -68,6 +68,13 @@ prueba('cabecera X-ESP32-Token con token de NVS', /addHeader\("X-ESP32-Token",\s
 prueba('hello al arrancar tras Serial.begin',
   src.indexOf('Serial.begin(115200)') < src.indexOf('emitirHello("hello");', src.indexOf('void setup')))
 
+// SpO2: sin valores inventados
+prueba('SpO2 arranca en 0 (sin lectura), no en 98', /volatile float spo2Actual = 0\.0/.test(src))
+prueba('SpO2 usa la razón de razones con componente pulsátil (AC) y continua (DC)', src.includes('sumaAcRojo2') && src.includes('indiceRojo / indiceIr'))
+prueba('SpO2 ya no usa la razón de valores brutos rojo/infrarrojo', !/float r = \(\(float\)rojo \/ \(float\)ir\)/.test(src))
+prueba('sin dedo o en calentamiento se borra la lectura de SpO2', (src.match(/reiniciarSpo2\(\);/g) || []).length >= 2)
+prueba('una señal inservible da «sin lectura» (0) y no un número', /ventanasSpo2Invalidas >= 3/.test(src) && /spo2Actual = 0;\s+\/\/ señal inservible/.test(src))
+
 if (fallos) {
   console.log(`\n${fallos} prueba(s) fallaron`)
   process.exit(1)
