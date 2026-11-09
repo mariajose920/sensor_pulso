@@ -24,6 +24,10 @@
  * Formato MULTICANAL (hasta 5 sensores MAX30102; canales 1..5):
  *   A) Una línea por muestra y canal (RECOMENDADO, lleva timestamp):
  *        CH<n>,t_ms,ir,red          ej.:  CH2,15230,84210,70311
+ *   A+) Igual que A con los valores que calcula la propia placa (los mismos que envía por WiFi):
+ *        CH<n>,t_ms,ir,red,bpm,spo2,dedo    ej.:  CH1,15230,24480,20990,72.0,97.5,1
+ *        bpm/spo2 = 0 significa «sin lectura»; dedo = 0 significa «sin dedo» (la placa manda ir=0).
+ *        Es el formato que usa el firmware esp32_wifi_prueba.ino por USB.
  *   B) Una trama con varios canales en la misma línea (timestamp opcional):
  *        [T:t_ms;]CH1:ir,red;CH2:ir,red;...   ej.:  T:15230;CH1:84210,70311;CH2:80100,66200
  *
@@ -127,12 +131,21 @@ export function parsearLineaSerial(linea) {
       muestras.push(crearMuestra(Number(m[1]), tMs, valores[0], valores[1]))
     }
   } else if (/^CH\d+,/i.test(s)) {
-    // A) CH<n>,t_ms,ir,red (exactamente 4 campos: un truncado no se confunde con otro formato)
+    // A) CH<n>,t_ms,ir,red  (4 campos)  ·  A+) CH<n>,t_ms,ir,red,bpm,spo2,dedo  (7 campos).
+    // Cualquier otra cantidad se descarta entera: un truncado no se confunde con otro formato.
     const partes = s.split(',')
-    if (partes.length !== 4) return []
+    if (partes.length !== 4 && partes.length !== 7) return []
     const nums = partes.slice(1).map(aNumero)
     if (nums.some(Number.isNaN)) return []
-    muestras.push(crearMuestra(Number(partes[0].slice(2)), nums[0], nums[1], nums[2]))
+    if (partes.length === 7) {
+      const [t, ir, rojo, bpmPlaca, spo2Placa, dedo] = nums
+      if (!(bpmPlaca >= 0 && bpmPlaca <= 300) || !(spo2Placa >= 0 && spo2Placa <= 100) || (dedo !== 0 && dedo !== 1)) return []
+      muestras.push(crearMuestra(Number(partes[0].slice(2)), t, ir, rojo, {
+        hardwareBpm: bpmPlaca, hardwareSpo2: spo2Placa, dePlaca: true, leadsOff: dedo === 0
+      }))
+    } else {
+      muestras.push(crearMuestra(Number(partes[0].slice(2)), nums[0], nums[1], nums[2]))
+    }
   } else {
     // Formatos heredados numéricos -> canal 1
     const partes = s.split(/[,;\s]+/).filter((p) => p !== '')
@@ -316,7 +329,7 @@ function nuevoCanal() {
   return {
     t: [], ir: [], rojo: [], nuevasIr: [], nuevasRojo: [],
     tsReales: false, ultimaT: null, contador: 0, visto: 0,
-    sinDedo: false, hardwareBpm: 0,
+    sinDedo: false, hardwareBpm: 0, hardwareSpo2: null, dePlaca: false,
     cache: null, cacheEn: -Infinity
   }
 }
@@ -350,6 +363,9 @@ export function crearAgregadorSerial(opciones = {}) {
     if (!c) { c = nuevoCanal(); canales.set(m.canal, c) }
     c.visto = ahora()
     c.hardwareBpm = m.hardwareBpm || 0
+    // Si la placa informa sus propios valores (formato A+) se usan los mismos que por WiFi
+    c.dePlaca = Boolean(m.dePlaca)
+    c.hardwareSpo2 = m.dePlaca ? (m.hardwareSpo2 || 0) : null
 
     // Sin dedo: ir=0 (firmware «0,0») o leads_off=1 -> el canal existe pero sin señal
     if (m.ir <= 0 || m.leadsOff) {
@@ -411,13 +427,24 @@ export function crearAgregadorSerial(opciones = {}) {
   function calcularMetricas(c) {
     const fs = frecuenciaCanal(c)
     const hayRojo = c.rojo.length === c.ir.length && c.rojo.length > 0
-    let bpm = calcularBpmDesdePicos(c.ir, c.t, fs)
-    let bpmOrigen = bpm === null ? null : 'muestras'
-    if (bpm === null && c.hardwareBpm >= BPM_MIN && c.hardwareBpm <= BPM_MAX) {
-      bpm = c.hardwareBpm // BPM informado por el propio dispositivo (formato MAX30100)
-      bpmOrigen = 'dispositivo'
+    let bpm
+    let bpmOrigen
+    if (c.dePlaca) {
+      // Formato A+: pulso de la placa (el mismo que se ve por WiFi); 0 = sin lectura
+      bpm = c.hardwareBpm >= BPM_MIN && c.hardwareBpm <= BPM_MAX ? c.hardwareBpm : null
+      bpmOrigen = bpm === null ? null : 'dispositivo'
+    } else {
+      bpm = calcularBpmDesdePicos(c.ir, c.t, fs)
+      bpmOrigen = bpm === null ? null : 'muestras'
+      if (bpm === null && c.hardwareBpm >= BPM_MIN && c.hardwareBpm <= BPM_MAX) {
+        bpm = c.hardwareBpm // BPM informado por el propio dispositivo (formato MAX30100)
+        bpmOrigen = 'dispositivo'
+      }
     }
-    const sp = hayRojo ? calcularSpo2DesdeVentana(c.ir, c.rojo, fs) : null
+    // Con formato A+ la SpO2 es la que mide la placa (el rojo que viaja es solo para el trazo): no se recalcula
+    const sp = c.dePlaca
+      ? (c.hardwareSpo2 > 0 ? { spo2: c.hardwareSpo2, ratioR: null, indicePerfusion: null } : null)
+      : (hayRojo ? calcularSpo2DesdeVentana(c.ir, c.rojo, fs) : null)
 
     // Calidad con los últimos ~3 s de IR
     const n3 = Math.round(3 * fs)

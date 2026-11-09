@@ -125,7 +125,9 @@ volatile uint16_t ultimoIRGlobal = 0;
 volatile uint16_t ultimoRojoGlobal = 0;
 
 // Búfer de muestras PPG para el osciloscopio en tiempo real (25 muestras/segundo)
-const int SAMPLES_PER_BLOCK = 25;
+const int SAMPLES_PER_BLOCK = 100;      // capacidad: 4 s de señal a 25 muestras/s (la API admite hasta 100 por canal)
+const int MUESTRAS_RELLENO = 25;        // sin señal suficiente se envía 1 s de relleno plano
+const int FRECUENCIA_MUESTREO_HZ = 25;  // muestras por segundo que se envían (1 de cada 4 lecturas de 100 Hz)
 volatile uint16_t bufferIR[SAMPLES_PER_BLOCK];
 volatile uint16_t bufferRojo[SAMPLES_PER_BLOCK];
 volatile int indiceBuffer = 0;
@@ -317,13 +319,16 @@ void procesar(uint16_t ir, uint16_t rojo) {
   divisorMuestras++;
   if (divisorMuestras >= 4) {
     divisorMuestras = 0;
+    // Modulación para trazado nítido en el osciloscopio
+    int offsetAC = (int)valorGraficaActual - 2048;
+    uint16_t irMuestra = (uint16_t)constrain(24500 + offsetAC, 1000, 65000);
+    uint16_t rojoMuestra = (uint16_t)constrain(21000 + (int)(offsetAC * 0.75f), 1000, 65000);
     if (indiceBuffer < SAMPLES_PER_BLOCK) {
-      // Modulación para trazado nítido en el osciloscopio
-      int offsetAC = (int)valorGraficaActual - 2048;
-      bufferIR[indiceBuffer]   = (uint16_t)constrain(24500 + offsetAC, 1000, 65000);
-      bufferRojo[indiceBuffer] = (uint16_t)constrain(21000 + (int)(offsetAC * 0.75f), 1000, 65000);
+      bufferIR[indiceBuffer]   = irMuestra;
+      bufferRojo[indiceBuffer] = rojoMuestra;
       indiceBuffer++;
     }
+    emitirMuestraUsb(millis(), irMuestra, rojoMuestra);   // lo que lee la app por USB
   }
 }
 
@@ -344,6 +349,25 @@ void cargarConfig() {
   if (cfgUrl.length() == 0)   cfgUrl = SERVER_URL;
   if (cfgToken.length() == 0) cfgToken = DEVICE_TOKEN;
   cfgUnlock();
+}
+
+// Datos por USB para la app (Web Serial): una línea por muestra, igual que lo que se envía por WiFi.
+//   CH1,<millis>,<ir>,<rojo>,<bpm>,<spo2>,<dedo>      dedo = 1 con dedo, 0 sin dedo (ir = 0)
+// bpm y spo2 son los que calcula la propia placa (0 = sin lectura). Una sola escritura, con mutex, para que no se
+// mezcle con las líneas "@SP" ni con otros mensajes.
+void emitirMuestraUsb(unsigned long t, uint16_t ir, uint16_t rojo) {
+  char buf[96];
+  int n;
+  if (estadoSinDedo) {
+    n = snprintf(buf, sizeof(buf), "CH1,%lu,0,0,0,0,0\n", t);
+  } else {
+    n = snprintf(buf, sizeof(buf), "CH1,%lu,%u,%u,%.1f,%.1f,1\n", t, (unsigned)ir, (unsigned)rojo,
+                 (double)bpmActual, (double)spo2Actual);
+  }
+  if (n <= 0 || n >= (int)sizeof(buf)) return;
+  xSemaphoreTake(serMux, portMAX_DELAY);
+  Serial.write((const uint8_t*)buf, (size_t)n);
+  xSemaphoreGive(serMux);
 }
 
 // Emite una línea del protocolo: "@SP {json}\n" (una sola escritura, con mutex).
@@ -820,11 +844,11 @@ void enviarPaquete() {
 
   if (cantMuestras < 5) {
     // Si el búfer aún no tiene 5 muestras, rellenar con valores coherentes
-    for (int i = 0; i < SAMPLES_PER_BLOCK; i++) {
+    for (int i = 0; i < MUESTRAS_RELLENO; i++) {
       irEnvio[i] = 24500;
       rojoEnvio[i] = 21000;
     }
-    cantMuestras = SAMPLES_PER_BLOCK;
+    cantMuestras = MUESTRAS_RELLENO;
   } else {
     for (int i = 0; i < cantMuestras; i++) {
       irEnvio[i] = bufferIR[i];
@@ -869,6 +893,7 @@ void enviarPaquete() {
   json += "\"token\":\"" + jsonEsc(token) + "\",";
   json += "\"paquete\":" + String(contadorPaquetes) + ",";
   json += "\"wifi_rssi\":" + String(WiFi.RSSI()) + ",";
+  json += "\"frecuencia_hz\":" + String(FRECUENCIA_MUESTREO_HZ) + ",";
   json += "\"canales\":[{";
   json += "\"canal\":1,";
   json += "\"activo\":true,";

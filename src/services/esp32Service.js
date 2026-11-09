@@ -7,6 +7,10 @@ import {
 } from '../utils/fuenteMedicion.js'
 import { codificarComando, parsearLinea, BAUDIOS } from '../utils/provisionWifi.js'
 import { decidirAnteRespuesta, esRespuestaVieja } from '../utils/toleranciaConexion.js'
+import { crearEstimadorFrecuencia, elegirFrecuencia } from '../utils/estimarFrecuencia.js'
+
+// Frecuencia real de la señal por WiFi: la que informa la placa o, si no, la que se deduce de los paquetes
+const estimadorFrecuenciaWifi = crearEstimadorFrecuencia()
 
 /**
  * FUENTE DE MEDICIÓN: el usuario debe elegir 'wifi' o 'usb' (esp32State.fuente).
@@ -83,6 +87,11 @@ function calidadPorCanal(canales) {
   const hz = esp32State.frecuenciaHz || 50
   const maxMuestras = Math.round(SEGUNDOS_VENTANA_CALIDAD * hz)
   return canales.map((c) => {
+    // Sin dedo no hay señal que evaluar: se conserva lo que informa el dispositivo y se descarta la ventana vieja
+    if (c.calidad === 'sin_dedo') {
+      ventanasCalidad.delete(c.canal)
+      return { ...c, causasCalidad: [] }
+    }
     const ventana = ventanasCalidad.get(c.canal) || []
     if (Array.isArray(c.ir)) ventana.push(...c.ir)
     if (ventana.length > maxMuestras) ventana.splice(0, ventana.length - maxMuestras)
@@ -156,6 +165,12 @@ export async function consultarTelemetriaWiFi() {
     esp32State.ip = data.ip
     esp32State.rssi = data.rssi
     esp32State.paquete = data.paquete || 0
+    estimadorFrecuenciaWifi.agregar({
+      paquete: data.paquete,
+      ultimoContacto: data.ultimoContacto,
+      muestras: Array.isArray(data.canales?.[0]?.ir) ? data.canales[0].ir.length : 0
+    })
+    esp32State.frecuenciaHz = elegirFrecuencia(data.frecuenciaHz, estimadorFrecuenciaWifi.estimar(), esp32State.frecuenciaHz)
     esp32State.canales = calidadPorCanal(data.canales || [])
     actualizarBuffersMultiCanal(esp32State.canales)
 
@@ -379,6 +394,7 @@ const INTERVALO_PUBLICACION_USB_MS = 200
 
 function limpiarEstadoMedicion() {
   ultimoOkMs = null
+  estimadorFrecuenciaWifi.reiniciar()
   esp32State.conectado = false
   esp32State.ultimoContacto = null
   esp32State.tiempoTranscurridoSegundos = null
@@ -466,7 +482,8 @@ export function publicarMuestrasUsb() {
   if (instantanea.length > 0) {
     // Hay canales que están enviando líneas (aunque sea «sin dedo»): hay contacto
     esp32State.frecuenciaHz = Math.round(agregadorUsb.frecuenciaHz() * 10) / 10
-    esp32State.canales = calidadPorCanal(instantanea)
+    // Igual que por WiFi: un canal sin dedo informa calidad «sin_dedo» (la pantalla avisa que apoye el dedo)
+    esp32State.canales = calidadPorCanal(instantanea.map((c) => (c.sinDedo ? { ...c, calidad: 'sin_dedo' } : c)))
     esp32State.ultimoContacto = new Date().toISOString()
     if (hayMuestras) {
       esp32State.paquete += 1

@@ -81,6 +81,7 @@ export default async function handler(req, res) {
       ip: ultimaTelemetria.ip,
       rssi: ultimaTelemetria.rssi,
       paquete: ultimaTelemetria.paquete,
+      frecuenciaHz: ultimaTelemetria.frecuenciaHz || null,
       canales: ultimaTelemetria.canales,
       estadisticas: {
         totalPaquetes: bufferPaquetes.length,
