@@ -413,10 +413,19 @@
       </template>
 
       <!-- Control y Gestión de Sesión de Medición en Vivo (RF09, RF10, RF11, RF111) -->
-      <details class="herramientas-prueba">
+      <!-- (Docente/administrador: el estado de la conexión se ve en «¿Cómo vas a medir?» y cada paciente se cierra con
+           «Terminar»; el control de sesión con cronómetro y rondas queda para estudiantes y usuarios.) -->
+      <details v-if="!esDocenteVista" class="herramientas-prueba">
         <summary>Sesión de medición (inicio, fin y estado)</summary>
         <SesionMedicionControl @ver-resultados="finalizarMedicionYVerResultados" />
       </details>
+
+      <!-- RF10 / RF11: si se pierde la comunicación en plena medición, se avisa y las gráficas quedan con lo último recibido -->
+      <div v-if="esDocenteVista && perdioConexion" class="alert alert-warning" role="alert" data-testid="comunicacion-perdida">
+        <strong>Se perdió la comunicación con el sensor.</strong>
+        Las gráficas muestran lo último que llegó. Revisa la conexión por {{ fuenteActual === 'usb' ? 'USB' : 'WiFi' }}; al volver, la medición
+        continúa sola. Si no vuelve, pulsa «Terminar» en cada gráfica para guardar lo medido.
+      </div>
 
       <!-- Un canal sin datos del paciente, términos y consentimiento no puede medir -->
       <div v-if="!canalSeleccionadoListo && !docenteSinCanal && !esDocenteVista" class="alert alert-warning" role="alert" data-testid="canal-bloqueado">
@@ -440,7 +449,7 @@
            paciente; con USB, al pulsar «Iniciar medición». -->
       <div ref="zonaGraficas">
         <GraficasCanalesPropios
-          v-if="sensorDetectado && graficablesPropios.length >= 1"
+          v-if="(sensorDetectado || perdioConexion) && graficablesPropios.length >= 1"
           :graficables="graficablesPropios"
           :frecuenciaHz="esp32State.frecuenciaHz"
           :sesion-id="canalesState.sesionActivaId"
@@ -1243,6 +1252,14 @@ function alAgregarCanal(canal) {
 async function quitarCanal(canal) {
   try { await desvincularMiCuenta(canal) } catch { /* el panel de canales ya informa los errores */ }
 }
+
+// RF10 / RF11: la comunicación se «perdió» si estaba conectada, había pacientes midiendo y dejó de estarlo
+const perdioConexion = ref(false)
+watch(fuenteConectada, (ahora, antes) => {
+  if (ahora) perdioConexion.value = false
+  else if (antes && esDocenteVista.value && misCanales.value.length > 0) perdioConexion.value = true
+})
+watch(fuenteActual, () => { perdioConexion.value = false }) // al cambiar de WiFi a USB no hay nada «perdido»
 
 // Si el canal en pantalla no es de este docente, se pasa a su primer canal habilitado
 watch(() => misCanales.value.map(c => c.canal).join(','), () => {

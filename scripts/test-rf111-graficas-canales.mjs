@@ -78,7 +78,7 @@ console.log('Sensor real, sin valores inventados (MedicionView)')
 const vista = readFileSync(new URL('../src/views/MedicionView.vue', import.meta.url), 'utf8')
 prueba('ya no hay canales de relleno con valores falsos', !vista.includes('canalesPorDefecto'))
 prueba('hay aviso «Sensor no detectado»', vista.includes('data-testid="sensor-no-detectado"'))
-prueba('gráficas y valores solo con sensor detectado', vista.includes('canalSeleccionadoListo.value && sensorDetectado.value') && vista.includes('v-if="sensorDetectado && graficablesPropios.length >= 1"'))
+prueba('gráficas y valores solo con sensor detectado', vista.includes('canalSeleccionadoListo.value && sensorDetectado.value') && vista.includes('v-if="(sensorDetectado || perdioConexion) && graficablesPropios.length >= 1"'))
 prueba('sin lecturas reales no se generan resultados', vista.includes('if (!bpmMedio || !spo2Medio) return'))
 
 console.log(`\n${ok} bien, ${mal} mal`)

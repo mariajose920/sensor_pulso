@@ -45,7 +45,7 @@ prueba('ya no hay botón «Iniciar medición»: al agregar el canal aparece la g
 
 console.log('Gráficas')
 prueba('con WiFi y con USB la gráfica aparece apenas hay canal y sensor', !vista.includes('mostrarGraficas') && vista.includes('const medicionActiva = computed(() => canalSeleccionadoListo.value && sensorDetectado.value)'))
-prueba('las gráficas solo aparecen con sensor detectado', vista.includes('v-if="sensorDetectado && graficablesPropios.length >= 1"'))
+prueba('las gráficas aparecen con sensor detectado (y se mantienen congeladas si se pierde la comunicación)', vista.includes('v-if="(sensorDetectado || perdioConexion) && graficablesPropios.length >= 1"'))
 prueba('el docente no ve el monitor de 5 canales (usa las gráficas)', vista.includes('v-if="canalesMostrados.length && !esDocenteVista"'))
 prueba('estudiantes siguen eligiendo canal a mano', vista.includes('<VinculacionCanales'))
 
@@ -54,6 +54,12 @@ prueba('el panel ya no lista canales ni pacientes', !panel.includes('lista-pacie
 prueba('docente no ve asignación de canales ni el monitor de 5 canales', vista.includes('v-if="canalesMostrados.length && !esDocenteVista"'))
 prueba('al agregar el canal la pantalla se mueve al centro de la gráfica', vista.includes("block: 'center'") && vista.includes('@agregado="alAgregarCanal"') && vista.includes('ref="zonaGraficas"'))
 prueba('se puede quitar un canal desde su gráfica', vista.includes('@quitar="quitarCanal"') && leer('../src/components/GraficasCanalesPropios.vue').includes("emit('quitar', d.canal)"))
+
+console.log('Sesión de medición en pantalla (RF09, RF10, RF11)')
+prueba('docente y administrador ya no ven el bloque «Sesión de medición (inicio, fin y estado)»', vista.includes('<details v-if="!esDocenteVista" class="herramientas-prueba">') && vista.includes('Sesión de medición (inicio, fin y estado)'))
+prueba('estudiantes y usuarios conservan el control de sesión con su vigilante RF10', vista.includes('<SesionMedicionControl'))
+prueba('si se pierde la comunicación se avisa (RF10/RF11) con data-testid y se explica qué hacer', vista.includes('data-testid="comunicacion-perdida"') && vista.includes('Se perdió la comunicación con el sensor'))
+prueba('la pérdida se detecta solo si estaba conectada y había pacientes midiendo', /watch\(fuenteConectada, \(ahora, antes\)[\s\S]*?antes && esDocenteVista\.value && misCanales\.value\.length > 0/.test(vista))
 
 console.log('Evaluaciones formativas sin sesión')
 prueba('la práctica no exige sesión', /path: '\/aprendizaje\/practica',\s*name: 'Practica',\s*component: PracticaView\s*}/.test(router))

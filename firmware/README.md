@@ -108,3 +108,21 @@ Ejemplo de sesión:
 - `loop()` (núcleo 1) lee la entrada serie de forma no bloqueante; el escaneo y la conexión los ejecuta la tarea WiFi (núcleo 0), que también hace el envío HTTP, de modo que no se interrumpe el muestreo del sensor.
 - La tarea WiFi se crea antes de esperar al sensor, así la placa se puede configurar aunque el MAX30100 no esté conectado.
 - Prueba estática del protocolo: `node scripts/test-firmware-provision-protocolo.mjs`.
+
+---
+
+## Datos por USB (Web Serial)
+
+Además del WiFi, el firmware escribe por el puerto USB (115200 baudios) **una línea por muestra**, 25 por segundo, con los
+mismos valores que se envían por WiFi:
+
+```
+CH1,<millis>,<ir>,<rojo>,<pulso>,<spo2>,<dedo>
+CH1,15230,24480,20990,72.0,97.5,1      con dedo
+CH1,15270,0,0,0,0,0                    sin dedo
+```
+
+`pulso` y `spo2` son los que calcula la placa (0 = sin lectura); `dedo` es 1 con dedo y 0 sin dedo. La app web
+(Medición → USB) reconoce esta línea (formato «A+», ver `src/utils/fuenteMedicion.js`) y muestra la misma gráfica que con
+WiFi. Los textos de registro y los mensajes `@SP` siguen saliendo por el mismo puerto y la app los ignora. Para usar USB hay
+que cerrar el Monitor Serie del Arduino IDE (solo un programa puede abrir el puerto).
