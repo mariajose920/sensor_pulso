@@ -32,7 +32,13 @@
         <div v-if="paso === 'guardar'">
           <p class="pregunta" data-testid="pregunta-guardar">¿Quieres guardar esta medición?</p>
           <p v-if="!evalGuardado.puede" class="alerta alerta-aviso" role="alert" data-testid="terminar-no-guardable">{{ evalGuardado.mensaje }}</p>
-          <p v-else-if="evalPublicacion.nota" class="nota" data-testid="terminar-nota-publicar">{{ evalPublicacion.nota }}</p>
+          <p
+            v-if="evalGuardado.puede && lineaPublicar.texto"
+            class="nota nota-publicar"
+            :class="{ 'nota-publicar-no': condicionesListas && !lineaPublicar.disponible }"
+            role="status"
+            data-testid="terminar-nota-publicar"
+          >{{ lineaPublicar.texto }}</p>
           <p v-if="error" class="alerta alerta-error" role="alert" data-testid="terminar-error">{{ error }}</p>
 
           <div class="acciones">
@@ -65,6 +71,9 @@
               (sin su nombre ni datos que lo identifiquen) para que otras personas la vean y comparen.
             </span>
           </label>
+          <p v-if="evalPublicacion.requiereAutorizacionPaciente && !autorizaPaciente" class="nota" data-testid="terminar-autoriza-ayuda">
+            Para publicar, marca la casilla de arriba. Si no, elige «No, solo guardar».
+          </p>
           <p v-if="error" class="alerta alerta-error" role="alert" data-testid="terminar-error">{{ error }}</p>
 
           <div class="acciones">
@@ -93,11 +102,11 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { usePuedePublicar } from '../composables/usePuedePublicar'
 import { useAuth } from '../composables/useAuth'
 import { guardarMedicion, publicarMedicion } from '../services/medicionesService'
-import { obtenerPermisosProfesor } from '../services/adminService'
 import {
-  evaluarGuardado, evaluarPublicacion, vistaPreviaPublica, mensajeResultado,
+  evaluarGuardado, evaluarPublicacion, vistaPreviaPublica, resultadoFinal, lineaInformativaPublicar,
   MENSAJES_TERMINAR
 } from '../utils/terminarMedicion.js'
 
@@ -110,13 +119,14 @@ const props = defineProps({
 })
 const emit = defineEmits(['cerrar', 'resultado'])
 
-const { isAuthenticated, isAdmin, isProfesor, currentUserId } = useAuth()
+const { isAuthenticated } = useAuth()
+const { cuenta, cargar: cargarCondiciones } = usePuedePublicar()
 
 const paso = ref('guardar') // 'guardar' | 'publicar' | 'resultado'
 const trabajando = ref(false)
 const error = ref('')
 const resultado = ref({ ok: false, titulo: '', detalle: '' })
-const permisos = ref(null)
+const condicionesListas = ref(false)
 const autorizaPaciente = ref(false) // quien mide confirma que el paciente autorizó publicar (consentimiento propio del canal)
 const caja = ref(null)
 const tituloEl = ref(null)
@@ -133,32 +143,26 @@ const evalGuardado = computed(() => evaluarGuardado({
 }))
 
 const evalPublicacion = computed(() => evaluarPublicacion({
-  haySesion: isAuthenticated.value,
-  esAdmin: isAdmin.value,
-  rol: isProfesor.value ? 'profesor' : 'usuario',
-  permisos: permisos.value,
+  ...cuenta.value,
   fuente: props.registro.fuente,
   pacienteConConsentimientoPropio: props.registro.pacienteConConsentimientoPropio
 }))
+
+// Línea discreta del primer paso: ¿se podrá publicar? y, si no, por qué (se calcula cuando ya se consultaron permisos y consentimiento)
+const lineaPublicar = computed(() => (condicionesListas.value ? lineaInformativaPublicar(evalPublicacion.value) : { disponible: false, texto: 'Comprobando si se puede publicar…' }))
 
 const vistaPrevia = computed(() => vistaPreviaPublica(props.registro))
 
 defineExpose({ paso })
 
-// El permiso del profesor (RF98) se consulta al abrir; el administrador no lo necesita
-const permisosListos = (async () => {
-  if (isAdmin.value || !isProfesor.value || !currentUserId.value) return
-  try {
-    const r = await obtenerPermisosProfesor(currentUserId.value)
-    permisos.value = r?.data || null
-  } catch { permisos.value = null }
-})()
+// El rol, el permiso del profesor (RF98), la sesión y el consentimiento se consultan al abrir
+const condicionesPromesa = cargarCondiciones().catch(() => {}).finally(() => { condicionesListas.value = true })
 
 async function guardar() {
   if (trabajando.value || !evalGuardado.value.puede) return
   error.value = ''
   trabajando.value = true
-  await permisosListos
+  await condicionesPromesa
   trabajando.value = false
   if (evalPublicacion.value.preguntar) {
     paso.value = 'publicar'
@@ -186,25 +190,26 @@ async function ejecutar(publicar) {
     }
     // 2) Publicar si se pidió y se puede
     let publicada = false
-    let motivoPublicacion = null
-    if (publicar && evalPublicacion.value.preguntar && (!evalPublicacion.value.requiereAutorizacionPaciente || autorizaPaciente.value)) {
-      if (medicionGuardada.pendiente) motivoPublicacion = MENSAJES_TERMINAR.publicar_pendiente
-      else if (!medicionGuardada.id) motivoPublicacion = MENSAJES_TERMINAR.publicar_sin_id
+    let fallo = null
+    const quisoPublicar = publicar && evalPublicacion.value.preguntar && (!evalPublicacion.value.requiereAutorizacionPaciente || autorizaPaciente.value)
+    if (quisoPublicar) {
+      if (medicionGuardada.pendiente) fallo = MENSAJES_TERMINAR.publicar_pendiente
+      else if (!medicionGuardada.id) fallo = MENSAJES_TERMINAR.publicar_sin_id
       else {
         const pub = await publicarMedicion(medicionGuardada.id)
         if (pub.ok) publicada = true
-        else motivoPublicacion = pub.mensaje
+        else fallo = pub.mensaje
       }
     }
-    const estado = publicada ? 'guardada_publicada' : (medicionGuardada.pendiente ? 'pendiente' : 'guardada')
-    const mensaje = mensajeResultado({ guardada: true, publicada, pendiente: medicionGuardada.pendiente, motivoPublicacion })
-    mostrarResultado({
-      ok: !motivoPublicacion || publicada,
-      titulo: publicada ? 'Medición guardada y publicada' : (medicionGuardada.pendiente ? 'Medición guardada en este dispositivo' : 'Medición guardada'),
-      detalle: motivoPublicacion || (medicionGuardada.pendiente ? MENSAJES_TERMINAR.pendiente : ''),
-      estado,
-      mensaje
+    // Siempre se dice si se publicó y, si no, el motivo concreto
+    const r = resultadoFinal({
+      publicada,
+      pendiente: medicionGuardada.pendiente,
+      eligioNoPublicar: evalPublicacion.value.preguntar && !quisoPublicar,
+      evaluacion: evalPublicacion.value,
+      fallo
     })
+    mostrarResultado({ ok: r.ok, titulo: r.titulo, detalle: r.detalle, estado: r.estado, mensaje: r.mensaje })
   } catch {
     error.value = 'No se pudo completar la operación. Revisa tu conexión e intenta de nuevo.'
   } finally {
@@ -300,6 +305,8 @@ onBeforeUnmount(() => { try { enfocadoAntes?.focus?.() } catch { /* el elemento 
 .resumen dd { margin: 0.1rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
 .pregunta { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.75rem; }
 .nota { font-size: 0.85rem; color: #475569; margin: 0.5rem 0; line-height: 1.45; }
+.nota-publicar { margin: 0.25rem 0 0; }
+.nota-publicar-no { color: #92400e; }
 .alerta { padding: 0.65rem 0.85rem; border-radius: 0.4rem; font-size: 0.88rem; line-height: 1.45; margin: 0.5rem 0; }
 .alerta-aviso { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }

@@ -50,15 +50,51 @@ export const MENSAJES_TERMINAR = {
 
 // ───────────────────────────── Reglas de publicación ─────────────────────────────
 
+/** Motivo (frase que sigue a «porque») por el que NO se puede publicar. Códigos estables. */
+export const RAZONES_NO_PUBLICAR = {
+  sin_sesion: 'necesitas iniciar sesión',
+  sin_permiso: 'tu cuenta de profesor no tiene el permiso de publicar (lo da el administrador)',
+  permiso_no_consultado: 'no se pudo consultar tu permiso (revisa tu conexión)',
+  simulador: 'la medición viene del simulador (solo se publican las del sensor)',
+  sin_consentimiento: 'no tienes un consentimiento informado vigente'
+}
+const SUFIJO_DESPUES = ' Puedes intentar publicarla después desde el historial.'
+
+/** «No se ofreció publicar porque …» para un código de RAZONES_NO_PUBLICAR (null si el código no es un motivo). */
+export function motivoNoPublicar(codigo) {
+  const razon = RAZONES_NO_PUBLICAR[codigo]
+  if (!razon) return null
+  return `No se ofreció publicar porque ${razon}.${codigo === 'permiso_no_consultado' ? SUFIJO_DESPUES : ''}`
+}
+
+/** Línea informativa del primer paso: ¿se podrá publicar? y, si no, por qué. */
+export function lineaInformativaPublicar(publicacion) {
+  if (publicacion?.preguntar) {
+    return { disponible: true, texto: 'Publicar: disponible. Después de guardar podrás elegir si la publicas (siempre anónima).' }
+  }
+  const razon = RAZONES_NO_PUBLICAR[publicacion?.codigo]
+  if (!razon) return { disponible: false, texto: '' }
+  return {
+    disponible: false,
+    texto: `Publicar: no disponible porque ${razon}.${publicacion.codigo === 'permiso_no_consultado' ? SUFIJO_DESPUES : ''}`
+  }
+}
+
 /**
  * Regla por cuenta: ¿esta persona puede publicar? (RF31 + RF98)
- * @param {{haySesion:boolean, esAdmin?:boolean, rol?:string, permisos?:object|null}} e
- * @returns {{puede:boolean, codigo:'ok'|'sin_sesion'|'sin_permiso'}}
+ * `sesionReal` false = la sesión guardada en el navegador ya no existe en la base (la base exige sesión).
+ * `permisoConsultado` false = falló la consulta del permiso del profesor (no es lo mismo que «no tiene permiso»).
+ * @param {{haySesion:boolean, sesionReal?:boolean|null, esAdmin?:boolean, rol?:string, permisos?:object|null,
+ *          permisoConsultado?:boolean}} e
+ * @returns {{puede:boolean, codigo:'ok'|'sin_sesion'|'sin_permiso'|'permiso_no_consultado'}}
  */
-export function puedePublicarPorCuenta({ haySesion, esAdmin = false, rol = 'usuario', permisos = null } = {}) {
-  if (!haySesion) return { puede: false, codigo: 'sin_sesion' }
+export function puedePublicarPorCuenta({
+  haySesion, sesionReal = null, esAdmin = false, rol = 'usuario', permisos = null, permisoConsultado = true
+} = {}) {
+  if (!haySesion || sesionReal === false) return { puede: false, codigo: 'sin_sesion' }
   if (esAdmin || rol === 'admin') return { puede: true, codigo: 'ok' }
   if (rol === 'profesor') {
+    if (permisoConsultado === false) return { puede: false, codigo: 'permiso_no_consultado' }
     return permisos && permisos[PERMISO_PUBLICAR] === true
       ? { puede: true, codigo: 'ok' }
       : { puede: false, codigo: 'sin_permiso' }
@@ -68,22 +104,49 @@ export function puedePublicarPorCuenta({ haySesion, esAdmin = false, rol = 'usua
 
 /**
  * ¿Se pregunta por publicar esta medición en concreto?
- * @param {{haySesion:boolean, esAdmin?:boolean, rol?:string, permisos?:object|null,
+ * `consentimientoVigente`: true / false / null (null = no se pudo comprobar; entonces decide la base al publicar).
+ * @param {{haySesion:boolean, sesionReal?:boolean|null, esAdmin?:boolean, rol?:string, permisos?:object|null,
+ *          permisoConsultado?:boolean, consentimientoVigente?:boolean|null,
  *          fuente?:string, pacienteConConsentimientoPropio?:boolean}} e
- * @returns {{puede:boolean, preguntar:boolean, codigo:string, nota:string|null}}
- *   `nota` solo se llena cuando la persona SÍ tendría permiso pero esta medición no se puede publicar
- *   (sin permiso o sin sesión no se muestra nada: la pregunta simplemente no aparece).
+ * @returns {{puede:boolean, preguntar:boolean, codigo:string, nota:string|null, requiereAutorizacionPaciente?:boolean}}
+ *   `nota` = «No se ofreció publicar porque …» siempre que no se pueda (con el motivo concreto).
  */
 export function evaluarPublicacion(e = {}) {
   const cuenta = puedePublicarPorCuenta(e)
-  if (!cuenta.puede) return { puede: false, preguntar: false, codigo: cuenta.codigo, nota: null }
-  if ((e.fuente || 'sensor') !== 'sensor') {
-    return { puede: false, preguntar: false, codigo: 'simulador', nota: MENSAJES_TERMINAR.publicar_simulador }
-  }
+  const no = (codigo) => ({ puede: false, preguntar: false, codigo, nota: motivoNoPublicar(codigo) })
+  if (cuenta.codigo === 'sin_sesion') return no('sin_sesion')
+  // Si la medición es del simulador, eso se explica primero: no se arregla con permisos
+  if ((e.fuente || 'sensor') !== 'sensor') return no('simulador')
+  if (!cuenta.puede) return no(cuenta.codigo)
+  if (e.consentimientoVigente === false) return no('sin_consentimiento')
   // El consentimiento de un paciente agregado con «Agregar canal» no menciona publicar: quien mide confirma, al publicar,
-  // que esa persona lo autorizó (casilla obligatoria en el diálogo)
+  // que esa persona lo autorizó (casilla obligatoria en el diálogo). Quien mide su propia ficha no la necesita.
   const requiereAutorizacionPaciente = Boolean(e.pacienteConConsentimientoPropio) && !CONSENTIMIENTO_PACIENTE_INCLUYE_PUBLICAR
   return { puede: true, preguntar: true, codigo: 'ok', nota: null, requiereAutorizacionPaciente }
+}
+
+/**
+ * Historial: qué se ofrece para una medición ya guardada.
+ * @param {{id?:string, usuarioId?:string|null, fuente?:string|null, fin?:string|null, publica?:boolean|null}} medicion
+ * @param {object} cuenta  mismos campos que evaluarPublicacion (haySesion, esAdmin, rol, permisos, …) y `usuarioActualId`
+ * @returns {{accion:'publicar'|'retirar'|null, motivo:string|null, codigo:string}}
+ *   accion null y motivo null = no aplica (ajena, simulador, sin cerrar o vista sin conexión): no se muestra nada.
+ */
+export function accionHistorial(medicion = {}, cuenta = {}) {
+  const ninguna = (codigo) => ({ accion: null, motivo: null, codigo })
+  if (!cuenta.usuarioActualId || !medicion.usuarioId || medicion.usuarioId !== cuenta.usuarioActualId) return ninguna('ajena')
+  if (medicion.publica === true) {
+    return cuenta.haySesion && cuenta.sesionReal !== false ? { accion: 'retirar', motivo: null, codigo: 'publicada' } : ninguna('sin_sesion')
+  }
+  if (medicion.fuente !== 'sensor') return ninguna('no_sensor')
+  if (!medicion.fin) return ninguna('sin_cerrar')
+  const ev = evaluarPublicacion({ ...cuenta, fuente: 'sensor', pacienteConConsentimientoPropio: false })
+  if (ev.preguntar) return { accion: 'publicar', motivo: null, codigo: 'ok' }
+  const razon = RAZONES_NO_PUBLICAR[ev.codigo]
+  const motivo = razon
+    ? `No se puede publicar porque ${razon}.${ev.codigo === 'permiso_no_consultado' ? ' Inténtalo de nuevo cuando tengas conexión.' : ''}`
+    : null
+  return { accion: null, motivo, codigo: ev.codigo }
 }
 
 /**
@@ -171,6 +234,9 @@ export function armarRegistroTerminado({
     if (typeof dentroDeRango !== 'boolean') dentroDeRango = null
   }
 
+  // `fin` nunca queda vacío: la base solo publica mediciones finalizadas (fin no nulo) y de fuente 'sensor'
+  fin = fin || new Date()
+  fuente = fuente || 'sensor'
   const duracionS = duracionSegundos(inicio, fin)
   return {
     resumen: {
@@ -245,12 +311,44 @@ export function vistaPreviaSinDatosIdentificables(vista, nombre) {
 
 // ───────────────────────────── Mensajes de resultado y errores ─────────────────────────────
 
-/** Mensaje de resultado de guardar (+ publicar). */
+/** Mensaje de resultado de guardar (+ publicar). El motivo de por qué no se publicó va siempre incluido. */
 export function mensajeResultado({ guardada, publicada = false, pendiente = false, motivoPublicacion = null }) {
   if (!guardada) return MENSAJES_TERMINAR.no_guardada
-  if (pendiente) return MENSAJES_TERMINAR.pendiente
+  if (pendiente) return motivoPublicacion ? `${MENSAJES_TERMINAR.pendiente} ${motivoPublicacion}` : MENSAJES_TERMINAR.pendiente
   if (publicada) return MENSAJES_TERMINAR.guardada_publicada
   return motivoPublicacion || MENSAJES_TERMINAR.guardada
+}
+
+/**
+ * Qué mostrar al terminar de guardar (y publicar).
+ * @param {{publicada?:boolean, pendiente?:boolean, eligioNoPublicar?:boolean, evaluacion?:object, fallo?:string|null}} e
+ *   `evaluacion` = resultado de evaluarPublicacion; `fallo` = texto cuando se intentó publicar y la base lo rechazó.
+ * @returns {{ok:boolean, titulo:string, detalle:string, mensaje:string, estado:string}}
+ */
+export function resultadoFinal({ publicada = false, pendiente = false, eligioNoPublicar = false, evaluacion = null, fallo = null } = {}) {
+  if (publicada) {
+    return { ok: true, titulo: 'Medición guardada y publicada', detalle: '', mensaje: MENSAJES_TERMINAR.guardada_publicada, estado: 'guardada_publicada' }
+  }
+  let porque
+  if (fallo) porque = fallo
+  else if (eligioNoPublicar) porque = 'Elegiste no publicarla.'
+  else porque = evaluacion?.nota || ''
+  if (pendiente) {
+    return {
+      ok: true,
+      titulo: 'Medición guardada en este dispositivo',
+      detalle: [MENSAJES_TERMINAR.pendiente, porque].filter(Boolean).join(' '),
+      mensaje: mensajeResultado({ guardada: true, pendiente: true, motivoPublicacion: porque }),
+      estado: 'pendiente'
+    }
+  }
+  return {
+    ok: !fallo,
+    titulo: porque ? 'Medición guardada, no publicada' : 'Medición guardada',
+    detalle: porque,
+    mensaje: porque ? (fallo ? porque : `Guardada. ${porque}`) : MENSAJES_TERMINAR.guardada,
+    estado: 'guardada'
+  }
 }
 
 /** Estado corto para la tarjeta del canal. */
@@ -281,4 +379,22 @@ export function clasificarErrorPublicacion(error) {
 
 export function mensajeErrorPublicacion(motivo) {
   return MENSAJES_TERMINAR[`publicar_${motivo}`] || MENSAJES_TERMINAR.publicar_generico
+}
+
+const CAUSAS_HISTORIAL = {
+  sin_sesion: 'necesitas iniciar sesión.',
+  sin_permiso: 'tu cuenta no tiene el permiso de publicar (lo da el administrador).',
+  consentimiento: 'no tienes un consentimiento informado vigente.',
+  no_sensor: 'solo se publican las mediciones hechas con el sensor y ya terminadas.',
+  conexion: 'no hay conexión. Inténtalo más tarde.',
+  sin_id: 'no se obtuvo el identificador de la medición.'
+}
+/** Mensaje de error de publicar/retirar desde el historial (la medición ya está guardada). */
+export function mensajeErrorHistorial(motivo, accion = 'publicar') {
+  if (accion === 'retirar') {
+    return motivo === 'conexion' ? 'No se pudo retirar la publicación: no hay conexión. Inténtalo más tarde.'
+      : motivo === 'sin_sesion' ? 'No se pudo retirar la publicación: necesitas iniciar sesión.'
+        : 'No se pudo retirar la publicación. Intenta de nuevo más tarde.'
+  }
+  return `No se pudo publicar: ${CAUSAS_HISTORIAL[motivo] || 'ocurrió un problema. Intenta de nuevo más tarde.'}`
 }

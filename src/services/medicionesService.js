@@ -37,6 +37,15 @@ async function insertarMedicion(fila) {
   return r
 }
 
+async function buscarIdPorIdCliente(idCliente) {
+  try {
+    const { data, error } = await supabase.from('mediciones').select('id').eq('id_cliente', idCliente).maybeSingle()
+    return error ? undefined : (data?.id || undefined)
+  } catch {
+    return undefined
+  }
+}
+
 function nuevoIdCliente() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   // Respaldo para navegadores sin crypto.randomUUID
@@ -78,7 +87,8 @@ export async function guardarMedicion(datos) {
     const motivo = clasificarErrorGuardado(error)
 
     if (motivo === 'duplicada') {
-      return { ok: true, estado: 'guardada', mensaje: 'Esta medición ya estaba guardada en tu historial.' }
+      // Se recupera el id de la medición ya guardada para poder publicarla (si la base no tiene id_cliente, no hay duplicados)
+      return { ok: true, estado: 'guardada', id: await buscarIdPorIdCliente(idCliente), mensaje: 'Esta medición ya estaba guardada en tu historial.' }
     }
     if (motivo === 'conexion') {
       // RNF03: sin internet se conserva en el dispositivo y se reenvía después
@@ -118,6 +128,47 @@ export async function publicarMedicion(medicionId, titulo = null) {
   }
 }
 
+/**
+ * Lo que la base dice de la sesión y del consentimiento de quien va a publicar (solo lectura, con su propia sesión).
+ * Cada valor es true/false, o null si no se pudo comprobar (sin conexión o error): en ese caso decide la base al publicar.
+ * @returns {Promise<{sesionReal: boolean|null, consentimientoVigente: boolean|null, usuarioId: string|null}>}
+ */
+export async function consultarCondicionesPublicar() {
+  let sesionReal = null
+  let consentimientoVigente = null
+  let usuarioId = null
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    if (!error) {
+      usuarioId = data?.session?.user?.id || null
+      sesionReal = Boolean(usuarioId)
+    }
+    if (usuarioId) {
+      const r = await supabase
+        .from('consentimientos_aceptados')
+        .select('id')
+        .eq('usuario_id', usuarioId)
+        .is('revocado_en', null)
+        .limit(1)
+      if (!r.error) consentimientoVigente = (r.data || []).length > 0
+    }
+  } catch { /* sin conexión: queda null */ }
+  return { sesionReal, consentimientoVigente, usuarioId }
+}
+
+/** Retira una publicación propia (RF90). Usa la función `retirar_publicacion` de la base. */
+export async function retirarPublicacion(medicionId) {
+  if (!medicionId) return { ok: false, motivo: 'sin_id' }
+  try {
+    const { error } = await supabase.rpc('retirar_publicacion', { p_medicion: medicionId })
+    if (error) throw error
+    return { ok: true }
+  } catch (error) {
+    const motivo = clasificarErrorPublicacion(error)
+    return { ok: false, motivo }
+  }
+}
+
 /** Reenvía las mediciones pendientes de la cuenta con sesión. Devuelve cuántas se enviaron y cuántas quedan. */
 export async function sincronizarPendientes() {
   const usuarioId = await usuarioActualId()
@@ -145,7 +196,7 @@ export function contarPendientes(usuarioId = null) {
 
 const COLUMNAS_HISTORIAL =
   'id, inicio, duracion_s, fuente, canal, bpm_promedio, spo2_promedio, hrv_rmssd_ms, ritmo, calidad, ' +
-  'causa_calidad, dentro_de_rango, actividad:actividades(nombre)'
+  'causa_calidad, dentro_de_rango, usuario_id, fin, publica, actividad:actividades(nombre)'
 
 /**
  * Historial de mediciones de la cuenta, de la más reciente a la más antigua.
@@ -165,7 +216,8 @@ export async function listarHistorial({ pagina = 0, fuente = null } = {}) {
     const { data, error, count } = await consulta
     if (error) throw error
 
-    const items = (data || []).map(resumirParaHistorial)
+    // usuarioId / fin / publica: para ofrecer «Publicar» o «Retirar publicación» solo donde corresponde
+    const items = (data || []).map((m) => ({ ...resumirParaHistorial(m), usuarioId: m.usuario_id || null, fin: m.fin || null, publica: m.publica === true }))
     if (pagina === 0 && !fuente) {
       for (const m of items.slice(0, 10)) {
         await guardarMedicionVista({
