@@ -1,4 +1,5 @@
 import { validarCorreoInstitucional } from '../../src/utils/validators.js'
+import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 
 // Handler compatible con Vercel Serverless Functions y Vite Middleware
 export default async function handler(req, res) {
@@ -17,6 +18,16 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json')
     return res.end(JSON.stringify({ ok: false, error: 'Método no permitido. Solo se acepta POST.' }))
   }
+
+  // RF67: Límite de peticiones para envío de invitaciones (anti-spam)
+  const ipCliente = extraerIp(req)
+  const claveRateLimit = `api:invitaciones:${ipCliente}`
+  const permitido = await aplicarLimitePeticiones(req, res, {
+    clave: claveRateLimit,
+    maximo: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_MAXIMO,
+    segundos: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_SEGUNDOS
+  })
+  if (!permitido) return
 
   // Parsear cuerpo de la petición
   let datos = {}

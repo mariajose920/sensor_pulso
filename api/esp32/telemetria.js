@@ -1,6 +1,11 @@
 import crypto from 'crypto'
-import { createClient } from '@supabase/supabase-js'
 import { validarYSanitizarTelemetriaEsp32 } from '../../src/services/sanitizacionService.js'
+import {
+  aplicarLimitePeticiones,
+  extraerIp,
+  LIMITES_PETICIONES_CONFIG,
+  getAdminSupabase
+} from '../_lib/limitePeticiones.js'
 
 // Cache en memoria para almacenar la última telemetría recibida
 // Permite que la app web en tiempo real consulte o verifique el estado inmediato del ESP32
@@ -17,16 +22,6 @@ let ultimaTelemetria = {
 // Historial circular corto de paquetes para estadísticas de latencia y recepción
 const bufferPaquetes = []
 const MAX_HISTORIAL = 50
-
-// Función para inicializar cliente Supabase con clave de servicio si está disponible
-function getAdminSupabase() {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-  const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !secretKey) return null
-  return createClient(url, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  })
-}
 
 /**
  * Detecta e informa dinámicamente el protocolo de transporte realmente utilizado.
@@ -108,6 +103,21 @@ export default async function handler(req, res) {
   // GET: Consultar el estado en vivo de la telemetría recibida del ESP32
   // --------------------------------------------------------------------------
   if (req.method === 'GET') {
+    // --------------------------------------------------------------------------
+    // RF67: Límite de peticiones para consultas de telemetría (GET)
+    // --------------------------------------------------------------------------
+    const ipCliente = extraerIp(req)
+    const claveRateLimit = `esp32:get:${ipCliente}`
+    const maximoGet = Number(process.env.ESP32_GET_RATE_LIMIT_MAX) || LIMITES_PETICIONES_CONFIG.ESP32_GET_MAXIMO
+    const segundosGet = Number(process.env.ESP32_GET_RATE_LIMIT_WINDOW) || LIMITES_PETICIONES_CONFIG.ESP32_GET_SEGUNDOS
+
+    const permitido = await aplicarLimitePeticiones(req, res, {
+      clave: claveRateLimit,
+      maximo: maximoGet,
+      segundos: segundosGet
+    })
+    if (!permitido) return
+
     const ahora = Date.now()
     const estaConectado = ultimaTelemetria.ultimoContacto && (ahora - new Date(ultimaTelemetria.ultimoContacto).getTime() < 5000)
     const infoTransporte = detectarProtocoloReal(req)
@@ -175,6 +185,23 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', 'application/json')
         return res.end(JSON.stringify({ ok: false, error: 'Falta token de autenticación del dispositivo ESP32 (RF54)' }))
       }
+
+      // --------------------------------------------------------------------------
+      // RF67: Límite de peticiones en la recepción del ESP32 (POST)
+      // Usa la función PostgreSQL `consumir_limite` y la tabla `limites_peticiones`.
+      // Normal: 1 Hz = 60 req/min. Límite: 120 req/min (el uso normal no se ve afectado).
+      // --------------------------------------------------------------------------
+      const tokenHashPrefijo = crypto.createHash('sha256').update(token).digest('hex').substring(0, 16)
+      const claveRateLimit = `esp32:telemetria:${tokenHashPrefijo}`
+      const maximoPost = Number(process.env.ESP32_RATE_LIMIT_MAX) || LIMITES_PETICIONES_CONFIG.ESP32_POST_MAXIMO
+      const segundosPost = Number(process.env.ESP32_RATE_LIMIT_WINDOW) || LIMITES_PETICIONES_CONFIG.ESP32_POST_SEGUNDOS
+
+      const permitido = await aplicarLimitePeticiones(req, res, {
+        clave: claveRateLimit,
+        maximo: maximoPost,
+        segundos: segundosPost
+      })
+      if (!permitido) return
 
       // 3. Validación y Sanitización Estricta de Entradas (RF65)
       const validacion = validarYSanitizarTelemetriaEsp32(body)
