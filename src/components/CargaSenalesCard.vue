@@ -91,6 +91,20 @@
       <div v-if="errorCsv" class="alert-box alert-error" style="margin-top: 0.75rem;">
         ⚠️ {{ errorCsv }}
       </div>
+
+      <!-- Alerta de Sanitización RF65 si hubo fórmulas neutralizadas o advertencias de seguridad -->
+      <div v-if="senalCargada && (senalCargada.formulasNeutralizadas > 0 || senalCargada.advertencias?.length > 0)" class="alert-box alert-sanitizacion" style="margin-top: 0.75rem;">
+        <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+          <span style="font-size: 1.15rem; line-height: 1;">🛡️</span>
+          <div>
+            <strong>Blindaje RF65 (Sanitización Exitosa):</strong>
+            <span v-if="senalCargada.formulasNeutralizadas > 0"> Se neutralizaron {{ senalCargada.formulasNeutralizadas }} celdas con fórmulas potencialmente peligrosas (CWE-1236 / Formula Injection).</span>
+            <ul v-if="senalCargada.advertencias?.length > 0" style="margin: 0.35rem 0 0 1.2rem; padding: 0; font-size: 0.82rem;">
+              <li v-for="(adv, idx) in senalCargada.advertencias" :key="idx">{{ adv }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 2. PESTAÑA: SEÑAL SIMULADA -->
@@ -674,6 +688,12 @@ onBeforeUnmount(() => {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
+}
+
+.alert-sanitizacion {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
 }
 
 /* Simulación */

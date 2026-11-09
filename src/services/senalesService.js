@@ -10,6 +10,7 @@
 
 import { supabase } from './supabase.js'
 import { filtroSuavizadoEMA } from '../utils/dspFiltros.js'
+import { validarYSanitizarArchivoCsv } from './sanitizacionService.js'
 
 // ============================================================================
 // 1. DATASETS PÚBLICOS ACREDITADOS (Indexados y Validados)
@@ -236,124 +237,30 @@ export function generarCurvaFisiologicaRealista(opciones = {}) {
 // 4. PARSER Y SANITIZADOR DE ARCHIVOS CSV (RF27, RF65, RF66)
 // ============================================================================
 /**
- * Parsea y sanitiza un archivo CSV con bioseñales fisiológicas
- * Soporta formatos de exportación propios y estándares abiertos (PhysioNet, PhysioZoo, etc.)
+ * Parsea y sanitiza un archivo CSV con bioseñales fisiológicas aplicando las
+ * reglas de seguridad del RF65 (CWE-1236 Formula Injection, XSS, sanitización numérica).
  */
 export function parsearArchivoCsv(contenidoTexto, nombreArchivo = 'senal.csv') {
-  if (!contenidoTexto || typeof contenidoTexto !== 'string') {
-    return { valido: false, error: 'El archivo está vacío o no contiene texto legible.' }
-  }
-
-  // Límite de seguridad de tamaño (RF66): máximo 5 MB de texto
-  if (contenidoTexto.length > 5 * 1024 * 1024) {
-    return { valido: false, error: 'El archivo supera el límite máximo de tamaño permitido (5 MB).' }
-  }
-
-  // Filtrar líneas de comentarios (# o //) y líneas en blanco
-  const lineas = contenidoTexto
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
-
-  if (lineas.length < 5) {
-    return { valido: false, error: 'El archivo contiene menos de 5 muestras válidas. Se requiere una serie temporal.' }
-  }
-
-  // Detección automática del delimitador (coma, punto y coma, tabulación, pipe)
-  const primeraLinea = lineas[0]
-  let delimitador = ','
-  if (primeraLinea.includes(';') && (primeraLinea.match(/;/g) || []).length > (primeraLinea.match(/,/g) || []).length) {
-    delimitador = ';'
-  } else if (primeraLinea.includes('\t')) {
-    delimitador = '\t'
-  } else if (primeraLinea.includes('|')) {
-    delimitador = '|'
-  }
-
-  const cabeceras = primeraLinea.split(delimitador).map(c => c.trim().toLowerCase().replace(/^["']|["']$/g, ''))
-
-  // Determinar si la primera línea es cabecera o datos numéricos directos
-  const esPrimeraLineaHeader = cabeceras.some(c => isNaN(Number(c.replace(',', '.'))))
-  const indiceInicioDatos = esPrimeraLineaHeader ? 1 : 0
-
-  // Mapeo inteligente de columnas
-  let colTiempo = -1
-  let colIr = -1
-  let colRojo = -1
-  let colPpgUnico = -1
-
-  if (esPrimeraLineaHeader) {
-    cabeceras.forEach((col, idx) => {
-      if (['tiempo', 'time', 't', 'tiempo_ms', 'time_ms', 'timestamp'].includes(col)) colTiempo = idx
-      else if (['ir', 'ir_raw', 'infrarrojo', 'ir_filtrado', 'pleth', 'pleth_ir', 'channel1', 'ch1'].includes(col)) colIr = idx
-      else if (['rojo', 'red', 'red_raw', 'rojo_filtrado', 'red_filtrado', 'channel2', 'ch2'].includes(col)) colRojo = idx
-      else if (['ppg', 'senal', 'valor', 'signal', 'val', 'data'].includes(col)) colPpgUnico = idx
-    })
-  }
-
-  // Si no se detectaron cabeceras, asumir estructura por orden de columnas
-  if (colIr === -1 && colPpgUnico === -1) {
-    const numCols = primeraLinea.split(delimitador).length
-    if (numCols === 1) {
-      colPpgUnico = 0
-    } else if (numCols === 2) {
-      colTiempo = 0
-      colPpgUnico = 1
-    } else {
-      colTiempo = 0
-      colIr = 1
-      colRojo = 2
+  // Validación y sanitización centralizada RF65
+  const resultadoSanitizacion = validarYSanitizarArchivoCsv(contenidoTexto, nombreArchivo)
+  if (!resultadoSanitizacion.valido) {
+    return {
+      valido: false,
+      error: resultadoSanitizacion.error || 'Error al validar el archivo CSV.',
+      advertencias: resultadoSanitizacion.advertencias || []
     }
   }
 
-  const muestrasIr = []
-  const muestrasRojo = []
-  const timestamps = []
-
-  for (let i = indiceInicioDatos; i < lineas.length; i++) {
-    const tokens = lineas[i].split(delimitador).map(t => t.trim().replace(/^["']|["']$/g, ''))
-    if (tokens.length === 0) continue
-
-    // Sanitización y parseo de número flotante
-    const parseNum = (str) => {
-      if (!str) return null
-      const limpio = str.replace(',', '.')
-      const num = Number(limpio)
-      return isNaN(num) ? null : num
-    }
-
-    const tVal = colTiempo >= 0 ? parseNum(tokens[colTiempo]) : i
-    const irVal = colIr >= 0 ? parseNum(tokens[colIr]) : (colPpgUnico >= 0 ? parseNum(tokens[colPpgUnico]) : null)
-    const rojoVal = colRojo >= 0 ? parseNum(tokens[colRojo]) : null
-
-    if (irVal !== null) {
-      muestrasIr.push(irVal)
-      if (rojoVal !== null) muestrasRojo.push(rojoVal)
-      if (tVal !== null) timestamps.push(tVal)
-    }
-  }
-
-  if (muestrasIr.length < 5) {
-    return { valido: false, error: 'No se encontraron columnas numéricas válidas de señal PPG en el CSV.' }
-  }
-
-  // Estimación de la frecuencia de muestreo a partir de la columna de tiempo (si existe)
-  let frecuenciaEstimadaHz = 50
-  if (timestamps.length >= 10) {
-    const dtArr = []
-    for (let j = 1; j < Math.min(timestamps.length, 50); j++) {
-      const dt = timestamps[j] - timestamps[j - 1]
-      if (dt > 0) dtArr.push(dt)
-    }
-    if (dtArr.length > 0) {
-      const dtProm = dtArr.reduce((a, b) => a + b, 0) / dtArr.length
-      // Si el delta viene en segundos (< 1.0) o milisegundos (> 1.0)
-      const dtSegundos = dtProm < 1.0 ? dtProm : dtProm / 1000.0
-      if (dtSegundos > 0.001 && dtSegundos < 1.0) {
-        frecuenciaEstimadaHz = Math.round(1.0 / dtSegundos)
-      }
-    }
-  }
+  const {
+    muestrasIr,
+    muestrasRojo,
+    timestamps,
+    frecuenciaEstimadaHz,
+    delimitador,
+    cabeceras,
+    formulasNeutralizadas,
+    advertencias
+  } = resultadoSanitizacion
 
   // Estimación preliminar de BPM mediante conteo de picos simples
   const irFiltrada = filtroSuavizadoEMA(muestrasIr, 0.3)
@@ -370,9 +277,12 @@ export function parsearArchivoCsv(contenidoTexto, nombreArchivo = 'senal.csv') {
     muestrasIr,
     muestrasRojo: muestrasRojo.length > 0 ? muestrasRojo : [...muestrasIr],
     bpmEstimado: bpmEstimado || 72.0,
-    spo2Estimado: muestrasRojo.length > 0 ? 98.0 : 98.0,
+    spo2Estimado: 98.0,
     columnasDetectadas: cabeceras,
     delimitador,
+    formulasNeutralizadas: formulasNeutralizadas || 0,
+    advertencias: advertencias || [],
+    sanitizado: true,
     resumen: `${muestrasIr.length} muestras analizadas (${duracionS}s a ${frecuenciaEstimadaHz} Hz) · BPM est: ${bpmEstimado || 72}`
   }
 }
