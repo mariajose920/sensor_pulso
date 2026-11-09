@@ -1,7 +1,35 @@
-import { ref, reactive } from 'vue'
-import { supabase } from './supabase.js'
+import { ref, reactive, computed } from 'vue'
 import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal.js'
 import { actualizarBuffersMultiCanal } from './multiCanalService.js'
+import { useSerialSensor } from '../composables/useSerialSensor.js'
+import {
+  FUENTES, validarFuente, crearAgregadorSerial, MENSAJE_USB_NO_SOPORTADO
+} from '../utils/fuenteMedicion.js'
+import { codificarComando, parsearLinea, BAUDIOS } from '../utils/provisionWifi.js'
+import { decidirAnteRespuesta, esRespuestaVieja } from '../utils/toleranciaConexion.js'
+
+/**
+ * FUENTE DE MEDICIÓN: el usuario debe elegir 'wifi' o 'usb' (esp32State.fuente).
+ *  - null  : aún no eligió -> no se sondea WiFi ni se abre USB.
+ *  - 'wifi': sondeo HTTP de /api/esp32/telemetria (comportamiento de siempre) y simulador.
+ *  - 'usb' : Web Serial (conectarUsb desde un clic); las muestras llenan el MISMO
+ *            esp32State.canales / senalBuffer que usa el resto de la app.
+ */
+const CLAVE_FUENTE = 'sensor_pulso_fuente_medicion'
+
+function usbSoportado() {
+  return typeof navigator !== 'undefined' && 'serial' in navigator
+}
+
+function leerFuenteGuardada() {
+  try {
+    const guardada = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(CLAVE_FUENTE) : null
+    // 'usb' guardada solo vale si este navegador soporta Web Serial
+    return validarFuente(guardada, { usbSoportado: usbSoportado() }).fuente
+  } catch {
+    return null
+  }
+}
 
 // Estado reactivo global de la telemetría del ESP32
 export const esp32State = reactive({
@@ -15,7 +43,26 @@ export const esp32State = reactive({
   canales: [],
   frecuenciaHz: 50,
   cargando: false,
-  error: null
+  error: null,
+  fuente: null // 'wifi' | 'usb' | null (null = el usuario aún no eligió)
+})
+esp32State.fuente = leerFuenteGuardada()
+if (esp32State.fuente === FUENTES.usb) esp32State.dispositivo = 'ESP32 (USB)'
+
+// true cuando el usuario ya eligió WiFi o USB
+export const fuenteElegida = computed(() => esp32State.fuente !== null)
+
+// Estado de la conexión USB (Web Serial)
+export const usbState = reactive({
+  soportado: usbSoportado(),
+  mensajeNoSoportado: MENSAJE_USB_NO_SOPORTADO,
+  conectando: false,
+  conectado: false,
+  puerto: '',
+  puertoAuto: false, // true si el puerto se identificó solo (sin elegirlo a mano)
+  error: null,
+  ultimaLinea: '',
+  lineasInvalidas: 0
 })
 
 // Buffer circular de muestras de señal para graficar en tiempo real (RF06)
@@ -49,19 +96,59 @@ function calidadPorCanal(canales) {
 }
 
 let pollingInterval = null
+let intervaloSolicitadoMs = null // intervalo pedido con iniciarSondeoWiFi (null = nadie lo pidió)
 let simuladorInterval = null
 export const simuladorActivo = ref(false)
 
 /**
  * Consulta el endpoint de la API para obtener el último paquete recibido del ESP32 por WiFi
+ * (solo si la fuente elegida es 'wifi').
  */
+// Última vez (hora de este equipo) que el servidor confirmó datos frescos del ESP32; sirve para tolerar huecos cortos
+let ultimoOkMs = null
+let consultando = false
+
+// Hueco corto o consulta fallida: se conservan canales y estado; pasada la tolerancia, se pasa a «desconectado»
+function aplicarHueco(decision) {
+  if (decision === 'perder') {
+    esp32State.conectado = false
+    esp32State.canales = []
+  } else if (esp32State.ultimoContacto) {
+    const diffMs = Date.now() - new Date(esp32State.ultimoContacto).getTime()
+    esp32State.tiempoTranscurridoSegundos = Math.max(0, Math.round(diffMs / 1000))
+  }
+}
+
 export async function consultarTelemetriaWiFi() {
+  // Con USB o sin fuente elegida no se sondea
+  if (esp32State.fuente !== FUENTES.wifi) return null
+  // Una consulta a la vez: si la anterior sigue en vuelo no se apilan respuestas desordenadas
+  if (consultando) return null
+  consultando = true
   try {
     const res = await fetch('/api/esp32/telemetria', {
       headers: { 'Accept': 'application/json' }
     })
     if (!res.ok) throw new Error(`HTTP error ${res.status}`)
     const data = await res.json()
+    // El usuario pudo cambiar de fuente mientras la petición estaba en vuelo
+    if (esp32State.fuente !== FUENTES.wifi) return null
+
+    // Una instancia del servidor sin datos recientes puede contestar con algo más viejo que lo que ya se muestra
+    if (esRespuestaVieja(esp32State.ultimoContacto, data.ultimoContacto)) return null
+
+    const decision = decidirAnteRespuesta({
+      conectadoAhora: esp32State.conectado,
+      ultimoOkMs,
+      ahoraMs: Date.now(),
+      servidorConectado: Boolean(data.conectado)
+    })
+    if (decision !== 'aplicar') {
+      aplicarHueco(decision)
+      esp32State.error = null
+      return data
+    }
+    ultimoOkMs = Date.now()
 
     esp32State.conectado = data.conectado
     esp32State.ultimoContacto = data.ultimoContacto
@@ -86,7 +173,15 @@ export async function consultarTelemetriaWiFi() {
     return data
   } catch (err) {
     esp32State.error = err.message
+    // Sin respuesta (red caída, servidor lento): mismo criterio, no se vacía la pantalla por un fallo aislado
+    if (esp32State.fuente === FUENTES.wifi) {
+      aplicarHueco(decidirAnteRespuesta({
+        conectadoAhora: esp32State.conectado, ultimoOkMs, ahoraMs: Date.now(), servidorConectado: null
+      }))
+    }
     return null
+  } finally {
+    consultando = false
   }
 }
 
@@ -141,22 +236,36 @@ export function setCanalOsciloscopio(canalNum) {
 }
 
 /**
- * Inicia el sondeo periódico de recepción WiFi
+ * Inicia el sondeo periódico de recepción WiFi.
+ * Se recuerda la petición: si aún no hay fuente elegida (o es USB) NO sondea y el
+ * sondeo arranca solo cuando el usuario elija WiFi (ver seleccionarFuente).
  */
 export function iniciarSondeoWiFi(intervaloMs = 1000) {
   detenerSondeoWiFi()
-  consultarTelemetriaWiFi()
-  pollingInterval = setInterval(consultarTelemetriaWiFi, intervaloMs)
+  intervaloSolicitadoMs = intervaloMs
+  if (esp32State.fuente !== FUENTES.wifi) return
+  arrancarTimerSondeo()
 }
 
-/**
- * Detiene el sondeo periódico
- */
-export function detenerSondeoWiFi() {
+function arrancarTimerSondeo() {
+  pararTimerSondeo()
+  consultarTelemetriaWiFi()
+  pollingInterval = setInterval(consultarTelemetriaWiFi, intervaloSolicitadoMs || 1000)
+}
+
+function pararTimerSondeo() {
   if (pollingInterval) {
     clearInterval(pollingInterval)
     pollingInterval = null
   }
+}
+
+/**
+ * Detiene el sondeo periódico (y olvida la petición de iniciarlo)
+ */
+export function detenerSondeoWiFi() {
+  intervaloSolicitadoMs = null
+  pararTimerSondeo()
 }
 
 /**
@@ -181,7 +290,6 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
     }
 
     const freqHz = bpm / 60.0
-    const phaseStep = (2 * Math.PI * freqHz) / 50.0
 
     const ir = []
     const rojo = []
@@ -240,7 +348,9 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
 }
 
 /**
- * Inicia o detiene el simulador continuo de envío WiFi
+ * Inicia o detiene el simulador continuo de envío WiFi.
+ * El simulador envía por HTTP, o sea que es la ruta WiFi: al activarlo, si la fuente
+ * era USB o no estaba elegida, se cambia a 'wifi' (deteniendo el puerto serie).
  */
 export function toggleSimuladorWiFi(token = 'esp_demotoken_unach_2026_rf05') {
   if (simuladorActivo.value) {
@@ -248,10 +358,345 @@ export function toggleSimuladorWiFi(token = 'esp_demotoken_unach_2026_rf05') {
     simuladorInterval = null
     simuladorActivo.value = false
   } else {
+    if (esp32State.fuente !== FUENTES.wifi) seleccionarFuente(FUENTES.wifi)
     simuladorActivo.value = true
     emitirPaquetePruebaWiFi(token).catch(console.error)
     simuladorInterval = setInterval(() => {
       emitirPaquetePruebaWiFi(token).catch(console.error)
     }, 1000)
+  }
+}
+
+// ============================================================================
+// Selección de fuente y recepción por USB (Web Serial)
+// ============================================================================
+let serial = null // instancia perezosa de useSerialSensor
+const agregadorUsb = crearAgregadorSerial()
+let timerUsb = null
+let desuscribirLinea = null
+let desuscribirDesconexion = null
+const INTERVALO_PUBLICACION_USB_MS = 200
+
+function limpiarEstadoMedicion() {
+  ultimoOkMs = null
+  esp32State.conectado = false
+  esp32State.ultimoContacto = null
+  esp32State.tiempoTranscurridoSegundos = null
+  esp32State.ip = null
+  esp32State.rssi = null
+  esp32State.paquete = 0
+  esp32State.canales = []
+  esp32State.frecuenciaHz = 50
+  esp32State.error = null
+  ventanasCalidad.clear()
+  senalBuffer.ir = []
+  senalBuffer.rojo = []
+  agregadorUsb.reiniciar()
+}
+
+function detenerLecturaUsb() {
+  if (timerUsb) { clearInterval(timerUsb); timerUsb = null }
+  if (desuscribirLinea) { desuscribirLinea(); desuscribirLinea = null }
+  if (desuscribirDesconexion) { desuscribirDesconexion(); desuscribirDesconexion = null }
+}
+
+/**
+ * Elige la fuente de medición ('wifi' | 'usb'). Detiene la anterior (sondeo WiFi /
+ * simulador / puerto serie) y limpia canales y buffers.
+ * Con 'wifi' reanuda el sondeo si alguien lo había pedido (iniciarSondeoWiFi).
+ * Con 'usb' NO abre el puerto: eso exige un clic del usuario (conectarUsb).
+ * @returns {boolean} true si la fuente quedó seleccionada (también si ya lo estaba)
+ */
+export function seleccionarFuente(fuente) {
+  const v = validarFuente(fuente, { usbSoportado: usbSoportado() })
+  if (!v.valida) {
+    if (fuente === FUENTES.usb) usbState.error = v.motivo
+    return false
+  }
+  if (esp32State.fuente === v.fuente) return true
+
+  // Detener la fuente anterior
+  pararTimerSondeo()
+  if (simuladorActivo.value) {
+    clearInterval(simuladorInterval)
+    simuladorInterval = null
+    simuladorActivo.value = false
+  }
+  detenerLecturaUsb()
+  usbState.conectado = false
+  usbState.conectando = false
+  usbState.puerto = ''
+  if (serial) serial.disconnect().catch(() => {})
+
+  esp32State.fuente = v.fuente
+  esp32State.dispositivo = v.fuente === FUENTES.usb ? 'ESP32 (USB)' : 'ESP32'
+  usbState.error = null
+  limpiarEstadoMedicion()
+
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(CLAVE_FUENTE, v.fuente)
+  } catch { /* sessionStorage puede no estar disponible: la elección vale igual en memoria */ }
+
+  if (v.fuente === FUENTES.wifi && intervaloSolicitadoMs) arrancarTimerSondeo()
+  return true
+}
+
+/**
+ * Procesa una línea recibida por USB (exportada para pruebas). Devuelve cuántas
+ * muestras válidas aportó. Solo hace efecto con la fuente 'usb'.
+ */
+export function procesarLineaSerial(linea) {
+  if (esp32State.fuente !== FUENTES.usb) return 0
+  // Mensajes del protocolo de configuración del WiFi ("@SP ..."): no son muestras ni líneas inválidas
+  if (typeof linea === 'string' && linea.startsWith('@SP ')) return 0
+  const n = agregadorUsb.agregarLinea(linea)
+  usbState.ultimaLinea = linea
+  if (n === 0) usbState.lineasInvalidas++
+  return n
+}
+
+/**
+ * Pasa lo acumulado por USB a esp32State / senalBuffer (como si fuera un paquete WiFi).
+ * Se ejecuta cada ~200 ms mientras el puerto está abierto (exportada para pruebas).
+ */
+export function publicarMuestrasUsb() {
+  if (esp32State.fuente !== FUENTES.usb) return null
+  const instantanea = agregadorUsb.instantanea()
+  const hayMuestras = instantanea.some((c) => c.ir.length > 0)
+  if (instantanea.length > 0) {
+    // Hay canales que están enviando líneas (aunque sea «sin dedo»): hay contacto
+    esp32State.frecuenciaHz = Math.round(agregadorUsb.frecuenciaHz() * 10) / 10
+    esp32State.canales = calidadPorCanal(instantanea)
+    esp32State.ultimoContacto = new Date().toISOString()
+    if (hayMuestras) {
+      esp32State.paquete += 1
+      actualizarBuffersMultiCanal(esp32State.canales)
+      if (!senalBuffer.congelado) actualizarBufferCanal()
+    }
+  } else if (esp32State.canales.length > 0) {
+    // Ningún canal envía desde hace unos segundos: sensor no detectado
+    esp32State.canales = []
+  }
+  if (esp32State.ultimoContacto) {
+    const diffMs = Date.now() - new Date(esp32State.ultimoContacto).getTime()
+    esp32State.tiempoTranscurridoSegundos = Math.max(0, Math.round(diffMs / 1000))
+  }
+  return instantanea
+}
+
+/**
+ * Abre el puerto serie (Web Serial). DEBE llamarse desde un gesto del usuario (clic):
+ * el navegador muestra su selector de puerto. Si la fuente no es 'usb', la selecciona.
+ * @returns {Promise<boolean>}
+ */
+export async function conectarUsb({ manual = false } = {}) {
+  if (!usbSoportado()) {
+    usbState.error = MENSAJE_USB_NO_SOPORTADO
+    return false
+  }
+  if (configUsbState.abierto && !configUsbState.compartido) {
+    usbState.error = 'Termina o cierra el asistente de WiFi antes de conectar por USB.'
+    return false
+  }
+  if (esp32State.fuente !== FUENTES.usb && !seleccionarFuente(FUENTES.usb)) return false
+  if (usbState.conectado || usbState.conectando) return usbState.conectado
+
+  usbState.conectando = true
+  usbState.error = null
+  if (!serial) serial = useSerialSensor()
+  const sp = serial
+  let ok = false
+  try {
+    ok = await sp.connect(115200, { manual })
+  } finally {
+    usbState.conectando = false
+  }
+
+  // El usuario pudo cambiar de fuente mientras elegía el puerto
+  if (ok && esp32State.fuente !== FUENTES.usb) {
+    await sp.disconnect()
+    return false
+  }
+  if (!ok) {
+    usbState.error = sp.errorMessage.value || null // sin mensaje si canceló el selector
+    return false
+  }
+
+  limpiarEstadoMedicion()
+  usbState.conectado = true
+  usbState.puerto = sp.portInfo.value
+  usbState.puertoAuto = Boolean(sp.autoDetectado?.value)
+  usbState.lineasInvalidas = 0
+  esp32State.conectado = true
+  esp32State.dispositivo = 'ESP32 (USB)'
+
+  detenerLecturaUsb()
+  desuscribirLinea = sp.subscribeLinea(procesarLineaSerial)
+  // Cable desenchufado o lectura terminada sin pedirlo: conectado=false
+  desuscribirDesconexion = sp.onDesconexion((mensaje) => {
+    detenerLecturaUsb()
+    usbState.conectado = false
+    usbState.puerto = ''
+    usbState.error = mensaje
+    esp32State.conectado = false
+    esp32State.canales = []
+  })
+  timerUsb = setInterval(publicarMuestrasUsb, INTERVALO_PUBLICACION_USB_MS)
+  return true
+}
+
+/** Cierra el puerto serie; conectado=false y se limpian los canales. La fuente sigue siendo 'usb'. */
+export async function desconectarUsb() {
+  detenerLecturaUsb()
+  if (serial) {
+    try { await serial.disconnect() } catch { /* ya cerrado */ }
+  }
+  usbState.conectado = false
+  usbState.conectando = false
+  usbState.puerto = ''
+  if (esp32State.fuente === FUENTES.usb) {
+    esp32State.conectado = false
+    esp32State.canales = []
+    esp32State.paquete = 0
+  }
+}
+
+// ============================================================================
+// Configuración del WiFi del ESP32 por cable USB (asistente)
+// ============================================================================
+// Usa el protocolo "@SP {json}" de src/utils/provisionWifi.js sobre Web Serial.
+//  - Si la fuente USB de medición ya tiene el puerto abierto, el asistente usa ESE puerto
+//    (compartido=true) y NO lo cierra al terminar.
+//  - Si no, abre uno propio y lo cierra al terminar (cerrarPuertoConfiguracion), dejándolo
+//    libre para la fuente USB o el Monitor Serie.
+//  - usbState / esp32State no cambian de significado: aquí solo se añade configUsbState.
+
+/** Estado del puerto del asistente de configuración (solo lectura desde la interfaz). */
+export const configUsbState = reactive({
+  soportado: usbSoportado(),
+  abriendo: false,
+  abierto: false,
+  compartido: false, // true si se reutiliza el puerto de la fuente USB (no se cierra)
+  puerto: '',
+  puertoAuto: false
+})
+
+let serialConfig = null // instancia propia del asistente (cuando no se comparte)
+let serialConfigActivo = null // instancia que se usa para escribir/leer (propia o compartida)
+let configDesuscribirLinea = null
+let configDesuscribirDesconexion = null
+const oyentesEventosConfig = new Set()
+const oyentesPerdidaConfig = new Set()
+
+function limpiarConfig() {
+  if (configDesuscribirLinea) { configDesuscribirLinea(); configDesuscribirLinea = null }
+  if (configDesuscribirDesconexion) { configDesuscribirDesconexion(); configDesuscribirDesconexion = null }
+  serialConfigActivo = null
+  configUsbState.abriendo = false
+  configUsbState.abierto = false
+  configUsbState.compartido = false
+  configUsbState.puerto = ''
+  configUsbState.puertoAuto = false
+}
+
+/**
+ * Abre (o reutiliza) el puerto serie para configurar el WiFi. DEBE llamarse desde un clic.
+ * Identifica el ESP32 solo; con { manual: true } el navegador deja elegir cualquier puerto.
+ * @returns {Promise<{ok:boolean, error?:string, cancelado?:boolean, compartido?:boolean, puerto?:string, auto?:boolean}>}
+ *   Nunca lanza: los motivos de fallo vienen en `error` (texto en español) o `cancelado`.
+ */
+export async function abrirPuertoConfiguracion({ manual = false } = {}) {
+  if (!usbSoportado()) return { ok: false, error: MENSAJE_USB_NO_SOPORTADO + '. Puedes configurar el WiFi de otra forma o usar la fuente USB directa.' }
+  if (configUsbState.abierto) {
+    return { ok: true, compartido: configUsbState.compartido, puerto: configUsbState.puerto, auto: configUsbState.puertoAuto }
+  }
+  if (configUsbState.abriendo || usbState.conectando) {
+    return { ok: false, error: 'El puerto USB se está abriendo. Espera un momento y vuelve a intentar.' }
+  }
+
+  // Puerto de la fuente USB ya abierto: se reutiliza
+  if (usbState.conectado && serial) {
+    serialConfigActivo = serial
+    configUsbState.compartido = true
+    configUsbState.puerto = usbState.puerto
+    configUsbState.puertoAuto = usbState.puertoAuto
+  } else {
+    configUsbState.abriendo = true
+    const sp = useSerialSensor()
+    let ok = false
+    try {
+      ok = await sp.connect(BAUDIOS, { manual })
+    } finally {
+      configUsbState.abriendo = false
+    }
+    if (!ok) {
+      const error = sp.errorMessage.value || ''
+      return error ? { ok: false, error } : { ok: false, cancelado: true }
+    }
+    serialConfig = sp
+    serialConfigActivo = sp
+    configUsbState.compartido = false
+    configUsbState.puerto = sp.portInfo.value
+    configUsbState.puertoAuto = Boolean(sp.autoDetectado?.value)
+  }
+
+  const activo = serialConfigActivo
+  configUsbState.abierto = true
+  configDesuscribirLinea = activo.subscribeLinea((linea) => {
+    const ev = parsearLinea(linea)
+    if (!ev) return
+    for (const cb of [...oyentesEventosConfig]) {
+      try { cb(ev) } catch { /* un oyente roto no debe afectar al resto */ }
+    }
+  })
+  configDesuscribirDesconexion = activo.onDesconexion((mensaje) => {
+    limpiarConfig()
+    serialConfig = null
+    for (const cb of [...oyentesPerdidaConfig]) {
+      try { cb(mensaje) } catch { /* idem */ }
+    }
+  })
+  return { ok: true, compartido: configUsbState.compartido, puerto: configUsbState.puerto, auto: configUsbState.puertoAuto }
+}
+
+/** Recibe cada evento del ESP32 ya interpretado ({ev:'hello'|'scan'|'wifi'|...}). Devuelve la función para dejar de escuchar. */
+export function suscribirEventosConfiguracion(callback) {
+  oyentesEventosConfig.add(callback)
+  return () => oyentesEventosConfig.delete(callback)
+}
+
+/** Avisa si el puerto se pierde (cable desenchufado) mientras el asistente lo usa. */
+export function alPerderPuertoConfiguracion(callback) {
+  oyentesPerdidaConfig.add(callback)
+  return () => oyentesPerdidaConfig.delete(callback)
+}
+
+/** Escribe una línea ya codificada (ver codificarComando). Lanza Error en español si el puerto no está abierto. */
+export async function escribirConfiguracion(texto) {
+  if (!configUsbState.abierto || !serialConfigActivo) throw new Error('El ESP32 no está conectado por USB.')
+  await serialConfigActivo.write(texto)
+}
+
+/**
+ * Codifica y envía un comando del protocolo: 'hello' | 'scan' | 'status' | 'forget' | 'wifi' | 'server'.
+ * Valida los datos (p. ej. ssid 1-32 bytes, clave 0-63) y lanza Error en español sin incluir la clave.
+ */
+export async function enviarComandoWifi(cmd, datos) {
+  await escribirConfiguracion(codificarComando(cmd, datos))
+}
+
+/**
+ * Libera el puerto del asistente. Solo lo cierra si lo abrió el asistente; si era el de la fuente USB
+ * de medición lo deja abierto. Se puede llamar varias veces.
+ */
+export async function cerrarPuertoConfiguracion() {
+  const propio = serialConfig
+  const eraCompartido = configUsbState.compartido
+  oyentesEventosConfig.clear()
+  oyentesPerdidaConfig.clear()
+  limpiarConfig()
+  serialConfig = null
+  if (propio && !eraCompartido) {
+    try { await propio.disconnect() } catch { /* ya cerrado */ }
   }
 }

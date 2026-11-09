@@ -5,7 +5,7 @@
         {{ roleLabel }}
       </span>
       <span class="status-indicator" :class="{ active: isAuthenticated }">
-        {{ isAuthenticated ? '● Identificado' : '○ Sesión no iniciada' }}
+        {{ isAuthenticated ? (esDocenteRol ? '● Identificado como docente' : '● Identificado') : '○ Sesión no iniciada' }}
       </span>
     </div>
 
@@ -16,7 +16,6 @@
       <div class="details">
         <h3 class="user-name">{{ currentUserName }}</h3>
         <p class="user-email">{{ currentUserEmail || 'Inicia sesión con tu correo @unach.cl o @alu.unach.cl' }}</p>
-        <small v-if="currentUserId" class="user-id">ID de Medición: <code>{{ currentUserId }}</code></small>
       </div>
     </div>
 
@@ -31,11 +30,14 @@
 import { computed } from 'vue'
 import { useAuth } from '../composables/useAuth'
 
-const { isAuthenticated, currentUserId, currentUserEmail, currentUserName, currentUserRole } = useAuth()
+const { isAuthenticated, currentUserEmail, currentUserName, currentUserRole } = useAuth()
 
 const avatarInitial = computed(() => {
   return currentUserName.value ? currentUserName.value.charAt(0).toUpperCase() : '?'
 })
+
+// Profesor y administrador se identifican como docentes
+const esDocenteRol = computed(() => currentUserRole.value === 'profesor' || currentUserRole.value === 'admin')
 
 const roleLabel = computed(() => {
   if (currentUserRole.value === 'admin') return 'Administrador'

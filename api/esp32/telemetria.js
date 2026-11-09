@@ -1,6 +1,9 @@
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 
+// Un envío HTTPS del ESP32 puede tardar varios segundos: se considera «conectado» si hubo contacto en los últimos 15 s
+const VENTANA_CONECTADO_MS = 15000
+
 // Cache en memoria para almacenar la última telemetría recibida
 // Permite que la app web en tiempo real consulte o verifique el estado inmediato del ESP32
 let ultimaTelemetria = {
@@ -67,7 +70,7 @@ export default async function handler(req, res) {
   // --------------------------------------------------------------------------
   if (req.method === 'GET') {
     const ahora = Date.now()
-    const estaConectado = ultimaTelemetria.ultimoContacto && (ahora - new Date(ultimaTelemetria.ultimoContacto).getTime() < 5000)
+    const estaConectado = ultimaTelemetria.ultimoContacto && (ahora - new Date(ultimaTelemetria.ultimoContacto).getTime() < VENTANA_CONECTADO_MS)
 
     const respuesta = {
       ok: true,

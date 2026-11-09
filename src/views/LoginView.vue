@@ -51,6 +51,9 @@
       <div v-if="errorMessage && !cuentaBloqueada" class="alert alert-error">
         {{ errorMessage }}
       </div>
+      <div v-if="avisoSesionRequerida" class="alert alert-info" role="status" data-testid="aviso-sesion-requerida">
+        {{ avisoSesionRequerida }}
+      </div>
       <div v-if="successMessage" class="alert alert-success">
         {{ successMessage }}
       </div>
@@ -222,6 +225,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { validarCorreoInstitucional } from '../utils/validators'
+import { mensajeSesionRequerida } from '../utils/accesoSinSesion'
 import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
 import { verificarEstadoBloqueo, formatearTiempoRestante } from '../services/seguridadLoginService'
 
@@ -236,6 +240,15 @@ const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
 const successMessage = ref('')
+// Quien intenta medir o entrar a las aulas sin sesión: solo puede estudiar o comparar
+const avisoSesionRequerida = ref(mensajeSesionRequerida(route.query?.motivo))
+
+// Pantalla a la que volver después de entrar: solo rutas internas de la propia aplicación
+function destinoTrasLogin() {
+  const pedido = route.query?.redirect
+  if (typeof pedido === 'string' && pedido.startsWith('/') && !pedido.startsWith('//')) return pedido
+  return '/medicion'
+}
 const needsEmailConfirmation = ref(false)
 const resending = ref(false)
 
@@ -319,7 +332,7 @@ const handleSubmit = async () => {
     const res = await login(email.value, password.value)
     if (res.success) {
       if (timerBloqueo.value) clearInterval(timerBloqueo.value)
-      router.push('/medicion')
+      router.push(destinoTrasLogin())
     } else {
       errorMessage.value = res.error
       if (res.bloqueado && res.segundosRestantes > 0) {

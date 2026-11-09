@@ -16,6 +16,9 @@
           <span v-else class="badge badge-local">
             ○ Almacenamiento local
           </span>
+          <span v-if="paciente.pendienteSync" class="badge badge-local" title="Se guardó en este dispositivo y se reintentará enviar a la nube">
+            Pendiente de sincronizar
+          </span>
         </div>
 
         <div style="display: flex; gap: 0.5rem;">
@@ -46,7 +49,13 @@
         </div>
         <div class="paciente-item">
           <span class="label">Edad:</span>
-          <span class="value">{{ paciente.edad }} años</span>
+          <span class="value">{{ textoEdad(paciente.edad) }}</span>
+          <small v-if="paciente.fechaNacimiento" class="form-text" style="margin: 0;">
+            Nació el {{ formatearFechaNacimiento(paciente.fechaNacimiento) }}
+          </small>
+          <small v-else class="form-text" style="margin: 0; color: #d97706;">
+            Edad de una ficha anterior: usa «Modificar» e ingresa la fecha de nacimiento para actualizarla.
+          </small>
         </div>
         <div class="paciente-item">
           <span class="label">Nivel de Estrés:</span>
@@ -54,7 +63,7 @@
             class="badge" 
             :style="{ backgroundColor: colorEstres(paciente.nivelEstres), color: '#ffffff', fontWeight: 'bold' }"
           >
-            {{ etiquetaEstres(paciente.nivelEstres) }}
+            {{ paciente.nivelEstres ? etiquetaEstres(paciente.nivelEstres) : 'Sin declarar' }}
           </span>
         </div>
 
@@ -186,22 +195,27 @@
             <small class="form-text">Identifica al titular de la medición.</small>
           </div>
 
-          <!-- Edad obligatoria (solo mayores de edad: 18 a 100 años) -->
+          <!-- Fecha de nacimiento obligatoria: la edad se calcula sola (solo mayores de edad: 18 a 100 años) -->
           <div class="form-group">
-            <label class="form-label" for="edadPaciente">
-              Edad (años) <span class="required">*</span>
+            <label class="form-label" for="fechaNacimientoPaciente">
+              Fecha de nacimiento <span class="required">*</span>
             </label>
             <input 
-              id="edadPaciente"
-              v-model.number="formulario.edad"
-              type="number" 
-              min="18" 
-              max="100"
+              id="fechaNacimientoPaciente"
+              v-model="formulario.fechaNacimiento"
+              type="date" 
+              :max="hoyIso"
               class="form-control"
-              placeholder="Ej: 22"
+              data-testid="ficha-fecha-nacimiento"
               required
             />
-            <small class="form-text">Solo se miden personas mayores de edad: entre 18 y 100 años.</small>
+            <small class="form-text" data-testid="ficha-edad-calculada">
+              <template v-if="edadCalculada !== null">Edad: <strong>{{ textoEdad(edadCalculada) }}</strong></template>
+              <template v-else-if="!formulario.fechaNacimiento && formulario.edad">
+                Edad guardada antes: {{ textoEdad(formulario.edad) }}. Ingresa la fecha de nacimiento para actualizarla.
+              </template>
+              <template v-else>Edad: se calcula automáticamente. Solo se miden personas mayores de edad (18 a 100 años).</template>
+            </small>
           </div>
 
           <!-- Nivel de estrés obligatorio -->
@@ -394,7 +408,9 @@
           </div>
         </div>
 
-        <!-- Botón ocultad c:
+        <!-- Aviso si la ficha no llegó al servidor (queda en el dispositivo y se reintenta) -->
+        <div v-if="avisoSync" class="alert alert-warning" style="margin-top: 1rem;">{{ avisoSync }}</div>
+
         <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
           <button 
             type="submit" 
@@ -404,7 +420,6 @@
             {{ guardando ? 'Guardando...' : 'Guardar ficha del paciente' }}
           </button>
         </div>
-        -->
       </form>
     </div>
   </div>
@@ -413,6 +428,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { calcularEdad, fechaHoyIso, textoEdad, parsearFechaIso } from '../utils/edad.js'
 import { consentimientoService, consentimientoEstado, formatearFechaHora } from '../services/consentimientoService'
 import { 
   pacienteService, 
@@ -431,10 +447,13 @@ const paciente = ref(null)
 const modoEdicion = ref(false)
 const guardando = ref(false)
 const errores = ref([])
+const avisoSync = ref('')
+const hoyIso = fechaHoyIso()
 
 const formulario = ref({
   nombre: '',
   edad: null,
+  fechaNacimiento: '',
   nivelEstres: '',
   suenoHoras: '7_8',
   cafeina: 'ninguna',
@@ -451,6 +470,8 @@ onMounted(async () => {
   if (activo) {
     paciente.value = activo
     emit('paciente-actualizado', activo)
+    // Fila que no se pudo descifrar: se conservan nombre y edad y se pide completar el resto en vez de mostrar una ficha vacía
+    if (!activo.nivelEstres) abrirEdicion()
   } else {
     modoEdicion.value = true
     if (currentUserName.value && currentUserName.value !== 'Invitado / No identificado') {
@@ -459,11 +480,20 @@ onMounted(async () => {
   }
 })
 
+// Edad calculada en vivo desde la fecha de nacimiento (null si falta, es inválida o futura)
+const edadCalculada = computed(() => calcularEdad(formulario.value.fechaNacimiento))
+
+function formatearFechaNacimiento(iso) {
+  const f = parsearFechaIso(iso)
+  return f ? `${String(f.dia).padStart(2, '0')}/${String(f.mes).padStart(2, '0')}/${f.anio}` : iso
+}
+
 function abrirEdicion() {
   if (paciente.value) {
     formulario.value = {
       nombre: paciente.value.nombre || '',
       edad: paciente.value.edad || null,
+      fechaNacimiento: paciente.value.fechaNacimiento || '',
       nivelEstres: paciente.value.nivelEstres || '',
       suenoHoras: paciente.value.suenoHoras || '7_8',
       cafeina: paciente.value.cafeina || 'ninguna',
@@ -551,6 +581,9 @@ async function guardar() {
     }
     paciente.value = res.data
     modoEdicion.value = false
+    avisoSync.value = res.declaracionId ? '' : (res.errorServidor
+      ? `La ficha se guardó en este dispositivo pero no llegó al servidor (${res.errorServidor}). Se reintentará al volver a cargarla.`
+      : '')
     emit('paciente-actualizado', res.data)
     return true      // Agrega este return true
   } catch (err) {
@@ -568,6 +601,7 @@ function confirmarBorrado() {
     formulario.value = {
       nombre: '',
       edad: null,
+      fechaNacimiento: '',
       nivelEstres: '',
       suenoHoras: '7_8',
       cafeina: 'ninguna',

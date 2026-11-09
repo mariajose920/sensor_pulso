@@ -11,6 +11,7 @@ import {
 } from '../utils/medicion.js'
 import { listarPendientes, agregarPendiente, quitarPendiente } from '../pwa/medicionesPendientes.js'
 import { guardarMedicionVista, listarMedicionesVistas } from '../pwa/medicionesOffline.js'
+import { clasificarErrorPublicacion, mensajeErrorPublicacion, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
 
 export const TAMANO_PAGINA = 20
 
@@ -69,6 +70,28 @@ export async function guardarMedicion(datos) {
         : { ok: false, estado: 'rechazada', motivo: 'generico', mensaje: MENSAJES_GUARDADO.generico }
     }
     return { ok: false, estado: 'rechazada', motivo, mensaje: MENSAJES_GUARDADO[motivo] || MENSAJES_GUARDADO.generico }
+  }
+}
+
+/**
+ * RF31 + RF57: publica una medición ya guardada. La base (función `publicar_medicion`) exige sesión, el permiso
+ * de RF98 al profesor, un consentimiento vigente y una medición de sensor, y guarda solo una vista anonimizada.
+ * La confirmación explícita (`p_confirmar`) la da quien pulsó «Sí, publicar» en el diálogo de la pantalla.
+ * @returns {Promise<{ok: boolean, motivo?: string, mensaje: string, publicacionId?: string}>}
+ */
+export async function publicarMedicion(medicionId, titulo = null) {
+  if (!medicionId) return { ok: false, motivo: 'sin_id', mensaje: MENSAJES_TERMINAR.publicar_sin_id }
+  try {
+    const { data, error } = await supabase.rpc('publicar_medicion', {
+      p_medicion: medicionId,
+      p_confirmar: true,
+      p_titulo: titulo
+    })
+    if (error) throw error
+    return { ok: true, publicacionId: data || undefined, mensaje: MENSAJES_TERMINAR.guardada_publicada }
+  } catch (error) {
+    const motivo = clasificarErrorPublicacion(error)
+    return { ok: false, motivo, mensaje: mensajeErrorPublicacion(motivo) }
   }
 }
 
