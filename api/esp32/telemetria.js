@@ -28,6 +28,47 @@ function getAdminSupabase() {
   })
 }
 
+/**
+ * Detecta e informa dinámicamente el protocolo de transporte realmente utilizado.
+ * Cumple con el criterio de aceptación del RF55: "La API informa el protocolo real".
+ *
+ * @param {import('http').IncomingMessage} req
+ * @returns {{
+ *   protocolo: string,
+ *   cifrado: boolean,
+ *   versionTls: string | null,
+ *   versionHttp: string
+ * }}
+ */
+export function detectarProtocoloReal(req) {
+  const socket = req.socket
+  const protoHeader = req.headers['x-forwarded-proto']
+  const socketEncrypted = Boolean(socket?.encrypted)
+  const esHttps = protoHeader === 'https' || socketEncrypted
+  const tlsVersion = socket?.getProtocol?.() || req.headers['x-vercel-tls-version'] || req.headers['ssl-protocol'] || null
+  const versionHttp = req.httpVersion ? `HTTP/${req.httpVersion}` : 'HTTP/1.1'
+
+  let descripcionProtocolo = ''
+  if (tlsVersion) {
+    descripcionProtocolo = `${tlsVersion} (${versionHttp})`
+  } else if (esHttps) {
+    descripcionProtocolo = `HTTPS (${versionHttp})`
+  } else {
+    const host = req.headers['host'] || ''
+    const esLocalhost = host.includes('localhost') || host.includes('127.0.0.1')
+    descripcionProtocolo = esLocalhost
+      ? `${versionHttp} (desarrollo local)`
+      : `${versionHttp} (no cifrado)`
+  }
+
+  return {
+    protocolo: descripcionProtocolo,
+    cifrado: esHttps,
+    versionTls: tlsVersion,
+    versionHttp
+  }
+}
+
 // Handler compatible con Vercel Serverless Functions y Vite Middleware
 export default async function handler(req, res) {
   // Configuración de cabeceras CORS
@@ -69,6 +110,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const ahora = Date.now()
     const estaConectado = ultimaTelemetria.ultimoContacto && (ahora - new Date(ultimaTelemetria.ultimoContacto).getTime() < 5000)
+    const infoTransporte = detectarProtocoloReal(req)
 
     const respuesta = {
       ok: true,
@@ -84,13 +126,15 @@ export default async function handler(req, res) {
         totalPaquetes: bufferPaquetes.length,
         tasaRecepcionEstimada: bufferPaquetes.length >= 2 ? '1.0 Hz' : '0.0 Hz'
       },
-      // RF55: Metadatos de cifrado y seguridad
+      // RF55: Metadatos reales del transporte y cifrado (informa el protocolo real dinámico)
       cifrado: {
-        enTransito: true,
-        protocolo: proto === 'https' ? 'TLS 1.3 / HTTPS' : (esLocalhost ? 'Localhost (dev)' : proto),
-        hstsHabilitado: true,
-        rf55: 'cumplido'
-      }
+        enTransito: infoTransporte.cifrado,
+        protocolo: infoTransporte.protocolo,
+        versionHttp: infoTransporte.versionHttp,
+        versionTls: infoTransporte.versionTls,
+        hstsHabilitado: true
+      },
+      transporte: infoTransporte
     }
 
     res.setHeader('Content-Type', 'application/json')
@@ -236,7 +280,8 @@ export default async function handler(req, res) {
         }
       }
 
-      // 8. Respuesta exitosa al ESP32 con metadatos de seguridad RF55 y RF65
+      // 8. Respuesta exitosa al ESP32 informando el protocolo realmente utilizado (RF55)
+      const infoTransporte = detectarProtocoloReal(req)
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json')
       return res.end(JSON.stringify({
@@ -247,7 +292,8 @@ export default async function handler(req, res) {
         paquete: ultimaTelemetria.paquete,
         canales_recibidos: canalesProcesados.length,
         timestamp: ahoraIso,
-        cifrado_transito: 'TLS_1_3',
+        protocolo_real: infoTransporte.protocolo,
+        cifrado: infoTransporte.cifrado,
         sanitizacion_entradas: 'RF65_CUMPLIDO',
         advertencias: validacion.advertencias
       }))
