@@ -118,6 +118,13 @@
         :measurementName="selectedMeasurementName"
       />
 
+      <!-- Descargas: informe PDF, CSV e imagen (RF32) -->
+      <DescargasPanel
+        :bpm="selectedBpm"
+        :amplitude="selectedAmplitude"
+        :measurementName="selectedMeasurementName"
+      />
+
       <!-- Tabla y Análisis Comparativo de Parámetros con ECG y Reposo -->
       <TemplateComparator
         :currentBpm="selectedBpm"
@@ -185,6 +192,7 @@ import MeasurementSelector from '../components/MeasurementSelector.vue'
 import MetricsCards from '../components/MetricsCards.vue'
 import OscilloscopeCanvas from '../components/OscilloscopeCanvas.vue'
 import TemplateComparator from '../components/TemplateComparator.vue'
+import DescargasPanel from '../components/DescargasPanel.vue'
 import ComparadorPatologiasCard from '../components/ComparadorPatologiasCard.vue'
 import ComparadorMedicionesCard from '../components/ComparadorMedicionesCard.vue'
 import ComparadorDatasetsCard from '../components/ComparadorDatasetsCard.vue'

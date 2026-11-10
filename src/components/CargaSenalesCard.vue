@@ -62,7 +62,7 @@
         <input
           ref="fileInputRef"
           type="file"
-          accept=".csv,text/csv,text/plain"
+          accept=".csv,text/csv"
           style="display: none;"
           @change="onFileSelected"
         />
@@ -73,7 +73,7 @@
             Arrastra tu archivo <strong>.CSV</strong> aquí o haz clic para examinar
           </p>
           <span class="dropzone-hint">
-            Formatos compatibles: columnas <code>tiempo, ir, rojo</code> o <code>t, ppg</code> (delimitadores: coma, punto y coma o tabulación). Límite: 5 MB (RF66).
+            Límites de seguridad (RF66): máximo 5 MB, hasta 50.000 filas, tipo estrictamente <code>.csv</code>. Se rechaza contenido binario o fórmulas (<code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>) antes de procesar.
           </span>
 
           <div style="display: flex; gap: 0.75rem; margin-top: 0.85rem; flex-wrap: wrap; justify-content: center;">
@@ -90,6 +90,20 @@
       <!-- Alerta de error si falla la validación del CSV -->
       <div v-if="errorCsv" class="alert-box alert-error" style="margin-top: 0.75rem;">
         ⚠️ {{ errorCsv }}
+      </div>
+
+      <!-- Alerta de Sanitización RF65 si hubo fórmulas neutralizadas o advertencias de seguridad -->
+      <div v-if="senalCargada && (senalCargada.formulasNeutralizadas > 0 || senalCargada.advertencias?.length > 0)" class="alert-box alert-sanitizacion" style="margin-top: 0.75rem;">
+        <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+          <span style="font-size: 1.15rem; line-height: 1;">🛡️</span>
+          <div>
+            <strong>Blindaje RF65 (Sanitización Exitosa):</strong>
+            <span v-if="senalCargada.formulasNeutralizadas > 0"> Se neutralizaron {{ senalCargada.formulasNeutralizadas }} celdas con fórmulas potencialmente peligrosas (CWE-1236 / Formula Injection).</span>
+            <ul v-if="senalCargada.advertencias?.length > 0" style="margin: 0.35rem 0 0 1.2rem; padding: 0; font-size: 0.82rem;">
+              <li v-for="(adv, idx) in senalCargada.advertencias" :key="idx">{{ adv }}</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -285,7 +299,8 @@ import {
   DATASETS_PUBLICOS_CATALOGO,
   SENALES_VALIDADAS_CATALOGO,
   PRESETS_SIMULACION,
-  generarCsvPlantillaEjemplo
+  generarCsvPlantillaEjemplo,
+  validarMetadatosArchivoCsv
 } from '../services/senalesService.js'
 import { esp32State, senalBuffer } from '../services/esp32Service.js'
 import { useAuth } from '../composables/useAuth'
@@ -347,15 +362,19 @@ function onDropArchivo(event) {
 
 function procesarArchivo(file) {
   errorCsv.value = ''
-  if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.txt')) {
-    errorCsv.value = 'El archivo debe tener extensión .csv o .txt'
+
+  // 1. Pre-validación de metadatos (tamaño y tipo .csv) antes de procesar (RF66)
+  const metaVal = validarMetadatosArchivoCsv(file)
+  if (!metaVal.valido) {
+    errorCsv.value = metaVal.error
     return
   }
 
   const reader = new FileReader()
   reader.onload = (e) => {
     const texto = e.target?.result
-    const res = senalesService.cargarDesdeCsv(texto, file.name)
+    // 2. Validación de límites, contenido binario y fórmulas con rechazo previo (RF66)
+    const res = senalesService.cargarDesdeCsv(texto, file.name, file.size)
     if (!res.valido) {
       errorCsv.value = res.error || 'Error al procesar el archivo CSV'
     } else {
@@ -680,6 +699,12 @@ onBeforeUnmount(() => {
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
+}
+
+.alert-sanitizacion {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
 }
 
 /* Simulación */

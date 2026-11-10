@@ -123,7 +123,7 @@ prueba('la onda va hacia arriba en el latido (IR invertido) y centrada en 24500'
 prueba('ganancia lenta y estable: baja con factor 0,999 y sube suave (0,02)', /amplitud \*= 0\.999f/.test(src) && /amplitud \+= 0\.02f/.test(src) && /GANANCIA_ONDA/.test(src))
 prueba('como máximo 100 muestras por paquete; el resto se conserva en orden para el siguiente', /MAX_MUESTRAS_PAQUETE = 100;/.test(src) && /uint16_t irEnvio\[MAX_MUESTRAS_PAQUETE\]/.test(src) && /memmove\(bufferIR, bufferIR \+ cantMuestras/.test(src) && /indiceBuffer = resto;/.test(src))
 prueba('el búfer se escribe y se consume dentro de una sección crítica', /portMUX_TYPE bufMux/.test(src) && (src.match(/portENTER_CRITICAL\(&bufMux\)/g) || []).length >= 2 && (src.match(/portEXIT_CRITICAL\(&bufMux\)/g) || []).length >= 2)
-prueba('la API acepta hasta 250 muestras por canal', readFileSync(join(aqui, '..', 'api', 'esp32', 'telemetria.js'), 'utf8').includes('ch.ir.slice(0, 250)'))
+prueba('la API acepta hasta 200 muestras por canal (RF65)', readFileSync(join(aqui, '..', 'src', 'services', 'sanitizacionService.js'), 'utf8').includes('MAX_MUESTRAS_POR_PAQUETE: 200'))
 
 if (fallos) {
   console.log(`\n${fallos} prueba(s) fallaron`)

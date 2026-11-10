@@ -40,6 +40,15 @@ Carga (la hace el docente/desarrollador, una sola vez):
 
 Compilar por línea de comandos: `arduino-cli compile --fqbn esp32:esp32:esp32 firmware/esp32_wifi_prueba`.
 
+URL del servidor (solo https:// con TLS, RF55):
+
+```cpp
+// Producción en Vercel:
+const char* SERVER_URL    = "https://sensorpulso.vercel.app/api/esp32/telemetria";
+// Pruebas locales seguras:
+// const char* SERVER_URL = "https://192.168.1.100:5173/api/esp32/telemetria";
+```
+
 ---
 
 ## Valores por defecto y almacenamiento (NVS)
