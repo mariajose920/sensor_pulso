@@ -6,7 +6,8 @@
  *
  * Arquitectura Dual-Core (FreeRTOS):
  *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz.
- *             Generación de la onda fotopletismográfica (PPG) a 25 Hz.
+ *             Filtro pasa-banda 0,5-5 Hz, detección de latidos por cresta y
+ *             onda fotopletismográfica (PPG) a 50 Hz (promedio de 2 lecturas).
  *             Lector NO bloqueante de comandos "@SP" por USB (configuración).
  *   - CORE 0: Gestión WiFi robusta y transmisión HTTPS a Vercel cada 1 s.
  *             Stack de 16 KB para TLS con diagnóstico detallado por Serial.
@@ -95,14 +96,41 @@ const uint8_t REG_PART_ID  = 0xFF;
 const uint16_t UMBRAL_DEDO = 7000;
 
 // Estado del procesamiento fisiológico
-float dc = 0;
-float filtrado = 0;
-float maximo = 0;
-float anterior = 0;
-float amplitud = 100;
-unsigned long ultimoLatido = 0;
-volatile float bpmActual = 0;
+// Filtro pasa-banda 0,5-5 Hz: dos biquads Butterworth de 2.º orden (forma directa II transpuesta), calculados con la
+// transformada bilineal para fs = 100 Hz (Q = 1/raíz(2)): pasa-altas 0,5 Hz (quita la línea de base y la respiración)
+// y pasa-bajas 5 Hz (quita el ruido). Campos: b0, b1, b2, a1, a2 y los estados z1, z2.
+struct Biquad { float b0, b1, b2, a1, a2, z1, z2; };
+Biquad bqAlta = { 0.978030479f, -1.95606096f, 0.978030479f, -1.95557824f, 0.956543677f, 0, 0 };
+Biquad bqBaja = { 0.0200833656f, 0.0401667311f, 0.0200833656f, -1.56101808f, 0.641351538f, 0, 0 };
+
+float dc = 0;                      // DC lento del infrarrojo: SOLO lo usa la SpO2
+float filtrado = 0;                // PPG filtrada 0,5-5 Hz, con el latido (sístole) hacia arriba
+float refIr = 0;                   // nivel del IR al apoyar el dedo (se resta para trabajar con números pequeños)
+float amplitud = 60;               // envolvente lenta de la señal filtrada: ganancia de la onda que se envía
+volatile float bpmActual = 0;      // 0 = sin lectura válida (nunca se conserva un valor viejo ni se inventa uno)
 volatile float spo2Actual = 0.0;   // 0 = sin lectura válida (nunca se inventa un valor)
+
+// Detección de latidos por CRESTA + intervalos entre latidos (el tiempo se mide en muestras de 100 Hz = 10 ms)
+const int   MUESTRA_MS      = 10;
+const float UMBRAL_PICO_MIN = 15.0f;   // cresta mínima (cuentas del sensor) para considerar un latido
+const float CAIDA_PICO      = 0.72f;   // la cresta se confirma cuando la señal baja al 72 % de su altura
+const float TOLERANCIA_RR   = 0.30f;   // un intervalo fuera de ±30 % de la mediana es anómalo
+const int   RR_MAX          = 8;       // el BPM sale de la mediana de los últimos 8 intervalos válidos
+const unsigned long SIN_LATIDO_MS = 3000;  // sin latido válido durante este tiempo: pulso = 0 (sin lectura)
+const float MAD_MAX         = 0.25f;   // dispersión máxima de los intervalos (MAD / mediana)
+const float AUTOCORR_MIN    = 0.50f;   // la señal debe repetirse de un latido al siguiente (descarta el ruido)
+const int   VENTANA         = 400;     // 4 s de señal filtrada para la autocorrelación
+const float GANANCIA_ONDA   = 950.0f;  // la cresta típica (≈1,7 × la envolvente) queda a ≈1650 de 2048: sin recortar ni quedar plana
+uint32_t nMuestra = 0;                 // contador de muestras de 100 Hz
+float ventana[VENTANA];
+uint32_t ventanaTot = 0;
+float fPrevio = 0, nivelAbs = 0, ampMedia = 0, picoMaxInicio = 0;
+bool buscando = false, picoSig = false, hayPicoPrevio = false, bpmMostrando = false, cambioRitmo = false;
+float picoVal = 0, picoPrev = 0, picoNext = 0, ultPicoFrac = 0;
+uint32_t picoIdx = 0, ultPicoIdx = 0, ultValidoIdx = 0;
+float rr[RR_MAX];
+int rrN = 0, nAnom = 0;
+float anomalos[3];
 
 // SpO2 por razón de razones: R = (AC_rojo / DC_rojo) / (AC_ir / DC_ir), con ventanas de 2 s
 float dcRojo = 0;
@@ -124,22 +152,20 @@ volatile uint16_t valorGraficaActual = 2048;
 volatile uint16_t ultimoIRGlobal = 0;
 volatile uint16_t ultimoRojoGlobal = 0;
 
-// Búfer de muestras PPG para el osciloscopio en tiempo real (25 muestras/segundo)
-const int SAMPLES_PER_BLOCK = 100;      // capacidad: 4 s de señal a 25 muestras/s (la API admite hasta 100 por canal)
-const int MUESTRAS_RELLENO = 25;        // sin señal suficiente se envía 1 s de relleno plano
-const int FRECUENCIA_MUESTREO_HZ = 25;  // muestras por segundo que se envían (1 de cada 4 lecturas de 100 Hz)
-volatile uint16_t bufferIR[SAMPLES_PER_BLOCK];
-volatile uint16_t bufferRojo[SAMPLES_PER_BLOCK];
-volatile int indiceBuffer = 0;
+// Búfer de muestras PPG para el osciloscopio en tiempo real (50 muestras/segundo)
+const int SAMPLES_PER_BLOCK = 200;      // capacidad: 4 s de señal a 50 muestras/s
+const int MAX_MUESTRAS_PAQUETE = 100;   // la API en producción corta cada arreglo a 100: se envían como máximo 100 por paquete
+const int MUESTRAS_RELLENO = 50;        // sin señal suficiente se envía 1 s de relleno plano
+const int FRECUENCIA_MUESTREO_HZ = 50;  // muestras por segundo que se envían (promedio de cada 2 lecturas de 100 Hz)
+uint16_t bufferIR[SAMPLES_PER_BLOCK];
+uint16_t bufferRojo[SAMPLES_PER_BLOCK];
+int indiceBuffer = 0;
+// El núcleo del sensor (loop) escribe y la tarea WiFi lee/consume el búfer: se protege con una sección crítica corta
+portMUX_TYPE bufMux = portMUX_INITIALIZER_UNLOCKED;
 
-const unsigned long REFRACTARIO_MS = 380;
 unsigned long dedoDesde = 0;
 const unsigned long CALENTAMIENTO_MS = 2000;
 bool habiaDedo = false;
-
-// Búfer para filtro de mediana
-float rrHist[4] = {800, 800, 800, 800};
-uint8_t rrIdx = 0;
 
 // Contador de paquetes WiFi transmitidos
 unsigned long contadorPaquetes = 0;
@@ -190,10 +216,169 @@ bool iniciarSensor() {
   return true;
 }
 
+// ----------------------------------------------------------------------------
+// Filtro y detección de latidos (se ejecutan a 100 Hz en el núcleo del sensor)
+// ----------------------------------------------------------------------------
+float biquadPaso(Biquad& f, float x) {
+  float y = f.b0 * x + f.z1;
+  f.z1 = f.b1 * x - f.a1 * y + f.z2;
+  f.z2 = f.b2 * x - f.a2 * y;
+  return y;
+}
+
+void biquadReiniciar(Biquad& f) { f.z1 = 0; f.z2 = 0; }
+
+// Mediana de hasta RR_MAX valores (promedio de los dos centrales si hay un número par).
+float medianaArr(const float* a, int n) {
+  float t[RR_MAX];
+  for (int i = 0; i < n; i++) {
+    float v = a[i];
+    int j = i - 1;
+    while (j >= 0 && t[j] > v) { t[j + 1] = t[j]; j--; }
+    t[j + 1] = v;
+  }
+  return (n % 2) ? t[n / 2] : 0.5f * (t[n / 2 - 1] + t[n / 2]);
+}
+
+// Borra todo lo aprendido de los latidos: el pulso vuelve a «sin lectura» y hacen falta 4 intervalos válidos nuevos.
+void limpiarLatidos() {
+  rrN = 0;
+  nAnom = 0;
+  bpmMostrando = false;
+  cambioRitmo = false;
+  ampMedia = 0;
+  picoMaxInicio = 0;
+  hayPicoPrevio = false;
+  bpmActual = 0;
+}
+
+// Correlación normalizada de la señal consigo misma desplazada un latido (lag L muestras, ±4): ≈1 si la forma de
+// onda se repite como un pulso real, ≈0 si es ruido o movimiento.
+float autocorrelacion(int L) {
+  uint32_t disp = ventanaTot < (uint32_t)VENTANA ? ventanaTot : (uint32_t)VENTANA;
+  float mejor = -1;
+  for (int l = L - 4; l <= L + 4; l++) {
+    if (l < 20 || (int)disp - l < l) continue;       // hace falta al menos un periodo completo de solape
+    float num = 0, e1 = 0, e2 = 0;
+    for (uint32_t i = 0; i < disp - (uint32_t)l; i++) {
+      float a = ventana[(ventanaTot - 1 - i) % VENTANA];
+      float b = ventana[(ventanaTot - 1 - i - (uint32_t)l) % VENTANA];
+      num += a * b; e1 += a * a; e2 += b * b;
+    }
+    float c = num / sqrtf(e1 * e2 + 1e-9f);
+    if (c > mejor) mejor = c;
+  }
+  return mejor;
+}
+
+// Evalúa el intervalo d (ms) entre dos crestas consecutivas y actualiza el pulso. alt = altura de la cresta.
+void evaluarIntervalo(float d, float alt) {
+  if (d < 333.0f || d > 1500.0f) { nAnom = 0; return; }   // fuera de 40-180 BPM
+  bool aceptar = false, yaGuardado = false;
+  cambioRitmo = false;
+  if (rrN >= 3) {
+    float m = medianaArr(rr, rrN);
+    if (fabsf(d - m) <= TOLERANCIA_RR * m) {
+      aceptar = true;
+    } else {
+      // Intervalo anómalo (latido ectópico, ruido): se descarta salvo que se repita 3 veces seguidas (ritmo nuevo real)
+      if (nAnom > 0 && fabsf(d - anomalos[0]) <= TOLERANCIA_RR * anomalos[0]) anomalos[nAnom++] = d;
+      else { anomalos[0] = d; nAnom = 1; }
+      if (nAnom >= 3) {
+        for (int k = 0; k < 3; k++) rr[k] = anomalos[k];
+        rrN = 3;
+        nAnom = 0;
+        cambioRitmo = true;
+        yaGuardado = true;
+      }
+    }
+  } else {
+    // Arranque: hacen falta intervalos consecutivos coherentes entre sí (no se inventa ningún valor inicial)
+    if (rrN >= 1 && fabsf(d - rr[rrN - 1]) > TOLERANCIA_RR * rr[rrN - 1]) rrN = 0;
+    aceptar = true;
+  }
+  if (aceptar) {
+    nAnom = 0;
+    if (rrN == RR_MAX) { for (int k = 1; k < RR_MAX; k++) rr[k - 1] = rr[k]; rrN--; }
+    rr[rrN++] = d;
+    float a = alt;
+    if (ampMedia > 0) a = constrain(alt, 0.5f * ampMedia, 1.6f * ampMedia);
+    ampMedia = (ampMedia > 0) ? 0.7f * ampMedia + 0.3f * a : a;
+    yaGuardado = true;
+  }
+  if (!yaGuardado) return;
+  if (rrN < 4 && !bpmMostrando) ultValidoIdx = nMuestra;          // el arranque cuenta como actividad válida
+  if (rrN < 3 || (!bpmMostrando && rrN < 4)) return;               // hasta tener 4 intervalos válidos no hay pulso
+
+  float m = medianaArr(rr, rrN);
+  float desv[RR_MAX];
+  for (int k = 0; k < rrN; k++) desv[k] = fabsf(rr[k] - m);
+  if (medianaArr(desv, rrN) / m > MAD_MAX) return;                 // intervalos demasiado dispersos: señal inestable
+  if (autocorrelacion((int)(m / MUESTRA_MS + 0.5f)) < AUTOCORR_MIN) return;   // no se repite como un pulso: ruido
+
+  ultValidoIdx = nMuestra;
+  float bruto = 60000.0f / m;
+  if (bruto < 40.0f || bruto > 180.0f) return;
+  if (!bpmMostrando || cambioRitmo) {
+    bpmActual = bruto;
+    bpmMostrando = true;
+  } else {
+    // Suavizado leve y variación limitada por latido (±4 BPM)
+    float paso = constrain(0.5f * (bruto - bpmActual), -4.0f, 4.0f);
+    bpmActual = bpmActual + paso;
+  }
+}
+
+// Busca la CRESTA de la señal filtrada: recuerda el máximo local y lo confirma cuando la señal baja al 72 % de su
+// altura. El instante de la cresta se afina con una parábola entre 3 muestras. Refractario adaptativo ≈ 0,58 × el
+// intervalo mediano (280-600 ms) para no contar la onda dícrota ni el ruido.
+void detectarLatido(float f) {
+  float m = (rrN >= 3) ? medianaArr(rr, rrN) : 0;
+  float refr = (m > 0) ? constrain(0.58f * m, 280.0f, 600.0f) : 320.0f;
+
+  if (!buscando) {
+    if ((float)(nMuestra - ultPicoIdx) * MUESTRA_MS >= refr) {
+      buscando = true;
+      picoVal = f; picoIdx = nMuestra; picoPrev = fPrevio; picoNext = f; picoSig = false;
+    }
+    return;
+  }
+
+  if (f > picoVal) {
+    picoVal = f; picoIdx = nMuestra; picoPrev = fPrevio; picoNext = f; picoSig = false;
+  } else if (!picoSig && nMuestra == picoIdx + 1) {
+    picoNext = f; picoSig = true;
+  }
+
+  float umbral = (ampMedia > 0) ? max(UMBRAL_PICO_MIN, 0.4f * ampMedia) : max(UMBRAL_PICO_MIN, 1.3f * nivelAbs);
+  if (picoVal > umbral && f < CAIDA_PICO * picoVal) {
+    float frac = 0;
+    if (picoSig) {
+      float den = picoPrev - 2.0f * picoVal + picoNext;
+      if (den < -1e-6f) frac = constrain(0.5f * (picoPrev - picoNext) / den, -0.5f, 0.5f);
+    }
+    // Al arrancar, una cresta mucho más baja que la mayor vista es la onda dícrota o ruido: no es un latido
+    if (ampMedia <= 0 && picoVal < 0.5f * picoMaxInicio) { buscando = false; return; }
+    if (picoVal > picoMaxInicio) picoMaxInicio = picoVal;
+    if (hayPicoPrevio) {
+      float d = ((float)(int32_t)(picoIdx - ultPicoIdx) + (frac - ultPicoFrac)) * MUESTRA_MS;
+      evaluarIntervalo(d, picoVal);
+    }
+    hayPicoPrevio = true;
+    ultPicoIdx = picoIdx;
+    ultPicoFrac = frac;
+    buscando = false;
+  } else if ((int32_t)(nMuestra - picoIdx) > 150) {
+    // La señal lleva 1,5 s sin bajar tras el máximo (movimiento o saturación): se descarta ese candidato
+    picoVal = f; picoIdx = nMuestra; picoPrev = fPrevio; picoNext = f; picoSig = false;
+  }
+}
+
 void procesar(uint16_t ir, uint16_t rojo) {
   bool sinDedo = ir < UMBRAL_DEDO;
-  int valor = 2048;
+  bool midiendo = false;
 
+  nMuestra++;
   ultimoIRGlobal = ir;
   ultimoRojoGlobal = rojo;
   estadoSinDedo = sinDedo;
@@ -203,77 +388,66 @@ void procesar(uint16_t ir, uint16_t rojo) {
     reiniciarSpo2();
     dc = ir;
     filtrado = 0;
-    maximo = 0;
-    amplitud = 100;
-    anterior = 0;
-    ultimoLatido = 0;
+    limpiarLatidos();
+    amplitud = 60;
+    nivelAbs = 0;
+    ventanaTot = 0;
+    buscando = false;
+    fPrevio = 0;
     habiaDedo = false;
-    valor = 2048;
   } else if (!habiaDedo || (millis() - dedoDesde) < CALENTAMIENTO_MS) {
     if (!habiaDedo) { habiaDedo = true; dedoDesde = millis(); }
     reiniciarSpo2();
     dc = ir;
-    filtrado = 0;
-    maximo = 0;
-    anterior = 0;
-    valor = 2048;
+    if ((millis() - dedoDesde) < CALENTAMIENTO_MS / 2) {
+      // Primer segundo: el nivel del IR aún se asienta al apoyar el dedo. Se reinicia el filtro en cada lectura
+      // (estado cero sobre el nivel actual) para que no arrastre un transitorio largo.
+      refIr = ir;
+      biquadReiniciar(bqAlta);
+      biquadReiniciar(bqBaja);
+      filtrado = 0;
+      fPrevio = 0;
+      nivelAbs = 0;
+      ventanaTot = 0;
+      buscando = false;
+      limpiarLatidos();
+    } else {
+      // Segundo siguiente: el filtro ya corre (se asienta) pero todavía no se detectan latidos
+      filtrado = biquadPaso(bqBaja, biquadPaso(bqAlta, refIr - ir));
+      nivelAbs += 0.01f * (fabsf(filtrado) - nivelAbs);
+      ventana[ventanaTot % VENTANA] = filtrado;
+      ventanaTot++;
+      fPrevio = filtrado;
+      ultValidoIdx = nMuestra;
+      ultPicoIdx = nMuestra;
+    }
   } else {
+    midiendo = true;
     if (dc == 0) dc = ir;
     dc += 0.02f * (ir - dc);
-    float x = dc - ir;
-    filtrado += 0.3f * (x - filtrado);
 
-    if (fabs(filtrado) > amplitud) amplitud = fabs(filtrado);
-    else amplitud *= 0.998f;
-    if (amplitud < 30) amplitud = 30;
+    // Pasa-banda 0,5-5 Hz sobre el IR invertido: la sístole (el IR baja) queda HACIA ARRIBA
+    filtrado = biquadPaso(bqBaja, biquadPaso(bqAlta, refIr - ir));
+    nivelAbs += 0.01f * (fabsf(filtrado) - nivelAbs);
+    ventana[ventanaTot % VENTANA] = filtrado;
+    ventanaTot++;
 
-    unsigned long ahora = millis();
+    // Envolvente lenta para la ganancia de la onda enviada (no interviene en el pulso): sube con rapidez moderada,
+    // baja muy despacio (≈10 s) y un artefacto brusco no la dispara (se limita a 3 × la cresta típica).
+    float a = fabsf(filtrado);
+    if (ampMedia > 0 && a > 3.0f * ampMedia) a = 3.0f * ampMedia;
+    if (a > amplitud) amplitud += 0.02f * (a - amplitud);
+    else amplitud *= 0.999f;
+    if (amplitud < 25) amplitud = 25;
 
-    // Recuperación rápida si hubo movimiento brusco
-    if (ahora - ultimoLatido > 1800 && maximo > 60) {
-      maximo = 50;
+    // Sin latido válido durante 3 s: «sin lectura» (0), no se conserva el valor viejo
+    if ((uint32_t)(nMuestra - ultValidoIdx) * MUESTRA_MS > SIN_LATIDO_MS && (rrN > 0 || bpmActual > 0)) {
+      limpiarLatidos();
+      ultValidoIdx = nMuestra;
     }
 
-    if (filtrado > maximo) maximo = filtrado;
-    else maximo *= 0.995f;
-    float umbral = 0.45f * maximo;
-
-    if (filtrado > umbral && anterior <= umbral && maximo > 20 &&
-        (ahora - ultimoLatido) >= REFRACTARIO_MS) {
-      if (ultimoLatido > 0) {
-        float delta = ahora - ultimoLatido;
-        if (delta >= REFRACTARIO_MS && delta <= 1800) {
-          rrHist[rrIdx % 4] = delta;
-          rrIdx++;
-
-          // Filtro de mediana de 4 intervalos
-          float temp[4];
-          for (int k = 0; k < 4; k++) temp[k] = rrHist[k];
-          for (int a = 0; a < 3; a++) {
-            for (int b = a + 1; b < 4; b++) {
-              if (temp[a] > temp[b]) {
-                float t = temp[a]; temp[a] = temp[b]; temp[b] = t;
-              }
-            }
-          }
-          float medianDelta = (temp[1] + temp[2]) * 0.5f;
-          float bpm = 60000.0f / medianDelta;
-
-          if (bpm >= 45 && bpm <= 150) {
-            if (bpmActual == 0 || rrIdx <= 3) {
-              bpmActual = bpm;
-            } else {
-              bpmActual = 0.60f * bpmActual + 0.40f * bpm;
-            }
-          }
-        }
-      }
-      ultimoLatido = ahora;
-    }
-    anterior = filtrado;
-
-    float v = 2048.0f + filtrado * (1800.0f / amplitud);
-    valor = (int)constrain(v, 0, 4095);
+    detectarLatido(filtrado);
+    fPrevio = filtrado;
 
     // Estimación de SpO2 (aproximación educativa, sin calibrar contra un oxímetro de referencia):
     // razón de razones R = (AC_rojo/DC_rojo) / (AC_ir/DC_ir) y la recta empírica 110 - 25·R.
@@ -312,22 +486,29 @@ void procesar(uint16_t ir, uint16_t rojo) {
     }
   }
 
-  valorGraficaActual = valor;
-
-  // Llenar búfer para el osciloscopio: 25 muestras por segundo (1 cada 4 lecturas de 100 Hz)
+  // Onda para la app y el osciloscopio: 50 muestras/s = PROMEDIO de cada 2 lecturas de 100 Hz (no se tiran muestras:
+  // mejor relación señal/ruido y sin aliasing). Es la PPG filtrada, con el latido hacia arriba y centrada.
   static uint8_t divisorMuestras = 0;
+  static float sumaSalida = 0;
+  float contribucion = midiendo ? filtrado : 0;
+  sumaSalida += contribucion;
+  valorGraficaActual = (uint16_t)constrain(2048.0f + contribucion * (GANANCIA_ONDA / amplitud), 0, 4095);
   divisorMuestras++;
-  if (divisorMuestras >= 4) {
+  if (divisorMuestras >= 2) {
+    float media = sumaSalida * 0.5f;
     divisorMuestras = 0;
+    sumaSalida = 0;
     // Modulación para trazado nítido en el osciloscopio
-    int offsetAC = (int)valorGraficaActual - 2048;
+    int offsetAC = (int)constrain(media * (GANANCIA_ONDA / amplitud), -2047.0f, 2047.0f);
     uint16_t irMuestra = (uint16_t)constrain(24500 + offsetAC, 1000, 65000);
     uint16_t rojoMuestra = (uint16_t)constrain(21000 + (int)(offsetAC * 0.75f), 1000, 65000);
+    portENTER_CRITICAL(&bufMux);
     if (indiceBuffer < SAMPLES_PER_BLOCK) {
       bufferIR[indiceBuffer]   = irMuestra;
       bufferRojo[indiceBuffer] = rojoMuestra;
       indiceBuffer++;
     }
+    portEXIT_CRITICAL(&bufMux);
     emitirMuestraUsb(millis(), irMuestra, rojoMuestra);   // lo que lee la app por USB
   }
 }
@@ -836,25 +1017,33 @@ void enviarPaquete() {
   String token = cfgToken;
   cfgUnlock();
 
-  // Copia segura de las muestras acumuladas
-  uint16_t irEnvio[SAMPLES_PER_BLOCK];
-  uint16_t rojoEnvio[SAMPLES_PER_BLOCK];
-  int cantMuestras = indiceBuffer;
-  if (cantMuestras > SAMPLES_PER_BLOCK) cantMuestras = SAMPLES_PER_BLOCK;
+  // Copia segura de las muestras acumuladas (sección crítica corta: el núcleo del sensor escribe en el mismo búfer).
+  // Se envían como máximo MAX_MUESTRAS_PAQUETE (las más antiguas); el resto queda, en orden, para el siguiente envío.
+  uint16_t irEnvio[MAX_MUESTRAS_PAQUETE];
+  uint16_t rojoEnvio[MAX_MUESTRAS_PAQUETE];
+  int cantMuestras = 0;
+  portENTER_CRITICAL(&bufMux);
+  int disponibles = indiceBuffer;
+  if (disponibles >= 5) {
+    cantMuestras = (disponibles > MAX_MUESTRAS_PAQUETE) ? MAX_MUESTRAS_PAQUETE : disponibles;
+    memcpy(irEnvio, bufferIR, cantMuestras * sizeof(uint16_t));
+    memcpy(rojoEnvio, bufferRojo, cantMuestras * sizeof(uint16_t));
+    int resto = disponibles - cantMuestras;
+    if (resto > 0) {
+      memmove(bufferIR, bufferIR + cantMuestras, resto * sizeof(uint16_t));
+      memmove(bufferRojo, bufferRojo + cantMuestras, resto * sizeof(uint16_t));
+    }
+    indiceBuffer = resto;
+  }
+  portEXIT_CRITICAL(&bufMux);
 
-  if (cantMuestras < 5) {
+  if (cantMuestras == 0) {
     // Si el búfer aún no tiene 5 muestras, rellenar con valores coherentes
     for (int i = 0; i < MUESTRAS_RELLENO; i++) {
       irEnvio[i] = 24500;
       rojoEnvio[i] = 21000;
     }
     cantMuestras = MUESTRAS_RELLENO;
-  } else {
-    for (int i = 0; i < cantMuestras; i++) {
-      irEnvio[i] = bufferIR[i];
-      rojoEnvio[i] = bufferRojo[i];
-    }
-    indiceBuffer = 0; // Reiniciar búfer para el próximo segundo
   }
 
   // Serializar arrays JSON

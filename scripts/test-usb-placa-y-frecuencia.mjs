@@ -9,8 +9,8 @@ const prueba = (nombre, cond) => { if (cond) { ok++; console.log('  ✓', nombre
 const cerca = (a, b, tol) => typeof a === 'number' && Math.abs(a - b) <= tol
 const leer = (ruta) => readFileSync(new URL(ruta, import.meta.url), 'utf8')
 
-// Onda que envía la placa: ya filtrada, hacia arriba en cada latido, centrada en 24500, a 25 muestras por segundo
-function lineasDePlaca({ bpm = 72, segundos = 12, hz = 25, spo2 = 97.5, dedo = true, t0 = 5000 } = {}) {
+// Onda que envía la placa: ya filtrada (pasa-banda 0,5-5 Hz), hacia arriba en cada latido, centrada en 24500, a 50 muestras por segundo
+function lineasDePlaca({ bpm = 72, segundos = 12, hz = 50, spo2 = 97.5, dedo = true, t0 = 5000 } = {}) {
   const lineas = []
   const n = Math.round(segundos * hz)
   for (let i = 0; i < n; i++) {
@@ -41,7 +41,7 @@ console.log('Agregador con los valores de la placa')
   const c = ag.instantanea()[0]
   prueba('usa el pulso de la placa (el mismo que por WiFi)', c && c.bpm === 72 && c.bpmOrigen === 'dispositivo')
   prueba('usa la SpO2 de la placa y no recalcula una inventada con el rojo del trazo', c && c.spo2 === 97.5)
-  prueba('la frecuencia sale de los tiempos de la placa: 25 Hz', c && cerca(c.frecuenciaHz, 25, 0.6))
+  prueba('la frecuencia sale de los tiempos de la placa: 50 Hz', c && cerca(c.frecuenciaHz, 50, 1))
   prueba('trae las muestras para graficar', c && c.ir.length > 200 && c.rojo.length === c.ir.length)
 }
 {
@@ -74,7 +74,7 @@ console.log('Servicio: lo que ve la pantalla con USB')
   publicarMuestrasUsb()
   const c = esp32State.canales[0]
   prueba('con la placa conectada hay un canal con pulso y SpO2 como por WiFi', c && c.bpm === 80 && c.spo2 === 96.5 && c.activo === true)
-  prueba('la frecuencia que usa la pantalla es 25 Hz (no 50)', cerca(esp32State.frecuenciaHz, 25, 0.6))
+  prueba('la frecuencia que usa la pantalla es 50 Hz (la que envía la placa)', cerca(esp32State.frecuenciaHz, 50, 1))
   for (const l of lineasDePlaca({ dedo: false, segundos: 2, t0: 20000 })) procesarLineaSerial(l)
   publicarMuestrasUsb()
   prueba('sin dedo la calidad es «sin_dedo» (la pantalla avisa que apoye el dedo)', esp32State.canales[0] && esp32State.canales[0].calidad === 'sin_dedo')
@@ -107,8 +107,9 @@ const ino = leer('../firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino')
 prueba('el firmware envía por USB una línea CH1 con tiempo, ir, rojo, pulso, SpO2 y dedo', ino.includes('"CH1,%lu,%u,%u,%.1f,%.1f,1\\n"') && ino.includes('"CH1,%lu,0,0,0,0,0\\n"'))
 prueba('la línea USB se escribe con el mutex (no se mezcla con @SP)', /void emitirMuestraUsb[\s\S]*?xSemaphoreTake\(serMux[\s\S]*?Serial\.write[\s\S]*?xSemaphoreGive\(serMux\)/.test(ino))
 prueba('se emite una línea por muestra, esté o no lleno el búfer del WiFi', /emitirMuestraUsb\(millis\(\), irMuestra, rojoMuestra\)/.test(ino))
-prueba('el paquete WiFi informa su frecuencia real (25 Hz)', ino.includes('"\\"frecuencia_hz\\":" + String(FRECUENCIA_MUESTREO_HZ)') && /FRECUENCIA_MUESTREO_HZ = 25/.test(ino))
-prueba('el búfer guarda hasta 4 s: no se pierden muestras mientras un envío tarda', /SAMPLES_PER_BLOCK = 100/.test(ino) && ino.includes('MUESTRAS_RELLENO = 25'))
+prueba('el paquete WiFi informa su frecuencia real (50 Hz)', ino.includes('"\\"frecuencia_hz\\":" + String(FRECUENCIA_MUESTREO_HZ)') && /FRECUENCIA_MUESTREO_HZ = 50/.test(ino))
+prueba('el búfer guarda hasta 4 s (200 a 50 Hz) y cada paquete lleva como máximo 100 muestras', /SAMPLES_PER_BLOCK = 200/.test(ino) && ino.includes('MUESTRAS_RELLENO = 50') && /MAX_MUESTRAS_PAQUETE = 100/.test(ino))
+prueba('la API acepta hasta 250 muestras por canal (el firmware envía como máximo 100)', leer('../api/esp32/telemetria.js').includes('ch.ir.slice(0, 250)'))
 prueba('la API devuelve la frecuencia informada', /frecuenciaHz: ultimaTelemetria\.frecuenciaHz \|\| null/.test(leer('../api/esp32/telemetria.js')))
 const servicio = leer('../src/services/esp32Service.js')
 prueba('la pantalla usa esa frecuencia (informada o estimada) con WiFi', servicio.includes('elegirFrecuencia(data.frecuenciaHz, estimadorFrecuenciaWifi.estimar(), esp32State.frecuenciaHz)'))

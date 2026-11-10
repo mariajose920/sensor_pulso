@@ -191,8 +191,8 @@ export default async function handler(req, res) {
         bpm: Number(ch.bpm) || 0,
         spo2: Number(ch.spo2) || 0,
         calidad: ['buena', 'regular', 'mala', 'sin_dedo'].includes(ch.calidad) ? ch.calidad : 'buena',
-        ir: Array.isArray(ch.ir) ? ch.ir.slice(0, 100) : [],
-        rojo: Array.isArray(ch.rojo) ? ch.rojo.slice(0, 100) : []
+        ir: Array.isArray(ch.ir) ? ch.ir.slice(0, 250) : [],
+        rojo: Array.isArray(ch.rojo) ? ch.rojo.slice(0, 250) : []
       }))
 
       // 5. Actualizar cache en memoria

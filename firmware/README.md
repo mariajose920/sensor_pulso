@@ -113,7 +113,7 @@ Ejemplo de sesión:
 
 ## Datos por USB (Web Serial)
 
-Además del WiFi, el firmware escribe por el puerto USB (115200 baudios) **una línea por muestra**, 25 por segundo, con los
+Además del WiFi, el firmware escribe por el puerto USB (115200 baudios) **una línea por muestra**, 50 por segundo, con los
 mismos valores que se envían por WiFi:
 
 ```
@@ -126,3 +126,15 @@ CH1,15270,0,0,0,0,0                    sin dedo
 (Medición → USB) reconoce esta línea (formato «A+», ver `src/utils/fuenteMedicion.js`) y muestra la misma gráfica que con
 WiFi. Los textos de registro y los mensajes `@SP` siguen saliendo por el mismo puerto y la app los ignora. Para usar USB hay
 que cerrar el Monitor Serie del Arduino IDE (solo un programa puede abrir el puerto).
+
+---
+
+## Señal y pulso (procesamiento en la placa)
+
+- **Sensor**: MAX30100 en modo SpO2, 100 muestras/s, 16 bits, LED IR ≈27 mA y rojo ≈7,6 mA (sin cambios). Detección de dedo: IR ≥ 7000.
+- **Filtro**: pasa-banda 0,5–5 Hz con dos biquads Butterworth de 2.º orden (pasa-altas 0,5 Hz + pasa-bajas 5 Hz, fs = 100 Hz). Arranca sin transitorio largo (el filtro se reinicia durante el primer segundo de calentamiento).
+- **Latidos**: se busca la **cresta** (máximo local confirmado al bajar al 72 % de su altura), con umbral adaptativo (0,4 × amplitud media de los últimos latidos) y refractario adaptativo (0,58 × intervalo mediano, entre 280 y 600 ms). Un intervalo fuera de ±30 % de la mediana se descarta salvo que se repita 3 veces (cambio real de ritmo).
+- **Pulso**: 60000 / mediana de los últimos ≤ 8 intervalos válidos (rango 40–180), suavizado leve y variación limitada a ±4 BPM por latido. No hay valores iniciales inventados: se muestra con ≥ 4 intervalos válidos coherentes. Con intervalos dispersos, una forma de onda que no se repite (ruido) o más de 3 s sin latido válido, el pulso es **0 (sin lectura)**.
+- **SpO2**: sin cambios (razón de razones AC/DC, ventanas de 2 s).
+- **Onda enviada** (WiFi y USB): **50 muestras/s**, promedio de cada 2 lecturas de 100 Hz, con el latido hacia arriba y centrada en 24500 (IR) / 21000 (rojo sintético). La ganancia sigue una envolvente lenta (sube con suavidad, baja en ≈10 s) para que no pulse con la respiración.
+- **Paquete WiFi**: informa `frecuencia_hz` = 50 y lleva como máximo 100 muestras por canal (límite de la API desplegada); si hay más acumuladas, las más antiguas salen primero y el resto queda para el siguiente envío. El búfer guarda 4 s (200 muestras) y se accede con una sección crítica entre el núcleo del sensor y el de red.
