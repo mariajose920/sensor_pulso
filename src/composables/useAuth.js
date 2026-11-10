@@ -18,7 +18,45 @@ const session = ref(null)
 const loading = ref(false)
 const authError = ref(null)
 
-async function cargarPerfilDesdeBD(userId) {
+function extraerNombreGoogle(usuario) {
+  const meta = usuario?.user_metadata || {}
+  return (
+    meta.full_name
+    || meta.name
+    || meta.nombre_completo
+    || meta.nombre
+    || [meta.given_name, meta.family_name].filter(Boolean).join(' ')
+    || ''
+  ).trim()
+}
+
+async function validarYAplicarSesion(currentSession) {
+  const usuario = currentSession?.user
+  if (!usuario) return false
+
+  const validacion = validarCorreoInstitucional(usuario.email)
+  if (!validacion.valido) {
+    authError.value = validacion.error
+    session.value = null
+    user.value = null
+    profile.value = null
+    localStorage.removeItem('sensor_user')
+    localStorage.removeItem('sensor_profile')
+    try { await supabase.auth.signOut() } catch (_) {}
+    return false
+  }
+
+  session.value = currentSession
+  user.value = usuario
+  localStorage.setItem('sensor_user', JSON.stringify(usuario))
+  if (profile.value?.id !== usuario.id) {
+    profile.value = null
+  }
+  await cargarPerfilDesdeBD(usuario.id, extraerNombreGoogle(usuario))
+  return true
+}
+
+async function cargarPerfilDesdeBD(userId, nombreFallback = '') {
   if (!userId) return
   try {
     const { data, error } = await supabase
@@ -28,6 +66,10 @@ async function cargarPerfilDesdeBD(userId) {
       .maybeSingle()
 
     if (!error && data) {
+      if (!data.nombre?.trim() && nombreFallback) {
+        data.nombre = nombreFallback
+        await supabase.from('perfiles').update({ nombre: nombreFallback }).eq('id', userId)
+      }
       profile.value = data
       localStorage.setItem('sensor_profile', JSON.stringify(data))
     }
@@ -39,9 +81,7 @@ async function cargarPerfilDesdeBD(userId) {
 // Inicializar sesión y escuchar redirección de Google OAuth
 supabase.auth.getSession().then(async ({ data }) => {
   if (data?.session?.user) {
-    session.value = data.session
-    user.value = data.session.user
-    await cargarPerfilDesdeBD(user.value.id)
+    await validarYAplicarSesion(data.session)
   }
 }).catch(() => {}).finally(() => {
   loading.value = false
@@ -49,18 +89,14 @@ supabase.auth.getSession().then(async ({ data }) => {
 
 supabase.auth.onAuthStateChange(async (event, currentSession) => {
   if (currentSession?.user) {
-    session.value = currentSession
-    user.value = currentSession.user
-    localStorage.setItem('sensor_user', JSON.stringify(currentSession.user))
-    await cargarPerfilDesdeBD(currentSession.user.id)
+    const valido = await validarYAplicarSesion(currentSession)
+    if (!valido) return
+
     if (!profile.value) {
       const correo = (currentSession.user.email || '').toLowerCase()
       const esProfesor = correo.endsWith('@unach.cl') && !correo.includes('@alu.')
       const esAdmin = correo === 'admin.general@unach.cl'
-      const nombre = currentSession.user.user_metadata?.full_name 
-        || currentSession.user.user_metadata?.name 
-        || currentSession.user.user_metadata?.nombre_completo 
-        || correo.split('@')[0]
+      const nombre = extraerNombreGoogle(currentSession.user) || correo.split('@')[0]
       profile.value = {
         id: currentSession.user.id,
         correo,
@@ -84,8 +120,9 @@ export function useAuth() {
   const currentUserId = computed(() => user.value?.id || null)
   const currentUserEmail = computed(() => user.value?.email || profile.value?.correo || '')
   const currentUserName = computed(() => {
-    return profile.value?.nombre || user.value?.user_metadata?.nombre_completo || 'Usuario'
+    return profile.value?.nombre?.trim() || extraerNombreGoogle(user.value) || 'Usuario'
   })
+
   const currentUserRole = computed(() => profile.value?.rol || user.value?.user_metadata?.rol || ROLES.USUARIO)
   const isAdmin = computed(() => !!profile.value?.es_admin || user.value?.user_metadata?.rol === 'admin')
   const isProfesor = computed(() => currentUserRole.value === ROLES.PROFESOR)
@@ -113,7 +150,7 @@ export function useAuth() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/`,
+          redirectTo: `${window.location.origin}/login`,
           skipBrowserRedirect: true, // Evita redirección automática para validar antes de navegar
           queryParams: {
             access_type: 'offline',

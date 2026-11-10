@@ -125,12 +125,12 @@
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 
 const router = useRouter()
-const { loginWithGoogle, loginGoogleDemo, register, loading } = useAuth()
+const { loginWithGoogle, loginGoogleDemo, register, loading, isAuthenticated, authError } = useAuth()
 
 const aceptaPolitica = ref(true)
 const errorMessage = ref('')
@@ -181,12 +181,42 @@ const registrarAuditoriaPolitica = async () => {
 }
 
 onMounted(() => {
-  // Si ya tiene sesión activa, redirigir al inicio
-  const storedUser = localStorage.getItem('sensor_user')
-  if (storedUser) {
-    router.push('/')
+  const queryParams = new URLSearchParams(window.location.search)
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const oauthError =
+    queryParams.get('error_description')
+    || hashParams.get('error_description')
+    || queryParams.get('error')
+    || hashParams.get('error')
+
+  if (oauthError) {
+    if (
+      oauthError.includes('Database error')
+      || oauthError.includes('unach.cl')
+      || oauthError.includes('access_denied')
+    ) {
+      errorMessage.value = 'Solo se permiten correos institucionales de la UNACH (@alu.unach.cl o @unach.cl). Las cuentas personales no pueden ingresar.'
+    } else {
+      errorMessage.value = `No se pudo iniciar sesión: ${oauthError}`
+    }
+    window.history.replaceState({}, document.title, window.location.pathname)
+    return
+  }
+
+  if (authError.value) {
+    errorMessage.value = authError.value
   }
 })
+
+watch(authError, (err) => {
+  if (err) errorMessage.value = err
+})
+
+watch(isAuthenticated, (logueado) => {
+  if (logueado) {
+    router.push('/')
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
