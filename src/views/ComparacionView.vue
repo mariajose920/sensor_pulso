@@ -55,7 +55,7 @@
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
           </svg>
-          Mediciones Propias o Públicas
+          {{ isAuthenticated ? 'Mediciones Propias o Públicas' : 'Mediciones Públicas' }}
         </button>
 
         <button
@@ -184,6 +184,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 
 import AvisoGirar from '../components/AvisoGirar.vue'
@@ -200,12 +201,13 @@ import CargaSenalesCard from '../components/CargaSenalesCard.vue'
 const route = useRoute()
 
 // Pestaña activa: 'guardadas', 'patologias', 'reposo', 'datasets' o 'senales'
+const { isAuthenticated } = useAuth()
 const pestañaActiva = ref('guardadas')
 
 const etiquetaPestaña = computed(() => {
   if (pestañaActiva.value === 'datasets') return 'Contraste con Datasets Públicos (RF47)'
   if (pestañaActiva.value === 'senales') return 'Carga de Bioseñales Externas (RF27)'
-  if (pestañaActiva.value === 'guardadas') return 'Comparación Histórica y Pública'
+  if (pestañaActiva.value === 'guardadas') return isAuthenticated.value ? 'Comparación Histórica y Pública' : 'Comparación con la Galería Pública'
   if (pestañaActiva.value === 'patologias') return 'Patologías y Arritmias Precargadas'
   return 'Plantilla Normal de Reposo'
 })

@@ -7,11 +7,36 @@ import { pathToFileURL } from 'url'
 
 // Plugin para simular en desarrollo local las funciones de Vercel de la carpeta /api (/api/<carpeta>/<archivo>).
 // Los archivos o carpetas que empiezan con «_» son internos y no se exponen.
+// En local, el ESP32 envía sus datos al servidor de producción (no puede llegar a «localhost»). Para ver esa medición
+// en la versión local, la consulta GET de telemetría se resuelve contra producción cuando allí hay datos frescos.
+// Se desactiva con TELEMETRIA_REMOTA=off o se apunta a otro servidor con TELEMETRIA_REMOTA=https://...
+async function telemetriaRemota() {
+  const base = process.env.TELEMETRIA_REMOTA || 'https://sensorpulso.vercel.app'
+  if (base === 'off') return null
+  try {
+    const r = await fetch(base.replace(/\/$/, '') + '/api/esp32/telemetria', { signal: AbortSignal.timeout(3000) })
+    if (!r.ok) return null
+    const datos = await r.json()
+    return datos && datos.conectado ? datos : null
+  } catch {
+    return null
+  }
+}
+
 function apiDevPlugin() {
   return {
     name: 'api-dev-plugin',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        if (req.method === 'GET' && /^\/api\/esp32\/telemetria(?:\?.*)?$/.test(req.url || '')) {
+          const remota = await telemetriaRemota()
+          if (remota) {
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ...remota, origen: 'produccion' }))
+            return
+          }
+        }
         const coincide = /^\/api\/([a-z0-9-]+)\/([a-z0-9-]+)(?:\?.*)?$/i.exec(req.url || '')
         if (!coincide) return next()
         const [, carpeta, archivo] = coincide

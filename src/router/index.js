@@ -6,6 +6,7 @@ import AulasView from '../views/AulasView.vue'
 import AulaDetalleView from '../views/AulaDetalleView.vue'
 import AprendizajeView from '../views/AprendizajeView.vue'
 import LeccionView from '../views/LeccionView.vue'
+import PracticaView from '../views/PracticaView.vue'
 import SimuladorView from '../views/SimuladorView.vue'
 import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
@@ -20,6 +21,7 @@ import SeguridadAdminView from '../views/SeguridadAdminView.vue'
 import EvaluacionesView from '../views/EvaluacionesView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
+import { motivoDeRuta } from '../utils/accesoSinSesion'
 
 const routes = [
   {
@@ -50,7 +52,8 @@ const routes = [
   {
     path: '/medicion',
     name: 'Medicion',
-    component: MedicionView
+    component: MedicionView,
+    meta: { requiresAuth: true }   // sin sesión no hay sensor: solo se estudia o se compara
   },
   {
     // RF13: Asistente integrado en la vista de medición
@@ -60,7 +63,8 @@ const routes = [
   {
     path: '/dispositivos',
     name: 'Dispositivos',
-    component: DispositivosView
+    component: DispositivosView,
+    meta: { requiresAuth: true }   // los sensores ESP32 son de quien tiene sesión
   },
   {
     path: '/historial',
@@ -76,7 +80,8 @@ const routes = [
   {
     path: '/aulas',
     name: 'Aulas',
-    component: AulasView
+    component: AulasView,
+    meta: { requiresAuth: true }   // sin sesión no se ven aulas
   },
   {
     // RF103: Página del aula (con pestañas: estudiantes, cursos y evaluaciones)
@@ -102,6 +107,12 @@ const routes = [
     path: '/aprendizaje/simulador',
     name: 'Simulador',
     component: SimuladorView
+  },
+  {
+    // Práctica para las evaluaciones: abierta con o sin sesión (va antes de la lección para que no se tome como slug)
+    path: '/aprendizaje/practica',
+    name: 'Practica',
+    component: PracticaView
   },
   {
     // RF38: una lección del apartado de aprendizaje
@@ -170,7 +181,11 @@ router.beforeEach(async (to, _from, next) => {
 
   // Si la ruta requiere autenticación
   if (to.meta.requiresAuth && !isAuthenticated.value) {
-    return next({ name: 'Login' })
+    // Se avisa en el login por qué hace falta la sesión y se vuelve a la pantalla pedida al entrar
+    const query = { redirect: to.fullPath }
+    const motivo = motivoDeRuta(to.name)
+    if (motivo) query.motivo = motivo
+    return next({ name: 'Login', query })
   }
 
   // Si la ruta está restringida a ciertos roles

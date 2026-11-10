@@ -268,8 +268,10 @@
           </button>
 
           <button
+            v-if="isAuthenticated"
             type="button"
             class="btn btn-secondary btn-sm"
+            data-testid="inyectar-medicion"
             @click="inyectarAMedicion"
             title="Inyectar muestras al osciloscopio en tiempo real de /medicion"
           >
@@ -301,6 +303,10 @@ import {
   validarMetadatosArchivoCsv
 } from '../services/senalesService.js'
 import { esp32State, senalBuffer } from '../services/esp32Service.js'
+import { useAuth } from '../composables/useAuth'
+
+// Sin sesión no hay sensor ni medición en vivo: solo se estudia o se compara
+const { isAuthenticated } = useAuth()
 
 const emit = defineEmits(['seleccionar-senal', 'usar-medicion'])
 
