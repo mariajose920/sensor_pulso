@@ -1,5 +1,17 @@
 import { reactive, computed } from 'vue'
 import { supabase } from './supabase.js'
+import { pacienteService } from './pacienteService.js'
+import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
+import {
+  MAX_CANALES_DOCENTE,
+  esDocente,
+  canalesDe,
+  siguienteCanalLibre,
+  evaluarAgregarCanal,
+  canalPrincipal,
+  requisitosCompletos,
+  canalListoParaMedir
+} from '../utils/canalesMultiples.js'
 
 // Usuario de sesión simulado / por defecto para pruebas si no hay Supabase Auth activo
 export const usuarioActual = reactive({
@@ -67,19 +79,19 @@ export async function cargarSesionYCanales(sesionId = canalesState.sesionActivaI
         usuarioActual.id = user.id
         usuarioActual.email = user.email || usuarioActual.email
         usuarioActual.nombre = user.user_metadata?.nombre || usuarioActual.nombre
-        if (user.user_metadata?.rol) {
+        // El rol sale de la tabla perfiles (no de user_metadata, que edita la propia persona): de él
+        // depende si se pueden tener varios canales (RF111).
+        const { data: perfil } = await supabase
+          .from('perfiles')
+          .select('rol, es_admin, nombre')
+          .eq('id', user.id)
+          .single()
+        if (perfil) {
+          if (perfil.es_admin) usuarioActual.rol = 'admin'
+          else if (perfil.rol) usuarioActual.rol = perfil.rol
+          if (perfil.nombre) usuarioActual.nombre = perfil.nombre
+        } else if (user.user_metadata?.rol) {
           usuarioActual.rol = user.user_metadata.rol
-        } else {
-          // Consultar rol en tabla perfiles
-          const { data: perfil } = await supabase
-            .from('perfiles')
-            .select('rol, nombre')
-            .eq('id', user.id)
-            .single()
-          if (perfil) {
-            if (perfil.rol) usuarioActual.rol = perfil.rol
-            if (perfil.nombre) usuarioActual.nombre = perfil.nombre
-          }
         }
       }
     } catch {
@@ -189,15 +201,16 @@ export async function vincularMiCuentaACanal(canalNum) {
 /**
  * Libera el canal ocupado por el usuario actual
  */
-export async function desvincularMiCuenta() {
+export async function desvincularMiCuenta(canalEspecifico = null) {
   canalesState.cargando = true
-  const miCanal = canalesState.canales.find(c => c.usuario_id === usuarioActual.id)
+  const miCanal = canalesState.canales.find(c => c.usuario_id === usuarioActual.id && (!canalEspecifico || c.canal === canalEspecifico))
   if (!miCanal) {
     canalesState.cargando = false
     return { ok: true }
   }
 
   const canalNumero = miCanal.canal
+  delete requisitosCanales[canalNumero]
 
   try {
     await supabase
@@ -224,6 +237,7 @@ export async function desvincularMiCuenta() {
  */
 export async function asignarCanalProfesor(canalNum, nuevoUsuarioId = null, usuarioInfo = null) {
   canalesState.cargando = true
+  delete requisitosCanales[canalNum] // el canal cambia de dueño: los requisitos anteriores ya no valen
   try {
     await supabase.rpc('asignar_canal', {
       p_sesion: canalesState.sesionActivaId,
@@ -268,6 +282,7 @@ export async function abrirSiguienteRonda() {
   }
 
   canalesState.sesionActiva.ronda = nuevaRonda
+  Object.keys(requisitosCanales).forEach(k => delete requisitosCanales[k])
   canalesState.canales.forEach(c => {
     c.usuario_id = null
     c.usuario_nombre = null
@@ -277,4 +292,130 @@ export async function abrirSiguienteRonda() {
 
   canalesState.cargando = false
   return nuevaRonda
+}
+
+// ============================================================================
+// «Agregar otro canal» para profesor y administrador (RF111, RF12, RF08)
+// ============================================================================
+
+export { MAX_CANALES_DOCENTE }
+
+/**
+ * Requisitos cumplidos por cada canal adicional, en memoria (se piden de nuevo al recargar la
+ * página, igual que el consentimiento del RF04). Clave = número de canal.
+ *   { ficha, politicaVersion, consentimientoVersion, completadoEn }
+ */
+export const requisitosCanales = reactive({})
+
+// Estado del botón «Agregar otro canal»
+export const estadoAgregarCanal = computed(() => evaluarAgregarCanal({
+  rol: usuarioActual.rol,
+  canales: canalesState.canales,
+  usuarioId: usuarioActual.id
+}))
+
+// Mis canales ordenados, con lo que les falta para poder medir
+export const misCanales = computed(() => {
+  const principal = canalPrincipal(canalesState.canales, usuarioActual.id)
+  return canalesDe(canalesState.canales, usuarioActual.id)
+    .slice().sort((a, b) => a.canal - b.canal)
+    .map(c => {
+      const esPrincipal = c.canal === principal
+      const req = requisitosCompletos(requisitosCanales[c.canal], { politicaVigente: POLITICA_VERSION })
+      return { ...c, esPrincipal, listo: esPrincipal || req.completos, faltan: esPrincipal ? [] : req.faltan }
+    })
+})
+
+/** ¿Se puede medir en este canal? Un canal adicional sin ficha + política + consentimiento no se usa. */
+export function puedeMedirEnCanal(canal) {
+  return canalListoParaMedir({
+    canal,
+    canales: canalesState.canales,
+    usuarioId: usuarioActual.id,
+    requisitos: requisitosCanales,
+    vigentes: { politicaVigente: POLITICA_VERSION }
+  })
+}
+
+// ¿El id de sesión es real (uuid de la base) y no el de demostración («ses-demo-01»)?
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export function esUuid(valor) { return typeof valor === 'string' && UUID_RE.test(valor) }
+
+/**
+ * Agrega otro canal a mi sesión: el sistema toma el siguiente canal libre (no se elige) y deja constancia
+ * de la ficha del paciente (RF03), la política (RF88) y el consentimiento (RF04) de esa persona.
+ * Con `canalExistente` solo se completan los requisitos de un canal que ya es mío (p. ej. tras recargar).
+ * Solo profesor/admin: la base de datos lo vuelve a exigir (RNF12).
+ */
+export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, canalExistente = null }) {
+  if (!esDocente(usuarioActual.rol)) {
+    throw new Error('Solo el profesor y el administrador pueden agregar otro canal.')
+  }
+  if (!canalExistente) {
+    const estado = estadoAgregarCanal.value
+    if (!estado.puede) throw new Error(estado.motivo)
+  }
+  const validacion = pacienteService.validarDatos(ficha || {})
+  if (!validacion.valido) throw new Error(validacion.errores[0])
+  if (politicaVersion !== POLITICA_VERSION) throw new Error('Debes aceptar los términos y la política de privacidad vigente.')
+  if (!consentimientoVersion) throw new Error('Debes aceptar el consentimiento informado vigente.')
+
+  canalesState.cargando = true
+  canalesState.error = null
+  try {
+    let canal = canalExistente
+    let declaracionId = null // id de la ficha del paciente en el servidor (la usa «Terminar» al guardar la medición)
+    let hayCuenta = false
+    // Sin una sesión de medición real en la base (id de demostración como «ses-demo-01», que no es un
+    // uuid) no hay dónde guardar el canal ni la ficha: todo queda en memoria, como el modo local.
+    const sesionReal = esUuid(canalesState.sesionActivaId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      hayCuenta = Boolean(session?.user?.id)
+    } catch { hayCuenta = false }
+
+    if (hayCuenta && sesionReal) {
+      const guardada = await pacienteService.guardarDeclaracion(ficha, { adicional: true, sesionId: canalesState.sesionActivaId })
+      if (!guardada.ok) throw new Error(guardada.errores?.[0] || 'No se pudo guardar la ficha del paciente.')
+      declaracionId = guardada.declaracionId || null
+      if (!guardada.declaracionId) {
+        // Se muestra el motivo real (p. ej. migración sin aplicar o cifrado caído) para no adivinar
+        throw new Error(`No se pudo guardar la ficha del paciente en el servidor${guardada.errorServidor ? `: ${guardada.errorServidor}` : ''}. Intenta de nuevo.`)
+      }
+
+      const { data, error } = await supabase.rpc('agregar_canal_automatico', {
+        p_sesion: canalesState.sesionActivaId,
+        p_declaracion: guardada.declaracionId,
+        p_politica_version: politicaVersion,
+        p_consentimiento_version: consentimientoVersion,
+        p_canal: canalExistente
+      })
+      if (error) throw new Error(error.message)
+      canal = Number(data)
+      await cargarSesionYCanales()
+    } else {
+      // Sin cuenta de Supabase (modo local): asignación en memoria, con la misma regla de siguiente libre
+      if (!canal) canal = siguienteCanalLibre(canalesState.canales)
+      const ch = canalesState.canales.find(c => c.canal === canal)
+      if (!ch) throw new Error('No hay canales libres en esta sesión.')
+      ch.usuario_id = usuarioActual.id
+      ch.usuario_nombre = usuarioActual.nombre
+      ch.usuario_email = usuarioActual.email
+      ch.asignado_en = ch.asignado_en || new Date().toISOString()
+    }
+
+    requisitosCanales[canal] = {
+      ficha: { ...ficha },
+      politicaVersion,
+      consentimientoVersion,
+      declaracionId,
+      completadoEn: new Date().toISOString()
+    }
+    return { ok: true, canal }
+  } catch (err) {
+    canalesState.error = err.message
+    throw err
+  } finally {
+    canalesState.cargando = false
+  }
 }

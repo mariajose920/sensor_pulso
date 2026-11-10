@@ -1,6 +1,14 @@
 import crypto from 'crypto'
-import { createClient } from '@supabase/supabase-js'
 import { validarYSanitizarTelemetriaEsp32 } from '../../src/services/sanitizacionService.js'
+import {
+  aplicarLimitePeticiones,
+  extraerIp,
+  LIMITES_PETICIONES_CONFIG,
+  getAdminSupabase
+} from '../_lib/limitePeticiones.js'
+
+// Un envío HTTPS del ESP32 puede tardar varios segundos: se considera «conectado» si hubo contacto en los últimos 15 s
+const VENTANA_CONECTADO_MS = 15000
 
 // Cache en memoria para almacenar la última telemetría recibida
 // Permite que la app web en tiempo real consulte o verifique el estado inmediato del ESP32
@@ -18,14 +26,45 @@ let ultimaTelemetria = {
 const bufferPaquetes = []
 const MAX_HISTORIAL = 50
 
-// Función para inicializar cliente Supabase con clave de servicio si está disponible
-function getAdminSupabase() {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-  const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !secretKey) return null
-  return createClient(url, secretKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  })
+/**
+ * Detecta e informa dinámicamente el protocolo de transporte realmente utilizado.
+ * Cumple con el criterio de aceptación del RF55: "La API informa el protocolo real".
+ *
+ * @param {import('http').IncomingMessage} req
+ * @returns {{
+ *   protocolo: string,
+ *   cifrado: boolean,
+ *   versionTls: string | null,
+ *   versionHttp: string
+ * }}
+ */
+export function detectarProtocoloReal(req) {
+  const socket = req.socket
+  const protoHeader = req.headers['x-forwarded-proto']
+  const socketEncrypted = Boolean(socket?.encrypted)
+  const esHttps = protoHeader === 'https' || socketEncrypted
+  const tlsVersion = socket?.getProtocol?.() || req.headers['x-vercel-tls-version'] || req.headers['ssl-protocol'] || null
+  const versionHttp = req.httpVersion ? `HTTP/${req.httpVersion}` : 'HTTP/1.1'
+
+  let descripcionProtocolo = ''
+  if (tlsVersion) {
+    descripcionProtocolo = `${tlsVersion} (${versionHttp})`
+  } else if (esHttps) {
+    descripcionProtocolo = `HTTPS (${versionHttp})`
+  } else {
+    const host = req.headers['host'] || ''
+    const esLocalhost = host.includes('localhost') || host.includes('127.0.0.1')
+    descripcionProtocolo = esLocalhost
+      ? `${versionHttp} (desarrollo local)`
+      : `${versionHttp} (no cifrado)`
+  }
+
+  return {
+    protocolo: descripcionProtocolo,
+    cifrado: esHttps,
+    versionTls: tlsVersion,
+    versionHttp
+  }
 }
 
 // Handler compatible con Vercel Serverless Functions y Vite Middleware
@@ -67,8 +106,24 @@ export default async function handler(req, res) {
   // GET: Consultar el estado en vivo de la telemetría recibida del ESP32
   // --------------------------------------------------------------------------
   if (req.method === 'GET') {
+    // --------------------------------------------------------------------------
+    // RF67: Límite de peticiones para consultas de telemetría (GET)
+    // --------------------------------------------------------------------------
+    const ipCliente = extraerIp(req)
+    const claveRateLimit = `esp32:get:${ipCliente}`
+    const maximoGet = Number(process.env.ESP32_GET_RATE_LIMIT_MAX) || LIMITES_PETICIONES_CONFIG.ESP32_GET_MAXIMO
+    const segundosGet = Number(process.env.ESP32_GET_RATE_LIMIT_WINDOW) || LIMITES_PETICIONES_CONFIG.ESP32_GET_SEGUNDOS
+
+    const permitido = await aplicarLimitePeticiones(req, res, {
+      clave: claveRateLimit,
+      maximo: maximoGet,
+      segundos: segundosGet
+    })
+    if (!permitido) return
+
     const ahora = Date.now()
-    const estaConectado = ultimaTelemetria.ultimoContacto && (ahora - new Date(ultimaTelemetria.ultimoContacto).getTime() < 5000)
+    const estaConectado = ultimaTelemetria.ultimoContacto && (ahora - new Date(ultimaTelemetria.ultimoContacto).getTime() < VENTANA_CONECTADO_MS)
+    const infoTransporte = detectarProtocoloReal(req)
 
     const respuesta = {
       ok: true,
@@ -79,18 +134,21 @@ export default async function handler(req, res) {
       ip: ultimaTelemetria.ip,
       rssi: ultimaTelemetria.rssi,
       paquete: ultimaTelemetria.paquete,
+      frecuenciaHz: ultimaTelemetria.frecuenciaHz || null,
       canales: ultimaTelemetria.canales,
       estadisticas: {
         totalPaquetes: bufferPaquetes.length,
         tasaRecepcionEstimada: bufferPaquetes.length >= 2 ? '1.0 Hz' : '0.0 Hz'
       },
-      // RF55: Metadatos de cifrado y seguridad
+      // RF55: Metadatos reales del transporte y cifrado (informa el protocolo real dinámico)
       cifrado: {
-        enTransito: true,
-        protocolo: proto === 'https' ? 'TLS 1.3 / HTTPS' : (esLocalhost ? 'Localhost (dev)' : proto),
-        hstsHabilitado: true,
-        rf55: 'cumplido'
-      }
+        enTransito: infoTransporte.cifrado,
+        protocolo: infoTransporte.protocolo,
+        versionHttp: infoTransporte.versionHttp,
+        versionTls: infoTransporte.versionTls,
+        hstsHabilitado: true
+      },
+      transporte: infoTransporte
     }
 
     res.setHeader('Content-Type', 'application/json')
@@ -131,6 +189,23 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', 'application/json')
         return res.end(JSON.stringify({ ok: false, error: 'Falta token de autenticación del dispositivo ESP32 (RF54)' }))
       }
+
+      // --------------------------------------------------------------------------
+      // RF67: Límite de peticiones en la recepción del ESP32 (POST)
+      // Usa la función PostgreSQL `consumir_limite` y la tabla `limites_peticiones`.
+      // Normal: 1 Hz = 60 req/min. Límite: 120 req/min (el uso normal no se ve afectado).
+      // --------------------------------------------------------------------------
+      const tokenHashPrefijo = crypto.createHash('sha256').update(token).digest('hex').substring(0, 16)
+      const claveRateLimit = `esp32:telemetria:${tokenHashPrefijo}`
+      const maximoPost = Number(process.env.ESP32_RATE_LIMIT_MAX) || LIMITES_PETICIONES_CONFIG.ESP32_POST_MAXIMO
+      const segundosPost = Number(process.env.ESP32_RATE_LIMIT_WINDOW) || LIMITES_PETICIONES_CONFIG.ESP32_POST_SEGUNDOS
+
+      const permitido = await aplicarLimitePeticiones(req, res, {
+        clave: claveRateLimit,
+        maximo: maximoPost,
+        segundos: segundosPost
+      })
+      if (!permitido) return
 
       // 3. Validación y Sanitización Estricta de Entradas (RF65)
       const validacion = validarYSanitizarTelemetriaEsp32(body)
@@ -236,7 +311,8 @@ export default async function handler(req, res) {
         }
       }
 
-      // 8. Respuesta exitosa al ESP32 con metadatos de seguridad RF55 y RF65
+      // 8. Respuesta exitosa al ESP32 informando el protocolo realmente utilizado (RF55)
+      const infoTransporte = detectarProtocoloReal(req)
       res.statusCode = 200
       res.setHeader('Content-Type', 'application/json')
       return res.end(JSON.stringify({
@@ -247,7 +323,8 @@ export default async function handler(req, res) {
         paquete: ultimaTelemetria.paquete,
         canales_recibidos: canalesProcesados.length,
         timestamp: ahoraIso,
-        cifrado_transito: 'TLS_1_3',
+        protocolo_real: infoTransporte.protocolo,
+        cifrado: infoTransporte.cifrado,
         sanitizacion_entradas: 'RF65_CUMPLIDO',
         advertencias: validacion.advertencias
       }))

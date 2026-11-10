@@ -68,17 +68,61 @@
           </button>
         </template>
         <template v-else>
-          <span class="unassigned-hint">
+          <span v-if="esProfesorOAdmin" class="unassigned-hint">
+            ⚠️ Aún no tienes canales. Pulsa «Agregar canal»: el sistema te asigna uno automáticamente.
+          </span>
+          <span v-else class="unassigned-hint">
             ⚠️ No tienes ningún canal asignado. Elige un canal libre a continuación (RF111):
           </span>
         </template>
       </div>
     </div>
 
+    <!-- Varios canales para profesor y administrador (RF111): el canal nuevo se asigna solo -->
+    <div v-if="estadoAgregarCanal.visible" class="mis-canales" data-testid="mis-canales">
+      <div class="mis-canales-header">
+        <strong>Tus canales: {{ misCanales.length }} de {{ MAX_CANALES_DOCENTE }}</strong>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          data-testid="agregar-otro-canal"
+          :disabled="!estadoAgregarCanal.puede || canalesState.cargando"
+          :title="estadoAgregarCanal.puede ? 'Asigna automáticamente el siguiente canal libre, con la ficha, los términos y el consentimiento del paciente' : estadoAgregarCanal.motivo"
+          @click="abrirAgregarCanal(null)"
+        >
+          ➕ {{ misCanales.length ? 'Agregar otro canal' : 'Agregar canal' }}
+        </button>
+      </div>
+      <p v-if="!estadoAgregarCanal.puede" class="mis-canales-nota" data-testid="agregar-canal-motivo">{{ estadoAgregarCanal.motivo }}</p>
+      <ul class="mis-canales-lista">
+        <li v-for="c in misCanales" :key="c.canal" :class="{ pendiente: !c.listo }">
+          <span><strong>Canal {{ c.canal }}</strong> ·
+            <template v-if="c.esPrincipal">tu canal principal</template>
+            <template v-else-if="c.listo">listo para medir</template>
+            <template v-else>no se puede medir: falta {{ c.faltan.map(etiquetaRequisito).join(', ') }}</template>
+          </span>
+          <span class="mis-canales-acciones">
+            <button v-if="!c.listo" type="button" class="btn btn-secondary btn-sm" :disabled="canalesState.cargando" @click="abrirAgregarCanal(c.canal)">Completar requisitos</button>
+            <button v-if="!c.esPrincipal" type="button" class="btn btn-secondary btn-sm" :disabled="canalesState.cargando" @click="desvincular(c.canal)">Liberar</button>
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <AgregarCanalModal
+      :visible="modalAgregarVisible"
+      :canal-existente="canalPendiente"
+      @cerrar="modalAgregarVisible = false"
+      @agregado="alAgregarCanal"
+    />
+
     <!-- Grid de los 5 Canales Físicos (RF12 / RF111) -->
-    <div class="canales-slots-grid">
+    <p v-if="esProfesorOAdmin && !canalesVisibles.length" class="mis-canales-nota" data-testid="sin-canales-tomados">
+      Todavía no hay canales tomados. Usa «Agregar canal» para empezar.
+    </p>
+    <div v-else class="canales-slots-grid">
       <div 
-        v-for="ch in canalesState.canales" 
+        v-for="ch in canalesVisibles" 
         :key="ch.canal"
         class="canal-slot"
         :class="{
@@ -104,14 +148,15 @@
           </div>
           <div v-else class="free-info">
             <span class="free-text">Sensor listo para medir</span>
-            <small>Haz clic abajo para tomar este canal</small>
+            <small v-if="esProfesorOAdmin">Se asigna solo con «Agregar canal»</small>
+            <small v-else>Haz clic abajo para tomar este canal</small>
           </div>
         </div>
 
         <div class="slot-actions">
           <!-- Si está libre, el estudiante puede elegirlo (RF111) -->
           <button 
-            v-if="!ch.usuario_id"
+            v-if="!ch.usuario_id && !esProfesorOAdmin"
             class="btn btn-primary btn-sm btn-block"
             @click="vincular(ch.canal)"
             :disabled="canalesState.cargando || Boolean(miCanalAsignado)"
@@ -124,7 +169,7 @@
           <button 
             v-else-if="ch.usuario_id === usuarioActual.id"
             class="btn btn-danger btn-sm btn-block"
-            @click="desvincular"
+            @click="desvincular(ch.canal)"
             :disabled="canalesState.cargando"
           >
             Liberar Canal {{ ch.canal }}
@@ -142,7 +187,7 @@
             </button>
           </div>
 
-          <span v-else class="slot-locked-text">Ocupado en esta ronda</span>
+          <span v-else-if="ch.usuario_id" class="slot-locked-text">Ocupado en esta ronda</span>
         </div>
       </div>
     </div>
@@ -164,12 +209,6 @@
           🔄 Abrir Siguiente Ronda de 5 Estudiantes
         </button>
 
-        <button 
-          class="btn btn-secondary btn-sm"
-          @click="alternarRolDemo"
-        >
-          Alternar Rol Demo (Actual: {{ usuarioActual.rol }})
-        </button>
       </div>
     </div>
 
@@ -186,6 +225,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { consentimientoEstado } from '../services/consentimientoService'
+import AgregarCanalModal from './AgregarCanalModal.vue'
 import {
   canalesState,
   usuarioActual,
@@ -195,7 +235,10 @@ import {
   vincularMiCuentaACanal,
   desvincularMiCuenta,
   asignarCanalProfesor,
-  abrirSiguienteRonda
+  abrirSiguienteRonda,
+  estadoAgregarCanal,
+  misCanales,
+  MAX_CANALES_DOCENTE
 } from '../services/canalesService'
 
 const emit = defineEmits(['canal-seleccionado', 'solicitar-consentimiento'])
@@ -205,6 +248,11 @@ const mensajeExito = ref('')
 const esProfesorOAdmin = computed(() => {
   return usuarioActual.rol === 'profesor' || usuarioActual.rol === 'admin'
 })
+
+// Profesor y administrador solo ven los canales ya tomados; los libres no se muestran (se asignan con «Agregar canal»)
+const canalesVisibles = computed(() =>
+  esProfesorOAdmin.value ? canalesState.canales.filter(c => c.usuario_id) : canalesState.canales
+)
 
 function formatearHora(isoString) {
   if (!isoString) return ''
@@ -231,11 +279,30 @@ async function vincular(canalNum) {
   }
 }
 
-async function desvincular() {
+const modalAgregarVisible = ref(false)
+const canalPendiente = ref(null)
+
+const ETIQUETAS_REQUISITO = { ficha: 'la ficha del paciente', politica: 'aceptar los términos y la privacidad', consentimiento: 'el consentimiento informado' }
+function etiquetaRequisito(r) { return ETIQUETAS_REQUISITO[r] || r }
+
+function abrirAgregarCanal(canalExistente) {
+  errorMensaje.value = ''
+  mensajeExito.value = ''
+  canalPendiente.value = canalExistente
+  modalAgregarVisible.value = true
+}
+
+function alAgregarCanal(canal) {
+  mensajeExito.value = `Se te asignó automáticamente el Canal ${canal}. Ya puedes medir en él.`
+  emit('canal-seleccionado', canal)
+  setTimeout(() => { mensajeExito.value = '' }, 4000)
+}
+
+async function desvincular(canalEspecifico = null) {
   errorMensaje.value = ''
   mensajeExito.value = ''
   try {
-    const res = await desvincularMiCuenta()
+    const res = await desvincularMiCuenta(typeof canalEspecifico === 'number' ? canalEspecifico : null)
     mensajeExito.value = `Canal ${res.canalLiberado || ''} liberado correctamente.`
     setTimeout(() => { mensajeExito.value = '' }, 3000)
   } catch (err) {
@@ -267,18 +334,6 @@ async function avanzarRonda() {
     setTimeout(() => { mensajeExito.value = '' }, 5000)
   } catch (err) {
     errorMensaje.value = err.message
-  }
-}
-
-function alternarRolDemo() {
-  if (usuarioActual.rol === 'estudiante') {
-    usuarioActual.rol = 'profesor'
-    usuarioActual.nombre = 'Prof. Carlos Méndez'
-    usuarioActual.email = 'cmendez@unach.cl'
-  } else {
-    usuarioActual.rol = 'estudiante'
-    usuarioActual.nombre = 'Adán Ramos'
-    usuarioActual.email = 'adanramos@alu.unach.cl'
   }
 }
 
@@ -326,6 +381,47 @@ onMounted(() => {
   color: var(--color-muted);
   max-width: 650px;
 }
+
+.mis-canales {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.mis-canales-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mis-canales-nota {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  margin: 0.5rem 0 0;
+}
+
+.mis-canales-lista {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.mis-canales-lista li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.mis-canales-lista li.pendiente { color: var(--color-danger, #b91c1c); }
+.mis-canales-acciones { display: inline-flex; gap: 0.4rem; }
 
 .session-badge {
   display: flex;

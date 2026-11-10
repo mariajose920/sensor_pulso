@@ -14,3 +14,6 @@ supabase/seed.sql
 
 # Capturas de las pruebas responsivas (RNF01)
 pruebas-responsivas/
+
+# Capturas de la señal cruda del sensor (datos personales de una medición): no se suben
+captura_cruda_*.csv

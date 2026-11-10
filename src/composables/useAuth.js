@@ -123,8 +123,12 @@ export function useAuth() {
     return profile.value?.nombre?.trim() || extraerNombreGoogle(user.value) || 'Usuario'
   })
 
-  const currentUserRole = computed(() => profile.value?.rol || user.value?.user_metadata?.rol || ROLES.USUARIO)
-  const isAdmin = computed(() => !!profile.value?.es_admin || user.value?.user_metadata?.rol === 'admin')
+  // user_metadata lo escribe la propia persona al registrarse: sirve de respaldo para «profesor/usuario», nunca para «admin»
+  const currentUserRole = computed(() => {
+    const rol = profile.value?.rol || user.value?.user_metadata?.rol || ROLES.USUARIO
+    return rol === 'admin' && !profile.value?.es_admin ? ROLES.USUARIO : rol
+  })
+  const isAdmin = computed(() => !!profile.value?.es_admin)
   const isProfesor = computed(() => currentUserRole.value === ROLES.PROFESOR)
   const isEstudiante = computed(() => currentUserRole.value === ROLES.USUARIO)
 

@@ -4,10 +4,12 @@
     <div class="card-head-bar">
       <div>
         <h3 class="card-title">
-          Comparación contra Mediciones Propias y Galería Pública
+          {{ isAuthenticated ? 'Comparación contra Mediciones Propias y Galería Pública' : 'Comparación contra la Galería Pública' }}
         </h3>
         <p class="card-desc">
-          Contraste de tu medición actual contra registros anteriores de tu historial o casos de referencia validados en la comunidad docente.
+          {{ isAuthenticated
+            ? 'Contraste de tu medición actual contra registros anteriores de tu historial o casos de referencia validados en la comunidad docente.'
+            : 'Contraste de la medición actual contra casos de referencia validados en la comunidad docente.' }}
         </p>
       </div>
 
@@ -34,10 +36,13 @@
     <!-- 1. Barra de Selección de Origen (Propias vs Públicas) y Filtros -->
     <div class="source-filter-bar">
       <div class="origin-toggle">
+        <!-- Las mediciones propias solo existen con sesión: sin ella no hay forma de saber de quién serían -->
         <button
+          v-if="isAuthenticated"
           type="button"
           class="btn-origin"
           :class="{ active: origenSeleccionado === 'propias' }"
+          data-testid="origen-propias"
           @click="cambiarOrigen('propias')"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 5px;">
@@ -62,6 +67,11 @@
           Galería Pública Docente ({{ listaPublicas.length }})
         </button>
       </div>
+
+      <p v-if="!isAuthenticated" class="nota-sin-sesion" data-testid="nota-sin-sesion">
+        Sin sesión no hay mediciones propias: compara con los casos de referencia de la galería docente.
+        <router-link to="/login">Inicia sesión</router-link> para comparar con tus mediciones guardadas.
+      </p>
 
       <!-- Filtro por Actividad y Botón Refrescar -->
       <div class="filter-controls">
@@ -164,7 +174,13 @@
         </div>
       </div>
 
-      <div v-if="medicionesFiltradas.length === 0" class="empty-state-box">
+      <div v-if="medicionesFiltradas.length === 0 && origenSeleccionado === 'propias' && listaPropias.length === 0" class="empty-state-box" data-testid="sin-mediciones-propias">
+        <p>Aún no tienes mediciones guardadas. Cuando midas con tu sensor y guardes, aparecerán aquí; mientras tanto puedes comparar con la galería docente.</p>
+        <button type="button" class="btn btn-sm btn-secondary" @click="cambiarOrigen('publicas')">
+          Ver galería docente
+        </button>
+      </div>
+      <div v-else-if="medicionesFiltradas.length === 0" class="empty-state-box">
         <p>No se encontraron mediciones para el filtro seleccionado.</p>
         <button type="button" class="btn btn-sm btn-secondary" @click="filtroActividad = 'todas'">
           Ver todas las mediciones
@@ -402,7 +418,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useAuth } from '../composables/useAuth'
 import {
   obtenerMedicionesPropias,
   obtenerMedicionesPublicas,
@@ -430,7 +447,9 @@ const props = defineProps({
 })
 
 // Estado de visualización y origen
-const origenSeleccionado = ref('propias') // 'propias' | 'publicas'
+// Sin sesión no se sabe de quién serían las mediciones: solo se comparan los casos de la galería docente
+const { isAuthenticated } = useAuth()
+const origenSeleccionado = ref(isAuthenticated.value ? 'propias' : 'publicas') // 'propias' | 'publicas'
 const filtroActividad = ref('todas') // 'todas' | 'reposo' | 'caminata' | 'ejercicio'
 const modoVisualizacion = ref('superpuesto') // 'superpuesto' | 'carriles'
 const cargando = ref(false)
@@ -447,6 +466,13 @@ onMounted(async () => {
   await recargarListas()
 })
 
+// Si se entra o se sale de la sesión con la pantalla abierta, se rehacen las listas y el origen
+watch(isAuthenticated, async (conSesion) => {
+  origenSeleccionado.value = conSesion ? 'propias' : 'publicas'
+  medicionSeleccionadaId.value = ''
+  await recargarListas()
+})
+
 async function recargarListas() {
   cargando.value = true
   try {
@@ -454,13 +480,13 @@ async function recargarListas() {
       obtenerMedicionesPropias(),
       obtenerMedicionesPublicas()
     ])
-    listaPropias.value = propias
+    listaPropias.value = isAuthenticated.value ? propias : []
     listaPublicas.value = publicas
 
     // Seleccionar por defecto la primera disponible
     if (!medicionSeleccionadaId.value) {
-      if (propias.length > 0) {
-        medicionSeleccionadaId.value = propias[0].id
+      if (listaPropias.value.length > 0) {
+        medicionSeleccionadaId.value = listaPropias.value[0].id
       } else if (publicas.length > 0) {
         medicionSeleccionadaId.value = publicas[0].id
       }
@@ -547,6 +573,15 @@ const pathSvgContraste = computed(() => {
 </script>
 
 <style scoped>
+.nota-sin-sesion {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
 .comparador-mediciones-card {
   margin-top: 1rem;
 }
