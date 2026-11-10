@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs'
 import {
   COLORES_CANAL, colorDeCanal, canalesGraficables, ofreceElegirVista, vistaEfectiva, puntosPolilinea,
-  acumularMuestras, posicionesPicos, textoMetrica, resumenMetricas, ETIQUETA_RUIDO, COLOR_RUIDO, COLOR_RITMO, SEGUNDOS_VENTANA_GRAFICA
+  acumularMuestras, posicionesPicos, trazarSerie, geometriaSerie, textoMetrica, resumenMetricas, ETIQUETA_RUIDO, COLOR_RUIDO, COLOR_RITMO, SEGUNDOS_VENTANA_GRAFICA
 } from '../src/utils/graficasCanales.js'
 
 let ok = 0, mal = 0
@@ -71,8 +71,28 @@ prueba('insignias de ruido y ritmo con colores definidos', ['buena', 'regular', 
 prueba('ventana de gráfica de varios segundos', SEGUNDOS_VENTANA_GRAFICA >= 3)
 const comp = readFileSync(new URL('../src/components/GraficasCanalesPropios.vue', import.meta.url), 'utf8')
 prueba('el componente acepta frecuenciaHz y calcula métricas', comp.includes('frecuenciaHz') && comp.includes('calcularMetricasCanal'))
-prueba('picos como marcadores y gráficos con aria-label', comp.includes('class="pico"') && comp.includes('role="img"') && comp.includes(':aria-label'))
+prueba('picos como PUNTO (no triángulo) y gráficos con aria-label', comp.includes('class="punto-pico"') && !comp.includes('class="pico"') && !/border-top: 9px solid/.test(comp) && comp.includes('role="img"') && comp.includes(':aria-label'))
+prueba('el punto es un círculo HTML centrado con translate(-50%, -50%)', /\.punto-pico[^}]*border-radius: 50%[^}]*translate\(-50%, -50%\)/.test(comp) && /\.marcas \{[^}]*inset: 0/.test(comp))
+prueba('el punto usa la geometría compartida (trazarSerie) y los picos de detectarPicosParaGrafica', comp.includes('trazarSerie(') && comp.includes('picosDeSerie(') && !comp.includes('posicionesPicos') && /detectarPicosParaGrafica/.test(readFileSync(new URL('../src/utils/graficasCanales.js', import.meta.url), 'utf8')))
+prueba('la leyenda de texto de picos acompaña al color', comp.includes('leyenda-picos') && comp.includes('textoPicos'))
 prueba('curvas con vector-effect non-scaling-stroke', comp.includes('vector-effect="non-scaling-stroke"'))
+
+console.log('Geometría compartida: el punto cae exactamente en el vértice de la polilínea')
+{
+  const sen = Array.from({ length: 250 }, (_, i) => 5000 + 40 * Math.sin(i / 90) + 300 * Math.max(0, Math.sin((2 * Math.PI * 1.2 * i) / 50)) ** 3)
+  const pk = [{ indice: 3 }, { indice: 100 }, { indice: 249 }, { indice: 9999 }, { indice: -1 }, { indice: 1.5 }]
+  const t = trazarSerie(sen, 600, 110, { picos: pk })
+  const verts = t.polilinea.split(' ').map(q => q.split(',').map(Number))
+  prueba('un vértice por muestra y la polilínea sale de geometriaSerie', t.puntos.length === 250 && verts.length === 250 && verts.every((v, i) => v[0] === t.puntos[i].x && v[1] === t.puntos[i].y))
+  prueba('se descartan índices inválidos', t.marcas.length === 3)
+  prueba('cada marca == vértice de la polilínea en su índice', t.marcas.every(m => verts[m.indice][0] === m.x && verts[m.indice][1] === m.y))
+  prueba('xPct/yPct son x/ancho y y/alto en %', t.marcas.every(m => Math.abs(m.xPct - (m.x / 600) * 100) < 1e-9 && Math.abs(m.yPct - (m.y / 110) * 100) < 1e-9))
+  const p2 = puntosPolilinea(sen, 600, 110, { margen: 6 })
+  const g6 = geometriaSerie(sen, 600, 110, { margen: 6, decimales: 1 })
+  prueba('puntosPolilinea y geometriaSerie coinciden', p2 === g6.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' '))
+  const pp = posicionesPicos(sen, [{ indice: 100 }], { alto: 110, margen: 6 })
+  prueba('posicionesPicos (en %) no tiene desfase con la polilínea', Math.abs(pp[0].x - (geometriaSerie(sen, 100, 110, { margen: 6, decimales: 6 })[100].x)) < 1e-9 && Math.abs(pp[0].y - (geometriaSerie(sen, 600, 110, { margen: 6, decimales: 6 })[100].y / 110) * 100) < 1e-6)
+}
 
 console.log('Sensor real, sin valores inventados (MedicionView)')
 const vista = readFileSync(new URL('../src/views/MedicionView.vue', import.meta.url), 'utf8')

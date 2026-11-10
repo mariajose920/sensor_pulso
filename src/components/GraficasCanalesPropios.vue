@@ -27,8 +27,8 @@
     </div>
 
     <p class="nota-picos">
-      <span class="ejemplo-pico" aria-hidden="true"></span>
-      Los triángulos marcan los picos sistólicos detectados. Las métricas se calculan con los últimos {{ SEGUNDOS_VENTANA_GRAFICA }} s de señal.
+      <span class="ejemplo-punto" aria-hidden="true"></span>
+      Los puntos sobre la curva marcan los picos sistólicos. Las métricas se calculan con los últimos {{ SEGUNDOS_VENTANA_GRAFICA }} s de señal.
     </p>
 
     <!-- Juntas: una sola gráfica, una curva de color por canal -->
@@ -44,7 +44,7 @@
           <polyline
             v-for="d in datos"
             :key="d.canal"
-            :points="d.puntosJuntas"
+            :points="d.trazado.polilinea"
             fill="none"
             :stroke="d.color"
             stroke-width="2"
@@ -52,15 +52,20 @@
             vector-effect="non-scaling-stroke"
           />
         </svg>
-        <template v-for="d in datos" :key="'p' + d.canal">
-          <span
-            v-for="p in d.marcasJuntas"
-            :key="d.canal + '-' + p.indice"
-            class="pico"
-            :style="{ left: p.x + '%', top: p.y + '%', '--c': d.color }"
-            aria-hidden="true"
-          ></span>
-        </template>
+        <!-- Puntos de los picos: HTML centrado (translate -50%) en el vértice exacto de la polilínea -->
+        <div class="marcas" aria-hidden="true">
+          <template v-for="d in datos" :key="'p' + d.canal">
+            <template v-if="d.ajustes.picos">
+              <span
+                v-for="p in d.trazado.marcas"
+                :key="d.canal + '-' + p.indice"
+                class="punto-pico"
+                data-testid="punto-pico"
+                :style="{ left: p.xPct + '%', top: p.yPct + '%', '--c': d.color }"
+              ></span>
+            </template>
+          </template>
+        </div>
       </div>
 
       <!-- Leyenda con color + nombre + métricas de cada canal (no depende solo del color) -->
@@ -74,12 +79,19 @@
               <button v-if="!d.terminada" type="button" class="btn-terminar" data-testid="terminar-canal" :aria-label="`Terminar la medición del canal ${d.canal}`" @click="terminarCanal(d.canal)">Terminar</button>
               <template v-else>
                 <button v-if="!d.estado" type="button" class="btn-terminar" data-testid="decidir-guardar" @click="abrirDialogo(d.canal)">¿Guardar?</button>
+                <button type="button" class="btn-terminar" data-testid="reanudar-terminada" :aria-label="`Reanudar la medición del canal ${d.canal}`" @click="reanudarTerminada(d.canal)">Reanudar</button>
                 <button type="button" class="btn-quitar" data-testid="medir-de-nuevo" :aria-label="`Medir de nuevo el canal ${d.canal}`" @click="medirDeNuevo(d.canal)">Medir de nuevo</button>
               </template>
               <button type="button" class="btn-quitar" :aria-label="`Quitar el canal ${d.canal}`" @click="emit('quitar', d.canal)">Quitar</button>
             </span>
           </div>
           <p v-if="d.terminada" class="estado-terminada" role="status">{{ d.textoEstado }}</p>
+          <BarraHerramientasCanal
+            :canal="d.canal" :color="d.color" :ajustes="d.ajustes" :pausada="d.pausada" :terminada="d.terminada"
+            @pausar="alternarPausa(d.canal)" @capturar="capturar(d.canal)" @exportar="exportarCsv(d.canal)" @alternar="(k) => alternarFiltro(d.canal, k)"
+          />
+          <p class="leyenda-picos" :data-testid="'leyenda-picos-' + d.canal">{{ d.textoPicos }}</p>
+          <GraficoSpo2Canal v-if="d.ajustes.spo2" :canal="d.canal" :spo2="d.spo2Hist" />
           <MetricasCanalPanel :metricas="d.metricas" compacto />
         </li>
       </ul>
@@ -96,12 +108,17 @@
             <button v-if="!d.terminada" type="button" class="btn-terminar" data-testid="terminar-canal" :aria-label="`Terminar la medición del canal ${d.canal}`" @click="terminarCanal(d.canal)">Terminar</button>
             <template v-else>
               <button v-if="!d.estado" type="button" class="btn-terminar" data-testid="decidir-guardar" @click="abrirDialogo(d.canal)">¿Guardar?</button>
+              <button type="button" class="btn-terminar" data-testid="reanudar-terminada" :aria-label="`Reanudar la medición del canal ${d.canal}`" @click="reanudarTerminada(d.canal)">Reanudar</button>
               <button type="button" class="btn-quitar" data-testid="medir-de-nuevo" :aria-label="`Medir de nuevo el canal ${d.canal}`" @click="medirDeNuevo(d.canal)">Medir de nuevo</button>
             </template>
             <button type="button" class="btn-quitar" :aria-label="`Quitar el canal ${d.canal}`" @click="emit('quitar', d.canal)">Quitar</button>
           </span>
         </figcaption>
         <p v-if="d.terminada" class="estado-terminada" role="status">{{ d.textoEstado }}</p>
+        <BarraHerramientasCanal
+          :canal="d.canal" :color="d.color" :ajustes="d.ajustes" :pausada="d.pausada" :terminada="d.terminada"
+          @pausar="alternarPausa(d.canal)" @capturar="capturar(d.canal)" @exportar="exportarCsv(d.canal)" @alternar="(k) => alternarFiltro(d.canal, k)"
+        />
         <div class="lienzo">
           <svg
             class="grafica"
@@ -111,7 +128,7 @@
             :aria-label="`Señal del canal ${d.canal}${d.nombre ? ' de ' + d.nombre : ''}: ${d.resumen}`"
           >
             <polyline
-              :points="d.puntosSeparada"
+              :points="d.trazado.polilinea"
               fill="none"
               :stroke="d.color"
               stroke-width="2"
@@ -119,14 +136,18 @@
               vector-effect="non-scaling-stroke"
             />
           </svg>
-          <span
-            v-for="p in d.marcasSeparada"
-            :key="p.indice"
-            class="pico"
-            :style="{ left: p.x + '%', top: p.y + '%', '--c': d.color }"
-            aria-hidden="true"
-          ></span>
+          <div v-if="d.ajustes.picos" class="marcas" aria-hidden="true">
+            <span
+              v-for="p in d.trazado.marcas"
+              :key="p.indice"
+              class="punto-pico"
+              data-testid="punto-pico"
+              :style="{ left: p.xPct + '%', top: p.yPct + '%', '--c': d.color }"
+            ></span>
+          </div>
         </div>
+        <p class="leyenda-picos" :data-testid="'leyenda-picos-' + d.canal">{{ d.textoPicos }}</p>
+        <GraficoSpo2Canal v-if="d.ajustes.spo2" :canal="d.canal" :spo2="d.spo2Hist" />
         <MetricasCanalPanel :metricas="d.metricas" />
       </figure>
     </div>
@@ -151,10 +172,14 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import MetricasCanalPanel from './MetricasCanalPanel.vue'
 import TerminarMedicionModal from './TerminarMedicionModal.vue'
+import BarraHerramientasCanal from './BarraHerramientasCanal.vue'
+import GraficoSpo2Canal from './GraficoSpo2Canal.vue'
 import {
-  puntosPolilinea, ofreceElegirVista, vistaEfectiva, acumularMuestras, posicionesPicos,
-  resumenMetricas, SEGUNDOS_VENTANA_GRAFICA
+  ofreceElegirVista, vistaEfectiva, acumularMuestras, acumularSpo2, contarMuestrasValidas,
+  resumenMetricas, SEGUNDOS_VENTANA_GRAFICA, serieMostrada, picosDeSerie, trazarSerie,
+  debeAcumular, reanudarVentana, ajustesDe, alternarAjuste, leerAjustes, guardarAjustes
 } from '../utils/graficasCanales.js'
+import { descargarCsvCanal, descargarPngCanal } from '../utils/exportarCanal.js'
 import { calcularMetricasCanal, PARAMETROS_METRICAS } from '../utils/metricasCanal.js'
 import { armarRegistroTerminado, estadoParaTarjeta } from '../utils/terminarMedicion.js'
 
@@ -188,21 +213,27 @@ const maxMuestras = computed(() => Math.round(SEGUNDOS_VENTANA_GRAFICA * hz.valu
 
 // Cada paquete del sensor trae ~0,5 s: se acumulan por canal para tener una ventana útil.
 // Solo se agrega cuando llega un arreglo nuevo (paquete nuevo), no en cada render.
-const ventanas = shallowRef(new Map()) // canal -> { ir, rojo, ultimoIr, inicio }
+const ventanas = shallowRef(new Map()) // canal -> { ir, rojo, spo2, ultimoIr, inicio }
 // Canales con la medición terminada: dejan de acumular y su gráfica queda fija.
 // canal -> { fin, bpm, spo2, calidad, estado, mensaje, idCliente, registro }
 const terminadas = ref({})
+// Canales en pausa (en vivo): la gráfica se congela y no se acumulan muestras
+const pausadas = ref({})
+// Filtros por canal (picos / SpO₂ / filtro DSP): se recuerdan durante la sesión
+const ajustes = ref(leerAjustes())
 watch(
   () => props.graficables,
   (lista) => {
     const previo = ventanas.value
     const nuevo = new Map()
     for (const g of lista) {
-      const v = previo.get(g.canal) || { ir: [], rojo: [], ultimoIr: null, inicio: null }
+      const v = previo.get(g.canal) || { ir: [], rojo: [], spo2: [], ultimoIr: null, inicio: null }
       if (terminadas.value[g.canal]) { nuevo.set(g.canal, v); continue } // terminada: no se acumula más
+      if (!debeAcumular({ pausada: Boolean(pausadas.value[g.canal]) })) { nuevo.set(g.canal, v); continue } // en pausa
       const irNuevo = Array.isArray(g.ir) ? g.ir : g.muestras
       if (Array.isArray(irNuevo) && irNuevo !== v.ultimoIr) {
         v.ir = acumularMuestras(v.ir, irNuevo, maxMuestras.value)
+        v.spo2 = acumularSpo2(v.spo2, contarMuestrasValidas(irNuevo), g.spo2, maxMuestras.value)
         v.rojo = acumularMuestras(v.rojo, g.rojo, maxMuestras.value)
         v.ultimoIr = irNuevo
         if (v.inicio === null && v.ir.length) v.inicio = Date.now()
@@ -225,16 +256,30 @@ const datos = computed(() =>
       bpmDispositivo: t ? t.bpm : g.bpm, spo2Dispositivo: t ? t.spo2 : g.spo2
     })
     const r = resumenMetricas(metricas)
+    // La serie que se dibuja (filtrada o cruda) es la MISMA con la que se detectan y se ubican los picos
+    const aj = ajustesDe(ajustes.value, g.canal)
+    const serie = serieMostrada(ir, hz.value, aj.dsp)
+    const picos = picosDeSerie(serie, hz.value)
+    const trazado = trazarSerie(serie, ANCHO, vista.value === 'juntas' ? ALTO : ALTO_SEPARADA, { picos })
+    const textoPicos = aj.picos
+      ? (picos.length ? `${picos.length} ${picos.length === 1 ? 'pico marcado' : 'picos marcados'} con un punto sobre la curva.` : 'Aún sin picos para marcar.')
+      : 'Picos ocultos.'
     return {
       canal: g.canal,
       color: g.color,
       nombre: g.nombre,
       metricas,
-      puntosJuntas: puntosPolilinea(ir, ANCHO, ALTO),
-      puntosSeparada: puntosPolilinea(ir, ANCHO, ALTO_SEPARADA),
-      marcasJuntas: posicionesPicos(ir, metricas.picos, { alto: ALTO }),
-      marcasSeparada: posicionesPicos(ir, metricas.picos, { alto: ALTO_SEPARADA }),
-      resumen: `frecuencia ${r.bpm}, variabilidad ${r.hrv}, ruido ${r.ruido}, ritmo ${r.ritmo}, SpO₂ ${r.spo2}, ${r.picos} picos sistólicos`,
+      resumenTxt: r,
+      ajustes: aj,
+      pausada: Boolean(pausadas.value[g.canal]),
+      ir,
+      rojo: v?.rojo || [],
+      spo2Hist: v?.spo2 || [],
+      serie,
+      picos,
+      trazado,
+      textoPicos,
+      resumen: `frecuencia ${r.bpm}, variabilidad ${r.hrv}, ruido ${r.ruido}, ritmo ${r.ritmo}, SpO₂ ${r.spo2}, ${picos.length} picos sistólicos marcados`,
       muestras: ir.length,
       terminada: Boolean(t),
       estado: t?.estado || null,
@@ -321,8 +366,79 @@ function medirDeNuevo(canal) {
   terminadas.value = resto
   const nuevo = new Map(ventanas.value)
   // ultimoIr = paquete actual: así no se vuelve a sumar lo que ya estaba en pantalla
-  nuevo.set(canal, { ir: [], rojo: [], ultimoIr: Array.isArray(g?.ir) ? g.ir : (g?.muestras ?? null), inicio: null })
+  nuevo.set(canal, { ir: [], rojo: [], spo2: [], ultimoIr: Array.isArray(g?.ir) ? g.ir : (g?.muestras ?? null), inicio: null })
   ventanas.value = nuevo
+  quitarPausa(canal)
+}
+
+function paqueteActual(canal) {
+  const g = props.graficables.find(x => x.canal === canal)
+  return Array.isArray(g?.ir) ? g.ir : (g?.muestras ?? null)
+}
+
+// «Reanudar» tras «Terminar»: continúa en la MISMA ventana (no se descarta lo acumulado);
+// lo que llegó mientras estaba terminada no se suma. Quita el estado terminado y la marca.
+function reanudarTerminada(canal) {
+  if (!terminadas.value[canal]) return
+  const resto = { ...terminadas.value }
+  delete resto[canal]
+  terminadas.value = resto
+  if (dialogoCanal.value === canal) dialogoCanal.value = null
+  quitarPausa(canal)
+  const v = ventanas.value.get(canal)
+  if (v) {
+    const nuevo = new Map(ventanas.value)
+    nuevo.set(canal, reanudarVentana(v, paqueteActual(canal)))
+    ventanas.value = nuevo
+  }
+}
+
+// ───────────────────────── Pausar / reanudar en vivo ─────────────────────────
+function quitarPausa(canal) {
+  if (!pausadas.value[canal]) return
+  const resto = { ...pausadas.value }
+  delete resto[canal]
+  pausadas.value = resto
+}
+
+function alternarPausa(canal) {
+  if (terminadas.value[canal]) return
+  if (pausadas.value[canal]) {
+    quitarPausa(canal)
+    const v = ventanas.value.get(canal)
+    if (v) {
+      const nuevo = new Map(ventanas.value)
+      nuevo.set(canal, reanudarVentana(v, paqueteActual(canal))) // lo recibido durante la pausa no se muestra
+      ventanas.value = nuevo
+    }
+  } else {
+    pausadas.value = { ...pausadas.value, [canal]: true }
+  }
+}
+
+// ───────────────────────── Filtros, captura y CSV ─────────────────────────
+function alternarFiltro(canal, clave) {
+  ajustes.value = alternarAjuste(ajustes.value, canal, clave)
+  guardarAjustes(ajustes.value)
+}
+
+function capturar(canal) {
+  const d = datos.value.find(x => x.canal === canal)
+  if (!d) return
+  descargarPngCanal({
+    canal, nombre: d.nombre, color: d.color, serie: d.serie, picos: d.picos,
+    mostrarPicos: d.ajustes.picos, spo2: d.spo2Hist, mostrarSpo2: d.ajustes.spo2,
+    resumen: d.resumenTxt, dsp: d.ajustes.dsp
+  })
+}
+
+function exportarCsv(canal) {
+  const d = datos.value.find(x => x.canal === canal)
+  if (!d) return
+  descargarCsvCanal({
+    canal, paciente: d.nombre, frecuenciaHz: hz.value, senalMostrada: d.serie, ir: d.ir, rojo: d.rojo,
+    picos: d.picos, bpm: d.metricas.bpm, spo2: d.spo2Hist, dsp: d.ajustes.dsp
+  })
 }
 
 const sinSenal = computed(() => datos.value.every(d => d.muestras < 2))
@@ -338,16 +454,19 @@ const calculando = computed(() => datos.value.some(d => !d.metricas.muestrasVali
 .vista-btn.activo { background: #0369a1; color: #fff; }
 .vista-btn:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 .nota-picos { display: flex; align-items: center; gap: 0.4rem; margin: 0.6rem 0 0; font-size: 0.75rem; color: #94a3b8; }
-.ejemplo-pico { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid #e2e8f0; flex: none; }
+.ejemplo-punto { width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: #94a3b8; border: 1.5px solid #fff; flex: none; }
 .muestra-color { display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%; margin-right: 0.3rem; vertical-align: middle; flex: none; }
 
-.lienzo { position: relative; margin-top: 0.4rem; }
-.grafica { width: 100%; display: block; background: #0b101a; border: 1px solid #1e293b; border-radius: 0.4rem; }
+.lienzo { position: relative; margin-top: 0.4rem; background: #0b101a; border: 1px solid #1e293b; border-radius: 0.4rem; }
+.grafica { width: 100%; display: block; }
 .grafica.juntas { height: 220px; }
 .separada .grafica { height: 110px; }
-/* Marcador de pico sistólico: triángulo hacia abajo, justo sobre la cresta, del color del canal */
-.pico { position: absolute; width: 0; height: 0; transform: translate(-50%, -115%); pointer-events: none;
-  border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 9px solid var(--c); filter: drop-shadow(0 0 1px #000); }
+/* Capa de marcas: ocupa EXACTAMENTE el área del SVG (misma caja), así left/top en % coinciden con el viewBox */
+.marcas { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 0.4rem; }
+/* Punto de pico: círculo perfecto centrado en el vértice de la polilínea (cresta), relleno del color del canal y borde blanco fino */
+.punto-pico { position: absolute; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; transform: translate(-50%, -50%);
+  background: var(--c); border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45); }
+.leyenda-picos { margin: 0.3rem 0 0; font-size: 0.72rem; color: #94a3b8; }
 
 .separadas { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; margin-top: 0.75rem; }
 .separada { margin: 0; padding: 0.6rem; border: 1px solid #1e293b; border-left: 4px solid var(--c); border-radius: 0.5rem; background: #0b101a; min-width: 0; }

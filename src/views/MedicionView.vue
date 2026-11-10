@@ -459,18 +459,9 @@
         />
       </div>
 
-      <!-- Detalle del canal seleccionado: osciloscopio y valores (plegado para el docente) -->
+      <!-- Valores del canal seleccionado (plegado para el docente). La única gráfica es la del canal, más arriba. -->
       <component :is="esDocenteVista ? 'details' : 'div'" v-if="medicionActiva" class="detalle-canal">
-      <summary v-if="esDocenteVista">Detalle del canal seleccionado: osciloscopio y valores</summary>
-      <OsciloscopioCanvas
-        :canal="canalSeleccionado"
-        :activo="esp32State.conectado"
-        :muestrasIr="senalBuffer.ir"
-        :muestrasRojo="senalBuffer.rojo"
-        :frecuenciaHz="esp32State.frecuenciaHz"
-        @repetir="repetirMedicionCanal"
-      />
-
+      <summary v-if="esDocenteVista">Valores del canal seleccionado</summary>
       <!-- Monitores de Biomarcadores Fisiológicos en Tiempo Real (RF07: BPM, RF114: SpO₂) -->
       <div class="biomarcadores-grid">
         <!-- RF07: Monitor y Despliegue del Valor de Frecuencia Cardíaca (BPM) -->
@@ -847,7 +838,6 @@ import FuenteMedicionSelector from '../components/FuenteMedicionSelector.vue'
 import CanalesPacientesPanel from '../components/CanalesPacientesPanel.vue'
 import ValorBpmCard from '../components/ValorBpmCard.vue'
 import ValorSpo2Card from '../components/ValorSpo2Card.vue'
-import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
 import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GraficasCanalesPropios from '../components/GraficasCanalesPropios.vue'
@@ -874,7 +864,6 @@ import { clasificarRitmo } from '../services/ritmoService'
 import { descargarInformeClinicoPdf } from '../services/informePdfService'
 import {
   esp32State,
-  senalBuffer,
   iniciarSondeoWiFi,
   detenerSondeoWiFi,
   fuenteElegida,
@@ -883,8 +872,7 @@ import {
   emitirPaquetePruebaWiFi,
   toggleSimuladorWiFi,
   simuladorActivo,
-  setCanalOsciloscopio,
-  repetirMedicionCanal
+  setCanalOsciloscopio
 } from '../services/esp32Service'
 import {
   canalesState,
