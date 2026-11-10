@@ -68,13 +68,13 @@ console.log('Ritmo')
   prueba('el ritmo trae nombre y explicación', typeof irr.ritmo?.nombre === 'string' && irr.ritmo.explicacion.length > 10)
 }
 
-console.log('BPM del dispositivo y pulso')
+console.log('BPM de la placa (solo informativo) y pulso de la app')
 {
   const ir = ppg({ tiempos: regular(72, 12), hz: 50, seg: 12 })
   const igual = calcularMetricasCanal({ ir, frecuenciaHz: 50, bpmDispositivo: 73 })
-  prueba('dispositivo ≈ picos: no se distinguen (pulsoDifiere=false)', igual.bpm === 73 && igual.pulso !== null && !igual.pulsoDifiere)
+  prueba('placa ≈ picos: bpm es el de la app, bpmPlaca el de la placa, pulsoDifiere=false', igual.bpmPlaca === 73 && Math.abs(igual.bpm - 72) <= 1 && igual.pulso === igual.bpm && !igual.pulsoDifiere)
   const dif = calcularMetricasCanal({ ir, frecuenciaHz: 50, bpmDispositivo: 95 })
-  prueba('dispositivo muy distinto de los picos: pulsoDifiere=true', dif.bpm === 95 && dif.pulsoDifiere && Math.abs(dif.pulso - 72) <= 3)
+  prueba('placa muy distinta de los picos: bpm NO es el de la placa, pulsoDifiere=true', dif.bpmPlaca === 95 && dif.bpm !== 95 && dif.pulsoDifiere && Math.abs(dif.bpm - 72) <= 3)
   const inval = calcularMetricasCanal({ ir, frecuenciaHz: 50, bpmDispositivo: 0, spo2Dispositivo: 0 })
   prueba('BPM/SpO₂ de 0 del dispositivo no se toman como dato', inval.spo2 === null && Math.abs(inval.bpm - 72) <= 3)
   prueba('SpO₂ válida del dispositivo se conserva', calcularMetricasCanal({ ir, frecuenciaHz: 50, spo2Dispositivo: 97.4 }).spo2 === 97.4)
@@ -91,7 +91,7 @@ console.log('Sin datos suficientes → null (nada inventado)')
   prueba('sin argumentos: todo null y sin NaN', vacia.bpm === null && vacia.spo2 === null && vacia.ruido === null && sinNaN(vacia))
   prueba('ir null / con NaN no revienta', calcularMetricasCanal({ ir: null }).bpm === null && calcularMetricasCanal({ ir: [NaN, 1, 2] }).bpm === null)
   const soloDisp = calcularMetricasCanal({ ir: [], bpmDispositivo: 80, spo2Dispositivo: 96 })
-  prueba('sin señal pero con lectura del dispositivo: solo esa lectura', soloDisp.bpm === 80 && soloDisp.spo2 === 96 && soloDisp.picos.length === 0 && soloDisp.hrv.sdnn === null)
+  prueba('sin señal pero con lectura de la placa: bpm null (no se copia la de la placa), bpmPlaca y SpO₂ sí', soloDisp.bpm === null && soloDisp.bpmPlaca === 80 && soloDisp.confianza === 'baja' && soloDisp.spo2 === 96 && soloDisp.picos.length === 0 && soloDisp.hrv.sdnn === null)
   prueba('detectarPicosSistolicos con entrada inválida → []', detectarPicosSistolicos(null).length === 0 && detectarPicosSistolicos([1, 2]).length === 0)
 }
 
@@ -105,6 +105,23 @@ console.log('Ruido y recorte')
   const sat = ppg({ tiempos: regular(72, 12), hz: 50, seg: 12, dc: 262000, amp: 30000 }).map(v => Math.min(v, 262143))
   const rec = calcularMetricasCanal({ ir: sat, frecuenciaHz: 50 })
   prueba('saturación del sensor detectada como recorte', rec.ruido?.causas.some(c => c.tipo === 'recorte') && rec.ruido.nivel === 'mala')
+}
+
+console.log('Confianza y detector robusto')
+{
+  const buena = calcularMetricasCanal({ ir: ppg({ tiempos: regular(72, 12), hz: 50, seg: 12 }), frecuenciaHz: 50 })
+  prueba(`señal limpia: confianza alta (${buena.confianza})`, buena.confianza === 'alta')
+  const ruidosa = calcularMetricasCanal({ ir: ppg({ tiempos: regular(72, 12), hz: 50, seg: 12, ruido: 0.9 }), frecuenciaHz: 50 })
+  prueba(`ruido muy alto: bpm null con confianza baja (${ruidosa.bpm}, ${ruidosa.confianza})`, ruidosa.bpm === null && ruidosa.confianza === 'baja')
+  const plana = calcularMetricasCanal({ ir: new Array(600).fill(90000), frecuenciaHz: 50 })
+  prueba('señal plana: confianza baja', plana.confianza === 'baja')
+  const corta = calcularMetricasCanal({ ir: ppg({ tiempos: regular(72, 4), hz: 50, seg: 4 }), frecuenciaHz: 50 })
+  prueba(`ventana de 4 s: ya hay pulso (${corta.bpm}) con confianza no alta (${corta.confianza})`, corta.bpm !== null && Math.abs(corta.bpm - 72) <= 3 && corta.confianza !== 'alta')
+  // un latido ectópico (prematuro) no mueve el pulso
+  const t = regular(72, 12); t[5] = t[4] + 0.5
+  const ect = calcularMetricasCanal({ ir: ppg({ tiempos: t, hz: 50, seg: 12 }), frecuenciaHz: 50 })
+  prueba(`un latido ectópico no desvía el BPM (${ect.bpm})`, ect.bpm !== null && Math.abs(ect.bpm - 72) <= 3)
+  prueba('picos devueltos con índices crecientes', buena.picos.every((p, i, a) => i === 0 || p.indice > a[i - 1].indice))
 }
 
 console.log(`\n${ok} bien, ${mal} mal`)

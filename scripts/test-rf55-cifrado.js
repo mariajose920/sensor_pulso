@@ -96,7 +96,7 @@ async function ejecutarPruebas() {
 
   test('ESP32: Utiliza WiFiClientSecure para handshake TLS', () => {
     assert(inoCode.includes('#include <WiFiClientSecure.h>'), 'Firmware debe incluir WiFiClientSecure.h')
-    assert(inoCode.includes('WiFiClientSecure client;'), 'Firmware debe instanciar WiFiClientSecure')
+    assert(inoCode.includes('WiFiClientSecure clienteSeguro;'), 'Firmware debe instanciar WiFiClientSecure')
   })
 
   test('ESP32: Endpoint SERVER_URL configurado estrictamente con protocolo https://', () => {
@@ -108,7 +108,7 @@ async function ejecutarPruebas() {
   })
 
   test('ESP32: Verificación activa de protocolo seguro en setup con aviso por Serial', () => {
-    assert(inoCode.includes('strncmp(SERVER_URL, "https://", 8)'), 'Setup debe validar protocolo https')
+    assert(inoCode.includes('cfgUrl.startsWith("https://")') && inoCode.includes('[Seguridad RF55]'), 'Setup debe validar protocolo https y avisar por Serial')
   })
 
   console.log('\n--- 4. Conexión Segura Cliente-Base de Datos (supabase.js) ---')

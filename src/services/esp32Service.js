@@ -1,5 +1,7 @@
 import { ref, reactive, computed } from 'vue'
 import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal.js'
+import { calcularMetricasCanal } from '../utils/metricasCanal.js'
+import { crearEstabilizadorPulso } from '../utils/estabilizadorPulso.js'
 import { actualizarBuffersMultiCanal } from './multiCanalService.js'
 import { useSerialSensor } from '../composables/useSerialSensor.js'
 import {
@@ -83,24 +85,77 @@ export const senalBuffer = reactive({
 const SEGUNDOS_VENTANA_CALIDAD = 3
 const ventanasCalidad = new Map()
 
+// UN SOLO PULSO PARA TODA LA APP (igual por WiFi y por USB): por canal se acumulan ~8 s de muestras ir/rojo y,
+// ~1 vez por segundo, calcularMetricasCanal obtiene el pulso a partir de los mismos picos que se dibujan.
+// `bpm` del canal = ese pulso estabilizado (null = sin lectura); `bpmPlaca` = lo que mandó la placa (solo informativo).
+const SEGUNDOS_VENTANA_PULSO = 8
+const INTERVALO_PULSO_MS = 1000
+const HUECO_MAX_MS = 3000 // sin datos durante más que esto la ventana acumulada ya no es continua: se reinicia
+const estadosPulso = new Map() // canal -> { ir, rojo, total, hz, ultimoDato, ultimoCalculo, estab, confianza, bpm }
+
+function reiniciarPulsos() {
+  estadosPulso.clear()
+}
+
+function estadoPulso(canal, hz, ahora) {
+  let e = estadosPulso.get(canal)
+  const cambioHz = e && Math.abs(e.hz - hz) / e.hz > 0.15
+  if (!e || cambioHz || ahora - e.ultimoDato > HUECO_MAX_MS) {
+    e = { ir: [], rojo: [], total: 0, hz, ultimoDato: ahora, ultimoCalculo: -Infinity, estab: crearEstabilizadorPulso(), confianza: 'baja', bpm: null }
+    estadosPulso.set(canal, e)
+  }
+  e.hz = hz
+  return e
+}
+
+function pulsoDelCanal(c, hz) {
+  const ahora = Date.now()
+  const e = estadoPulso(c.canal, hz, ahora)
+  const nuevas = Array.isArray(c.ir) ? c.ir : []
+  if (nuevas.length > 0) {
+    e.ultimoDato = ahora
+    e.ir.push(...nuevas)
+    e.total += nuevas.length
+    if (Array.isArray(c.rojo) && c.rojo.length) e.rojo.push(...c.rojo)
+    const max = Math.round(SEGUNDOS_VENTANA_PULSO * hz)
+    if (e.ir.length > max) e.ir.splice(0, e.ir.length - max)
+    if (e.rojo.length > max) e.rojo.splice(0, e.rojo.length - max)
+    if (ahora - e.ultimoCalculo >= INTERVALO_PULSO_MS) {
+      e.ultimoCalculo = ahora
+      const m = calcularMetricasCanal({ ir: e.ir, rojo: e.rojo.length === e.ir.length ? e.rojo : undefined, frecuenciaHz: hz })
+      const ultimo = m.picos.length ? m.picos[m.picos.length - 1].indice : null
+      e.bpm = e.estab.actualizar({ bpm: m.bpm, ultimoPico: ultimo === null ? undefined : e.total - e.ir.length + ultimo })
+      e.confianza = e.bpm === null ? 'baja' : m.confianza
+    }
+  }
+  return { bpm: e.bpm, confianza: e.confianza }
+}
+
 function calidadPorCanal(canales) {
   const hz = esp32State.frecuenciaHz || 50
   const maxMuestras = Math.round(SEGUNDOS_VENTANA_CALIDAD * hz)
+  const bpmDePlaca = (c) => (typeof c.bpm === 'number' && Number.isFinite(c.bpm) && c.bpm > 0 ? c.bpm : null)
+  const presentes = new Set(canales.map((c) => c.canal))
+  for (const k of [...estadosPulso.keys()]) if (!presentes.has(k)) estadosPulso.delete(k)
   return canales.map((c) => {
-    // Sin dedo no hay señal que evaluar: se conserva lo que informa el dispositivo y se descarta la ventana vieja
+    // Sin dedo no hay señal que evaluar: se descarta la ventana vieja y no hay pulso
     if (c.calidad === 'sin_dedo') {
       ventanasCalidad.delete(c.canal)
-      return { ...c, causasCalidad: [] }
+      estadosPulso.delete(c.canal)
+      return { ...c, bpm: null, bpmPlaca: bpmDePlaca(c), confianza: 'baja', causasCalidad: [] }
     }
     const ventana = ventanasCalidad.get(c.canal) || []
     if (Array.isArray(c.ir)) ventana.push(...c.ir)
     if (ventana.length > maxMuestras) ventana.splice(0, ventana.length - maxMuestras)
     ventanasCalidad.set(c.canal, ventana)
 
+    const pulso = pulsoDelCanal(c, hz)
+    const base = { ...c, bpm: pulso.bpm, bpmPlaca: bpmDePlaca(c), confianza: pulso.confianza }
+
     const r = evaluarCalidad(ventana, { frecuenciaHz: hz, maximo: MAXIMO_MAX30102 })
     // Sin muestras suficientes se conserva la calidad que informó el dispositivo.
-    if (r.nivel === 'sin_senal') return { ...c, causasCalidad: [] }
-    return { ...c, calidad: r.nivel, causasCalidad: r.causas }
+    if (r.nivel === 'sin_senal') return { ...base, causasCalidad: [] }
+    return { ...base, calidad: r.nivel, causasCalidad: r.causas }
   })
 }
 
@@ -225,6 +280,7 @@ export function actualizarBufferCanal() {
 // RF16: repetir la medición del canal en pantalla: se descarta lo recibido y se vuelve a evaluar la calidad
 export function repetirMedicionCanal() {
   ventanasCalidad.clear()
+  reiniciarPulsos()
   senalBuffer.ir = []
   senalBuffer.rojo = []
 }
@@ -287,6 +343,11 @@ export function detenerSondeoWiFi() {
  * Envía un paquete de prueba directamente al endpoint /api/esp32/telemetria
  * Simula el comportamiento del ESP32 enviando datos por WiFi (RF05)
  */
+// Fase acumulada de la onda simulada por canal: la señal es continua de un paquete al siguiente
+// (25 muestras por paquete a 25 Hz = 1 s de señal), así el pulso calculado por la app es el simulado.
+const fasesSimulador = [0, 0, 0, 0, 0]
+const HZ_SIMULADOR = 25
+
 export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_rf05', customCanal1 = null) {
   const now = Date.now()
   const canales = []
@@ -308,9 +369,9 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
 
     const ir = []
     const rojo = []
-    for (let i = 0; i < 25; i++) {
-      const t = (now / 1000 + i * (1 / 50)) * (2 * Math.PI * freqHz)
-      const ph = t % (2 * Math.PI)
+    for (let i = 0; i < HZ_SIMULADOR; i++) {
+      fasesSimulador[c] = (fasesSimulador[c] + (2 * Math.PI * freqHz) / HZ_SIMULADOR) % (2 * Math.PI)
+      const ph = fasesSimulador[c]
       const ppg = Math.exp(-Math.pow(ph - 1.2, 2) / 0.18) + 0.35 * Math.exp(-Math.pow(ph - 2.3, 2) / 0.12)
       // Modelo de absorción óptica del MAX30102 (RF114)
       const ratioSpO2 = (110.0 - spo2) / 25.0
@@ -338,7 +399,7 @@ export async function emitirPaquetePruebaWiFi(token = 'esp_demotoken_unach_2026_
     uptime_ms: now,
     wifi_rssi: -58,
     ip: '192.168.1.105',
-    frecuencia_hz: 50,
+    frecuencia_hz: HZ_SIMULADOR,
     canales
   }
 
@@ -405,6 +466,7 @@ function limpiarEstadoMedicion() {
   esp32State.frecuenciaHz = 50
   esp32State.error = null
   ventanasCalidad.clear()
+  reiniciarPulsos()
   senalBuffer.ir = []
   senalBuffer.rojo = []
   agregadorUsb.reiniciar()
