@@ -87,6 +87,8 @@ supabase.auth.getSession().then(async ({ data }) => {
   loading.value = false
 })
 
+let omitirLimpiezaSignOut = false
+
 supabase.auth.onAuthStateChange(async (event, currentSession) => {
   if (currentSession?.user) {
     const valido = await validarYAplicarSesion(currentSession)
@@ -95,18 +97,17 @@ supabase.auth.onAuthStateChange(async (event, currentSession) => {
     if (!profile.value) {
       const correo = (currentSession.user.email || '').toLowerCase()
       const esProfesor = correo.endsWith('@unach.cl') && !correo.includes('@alu.')
-      const esAdmin = correo === 'admin.general@unach.cl'
       const nombre = extraerNombreGoogle(currentSession.user) || correo.split('@')[0]
       profile.value = {
         id: currentSession.user.id,
         correo,
         nombre,
         rol: esProfesor ? ROLES.PROFESOR : ROLES.USUARIO,
-        es_admin: esAdmin
+        es_admin: false
       }
       localStorage.setItem('sensor_profile', JSON.stringify(profile.value))
     }
-  } else if (event === 'SIGNED_OUT') {
+  } else if (event === 'SIGNED_OUT' && !omitirLimpiezaSignOut) {
     session.value = null
     user.value = null
     profile.value = null
@@ -197,26 +198,73 @@ export function useAuth() {
     }
   }
 
-  // Acceso de prueba rápida para desarrollo local
-  const loginGoogleDemo = async (tipoCuenta = 'docente') => {
+  // Acceso rápido con las dos cuentas predefinidas (Administrador y Profesor) para pruebas
+  const CUENTAS_PRUEBA = {
+    admin: {
+      id: '4c0657db-4c09-4b4b-a197-ed106641c112',
+      email: PRIMER_ADMIN.email,
+      nombre: PRIMER_ADMIN.nombreCompleto || 'Administrador Inicial',
+      rol: ROLES.PROFESOR,
+      es_admin: true,
+      password: PRIMER_ADMIN.password
+    },
+    profesor: {
+      id: '06d76e05-00b4-4098-b5a1-bf518561f0c4',
+      email: 'profesor.prueba@unach.cl',
+      nombre: 'Profesor Docente',
+      rol: ROLES.PROFESOR,
+      es_admin: false
+    }
+  }
+
+  const loginGoogleDemo = async (tipoCuenta = 'admin') => {
     loading.value = true
     authError.value = null
+    const cuenta = CUENTAS_PRUEBA[tipoCuenta] || CUENTAS_PRUEBA.admin
+
     try {
-      const email = tipoCuenta === 'docente' ? 'admin.general@unach.cl' : 'cristobalvaldes@alu.unach.cl'
-      const nombre = tipoCuenta === 'docente' ? 'ADMIN (Administrador y Profesor)' : 'Cristóbal Valdés (Estudiante)'
-      const rol = tipoCuenta === 'docente' ? ROLES.PROFESOR : ROLES.USUARIO
+      omitirLimpiezaSignOut = true
+      try { await supabase.auth.signOut() } catch (_) {}
+      omitirLimpiezaSignOut = false
+
+      if (cuenta.password) {
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: cuenta.email,
+            password: cuenta.password
+          })
+          if (!error && data?.user) {
+            user.value = data.user
+            session.value = data.session
+            localStorage.setItem('sensor_user', JSON.stringify(data.user))
+            await cargarPerfilDesdeBD(data.user.id, cuenta.nombre)
+            if (!profile.value) {
+              profile.value = {
+                id: data.user.id,
+                correo: cuenta.email,
+                nombre: cuenta.nombre,
+                rol: cuenta.rol,
+                es_admin: cuenta.es_admin
+              }
+              localStorage.setItem('sensor_profile', JSON.stringify(profile.value))
+            }
+            return { success: true, data: data.user }
+          }
+        } catch (_) {}
+      }
+
       const mockUser = {
-        id: tipoCuenta === 'docente' ? '4c0657db-4c09-4b4b-a197-ed106641c112' : '9d71a994-c807-4264-ba07-49917194faeb',
-        email,
+        id: cuenta.id,
+        email: cuenta.email,
         app_metadata: { provider: 'google' },
-        user_metadata: { full_name: nombre, rol }
+        user_metadata: { full_name: cuenta.nombre, rol: cuenta.rol }
       }
       const mockProfile = {
-        id: mockUser.id,
-        correo: email,
-        nombre,
-        rol,
-        es_admin: tipoCuenta === 'docente'
+        id: cuenta.id,
+        correo: cuenta.email,
+        nombre: cuenta.nombre,
+        rol: cuenta.rol,
+        es_admin: cuenta.es_admin
       }
       user.value = mockUser
       profile.value = mockProfile
@@ -225,6 +273,7 @@ export function useAuth() {
       localStorage.setItem('sensor_profile', JSON.stringify(mockProfile))
       return { success: true, data: mockUser }
     } finally {
+      omitirLimpiezaSignOut = false
       loading.value = false
     }
   }
