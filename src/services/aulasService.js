@@ -1,5 +1,6 @@
-import { supabase } from './supabase'
-import { validarCorreoInstitucional } from '../utils/validators'
+import { supabase } from './supabase.js'
+import { validarCorreoInstitucional } from '../utils/validators.js'
+import { enviarCorreoInvitacion } from './emailService.js'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -18,6 +19,8 @@ const STORAGE_AULA_ESTUDIANTES = 'sensor_pulso_aula_estudiantes_locales'
 const STORAGE_CURSOS = 'sensor_pulso_cursos_locales'
 const STORAGE_CURSO_ESTUDIANTES = 'sensor_pulso_curso_estudiantes_locales'
 const STORAGE_INVITACIONES = 'sensor_pulso_invitaciones_aulas_locales'
+const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
+const STORAGE_INTENTOS_EVALUACIONES = 'sensor_pulso_intentos_evaluaciones_locales'
 
 function cargarDeStorage(key, porDefecto) {
   if (typeof window === 'undefined' || !window.localStorage) return porDefecto
@@ -84,9 +87,215 @@ let cursoEstudiantesLocales = cargarDeStorage(STORAGE_CURSO_ESTUDIANTES, [
 // Invitaciones por correo (RF100)
 let invitacionesLocales = cargarDeStorage(STORAGE_INVITACIONES, [])
 
+// Evaluaciones del aula (RF103 / RF104)
+let evaluacionesLocales = cargarDeStorage(STORAGE_EVALUACIONES, [
+  {
+    id: 'eval-001',
+    aula_id: 'aula-001',
+    titulo: 'Evaluación Práctica: Medición de Pulso y SpO2 en Reposo',
+    descripcion: 'Prueba práctica de adquisición de señal fotopletismográfica, cálculo de frecuencia cardíaca e interpretación de saturación de oxígeno con sensor MAX30102.',
+    tiempo_limite_minutos: 45,
+    activa: true,
+    preguntas_count: 5,
+    creada_en: '2026-11-01T10:00:00Z'
+  },
+  {
+    id: 'eval-002',
+    aula_id: 'aula-001',
+    titulo: 'Control Teórico: Ciberseguridad y Privacidad en Dispositivos IoT Médicos',
+    descripcion: 'Evaluación de conceptos de cifrado AES-GCM, autenticación segura y cumplimiento de normativas de salud en telemetría inalámbrica.',
+    tiempo_limite_minutos: 30,
+    activa: true,
+    preguntas_count: 8,
+    creada_en: '2026-11-03T14:30:00Z'
+  }
+])
+
+// Intentos de evaluaciones (RF117: Visibilidad docente sin datos de salud)
+let intentosEvaluacionesLocales = cargarDeStorage(STORAGE_INTENTOS_EVALUACIONES, [
+  {
+    id: 'intento-001',
+    aula_id: 'aula-001',
+    evaluacion_id: 'eval-001',
+    usuario_id: '00000000-0000-0000-0000-000000000003',
+    estudiante_nombre: 'Constanza Morales',
+    estudiante_correo: 'cmorales@alu.unach.cl',
+    puntaje: 90.0,
+    puntaje_maximo: 100.0,
+    porcentaje: 90.0,
+    nivel: 'logrado',
+    inicio: '2026-11-04T11:00:00Z',
+    fin: '2026-11-04T11:35:00Z',
+    respuestas: [
+      { pregunta_id: 'p-1', pregunta: 'Longitud de onda infrarroja del sensor MAX30102', respuesta: '880 nm', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-2', pregunta: 'Componente que absorbe mayor luz infrarroja', respuesta: 'Oxihemoglobina (HbO2)', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-3', pregunta: 'Calculo del indice de perfusion (PI)', respuesta: 'Relacion entre componente pulsatil AC y continuo DC', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-4', pregunta: 'Rango normocardico segun la AHA en reposo', respuesta: '60 a 100 BPM', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-5', pregunta: 'Definicion de hipoxia leve en SpO2', respuesta: '90% a 94%', es_correcta: false, puntaje: 10 }
+    ],
+    medicion: {
+      id: 'med-eval-001',
+      bpm: 72.5,
+      spo2: 98.2,
+      indicePerfusion: 4.8,
+      dentroDeRango: true,
+      fecha: '2026-11-04T11:20:00Z',
+      frecuenciaHz: 100,
+      muestrasPpg: [0.15, 0.25, 0.55, 0.9, 0.98, 0.75, 0.45, 0.3, 0.38, 0.25, 0.18, 0.15]
+    }
+  },
+  {
+    id: 'intento-002',
+    aula_id: 'aula-001',
+    evaluacion_id: 'eval-001',
+    usuario_id: '00000000-0000-0000-0000-000000000004',
+    estudiante_nombre: 'Matias Silva',
+    estudiante_correo: 'msilva@alu.unach.cl',
+    puntaje: 70.0,
+    puntaje_maximo: 100.0,
+    porcentaje: 70.0,
+    nivel: 'medianamente_logrado',
+    inicio: '2026-11-04T11:05:00Z',
+    fin: '2026-11-04T11:38:00Z',
+    respuestas: [
+      { pregunta_id: 'p-1', pregunta: 'Longitud de onda infrarroja del sensor MAX30102', respuesta: '880 nm', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-2', pregunta: 'Componente que absorbe mayor luz infrarroja', respuesta: 'Hemoglobina desoxigenada (Hb)', es_correcta: false, puntaje: 0 },
+      { pregunta_id: 'p-3', pregunta: 'Calculo del indice de perfusion (PI)', respuesta: 'Relacion entre componente pulsatil AC y continuo DC', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-4', pregunta: 'Rango normocardico segun la AHA en reposo', respuesta: '60 a 100 BPM', es_correcta: true, puntaje: 20 },
+      { pregunta_id: 'p-5', pregunta: 'Definicion de hipoxia leve en SpO2', respuesta: 'Menor a 85%', es_correcta: false, puntaje: 10 }
+    ],
+    medicion: {
+      id: 'med-eval-002',
+      bpm: 76.0,
+      spo2: 97.0,
+      indicePerfusion: 4.2,
+      dentroDeRango: true,
+      fecha: '2026-11-04T11:35:00Z',
+      frecuenciaHz: 100,
+      muestrasPpg: [0.12, 0.22, 0.5, 0.88, 0.95, 0.72, 0.42, 0.28, 0.36, 0.22, 0.16, 0.13]
+    }
+  }
+])
+
 /**
  * Obtener aulas
  */
+/**
+ * RF103: Obtener datos de una sola aula por su ID y validar permisos de acceso.
+ * Criterio de aceptación: Solo entra el profesor dueño o el admin.
+ */
+export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+
+  let aula = null
+
+  // 1. Intentar buscar en Supabase
+  try {
+    const { data, error } = await supabase
+      .from('aulas')
+      .select('*, perfiles:profesor_id(nombre, correo)')
+      .eq('id', aulaId)
+      .maybeSingle()
+
+    if (!error && data) {
+      aula = {
+        ...data,
+        profesor_nombre: data.perfiles?.nombre || 'Docente'
+      }
+    }
+  } catch (_) {}
+
+  // 2. Si no está en Supabase, buscar en almacenamiento local
+  if (!aula) {
+    aula = aulasLocales.find(a => a.id === aulaId)
+  }
+
+  if (!aula) {
+    return { success: false, error: 'El aula solicitada no existe o fue archivada.' }
+  }
+
+  // 3. Criterio de aceptación estricto RF103: Solo entra el profesor dueño o el admin
+  if (usuarioId && !esAdmin && aula.profesor_id !== usuarioId) {
+    return {
+      success: false,
+      error: 'Acceso no autorizado: Solo el profesor titular o un administrador pueden acceder a esta aula.',
+      noAutorizado: true
+    }
+  }
+
+  return { success: true, data: aula }
+}
+
+/**
+ * RF103 / RF105: Obtener evaluaciones asociadas al aula (datos reales de Supabase / creadas)
+ */
+/**
+ * RF103 / RF104: Obtener evaluaciones asociadas al aula con sus asignaciones reales
+ */
+export async function obtenerEvaluacionesAula(aulaId) {
+  if (!aulaId) return { success: true, data: [] }
+  
+  // 1. Consultar en Supabase por el aulaId real
+  try {
+    const { data, error } = await supabase
+      .from('evaluaciones')
+      .select('*')
+      .eq('aula_id', aulaId)
+      .order('creado_en', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      // Consultar asignaciones reales para estas evaluaciones
+      const evalIds = data.map(e => e.id)
+      let asignaciones = []
+      try {
+        const { data: asigData } = await supabase
+          .from('evaluacion_asignaciones')
+          .select('*')
+          .in('evaluacion_id', evalIds)
+        if (asigData) asignaciones = asigData
+      } catch (_) {}
+
+      return { 
+        success: true, 
+        data: data.map(e => ({
+          ...e,
+          activa: e.estado ? e.estado !== 'borrador' : true,
+          creada_en: e.creado_en,
+          asignaciones: asignaciones.filter(a => a.evaluacion_id === e.id)
+        }))
+      }
+    }
+  } catch (_) {}
+
+  // 2. Si no están en Supabase o es modo local, buscar en el almacenamiento de evaluaciones
+  const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
+  let locales = []
+  try {
+    locales = JSON.parse(localStorage.getItem(STORAGE_EVALUACIONES) || '[]')
+  } catch (_) {}
+
+  const STORAGE_ASIG = 'sensor_pulso_evaluacion_asignaciones'
+  let asigLocales = []
+  try {
+    asigLocales = JSON.parse(localStorage.getItem(STORAGE_ASIG) || '[]')
+  } catch (_) {}
+
+  const evalsLocales = locales.filter(e => e.aula_id === aulaId).map(e => ({
+    ...e,
+    activa: true,
+    creada_en: e.creado_en || e.creada_en,
+    asignaciones: asigLocales.filter(a => a.evaluacion_id === e.id)
+  }))
+
+  if (evalsLocales.length > 0) {
+    return { success: true, data: evalsLocales }
+  }
+
+  // 3. Fallback de muestra para aulas demo
+  const evals = evaluacionesLocales.filter(e => !e.aula_id || e.aula_id === aulaId)
+  return { success: true, data: evals }
+}
+
 export async function obtenerAulas({ usuarioId, usuarioCorreo, esAdmin, esProfesor }) {
   try {
     let query = supabase.from('aulas').select('*').order('creado_en', { ascending: false })
@@ -308,11 +517,15 @@ export async function regenerarCodigoAulaDocente({ aulaId, profesorId, esAdmin }
 /**
  * RF100: Enviar invitación con el código al correo del estudiante (@alu.unach.cl)
  */
-export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, esAdmin }) {
+export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profesorId, profesorNombre, esAdmin }) {
   const aula = aulasLocales.find(a => a.id === aulaId)
   if (!aula) return { success: false, error: 'Aula no encontrada.' }
   if (!esAdmin && aula.profesor_id !== profesorId) {
     return { success: false, error: 'No tienes permiso para gestionar invitaciones en esta aula.' }
+  }
+
+  if (!aula.codigo_activo) {
+    return { success: false, error: 'El código de acceso de esta aula se encuentra desactivado. Actívalo antes de enviar invitaciones.' }
   }
 
   const validacion = validarCorreoInstitucional(correoEstudiante)
@@ -322,13 +535,46 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   const correoLimpio = correoEstudiante.trim().toLowerCase()
 
-  // Guardar invitación
+  // Conectar con el servicio de correo real (Resend)
+  const resultadoEnvio = await enviarCorreoInvitacion({
+    correo: correoLimpio,
+    codigo: aula.codigo,
+    aulaNombre: aula.nombre,
+    profesorNombre: profesorNombre || 'Docente'
+  })
+
+  // Criterio de aceptación: Si el envío falla, NO dice "enviada" y registra el resultado del envío
+  if (!resultadoEnvio.success) {
+    const invitacionFallida = {
+      id: `inv-err-${Date.now()}`,
+      aula_id: aulaId,
+      aula_nombre: aula.nombre,
+      codigo_aula: aula.codigo,
+      correo: correoLimpio,
+      servicio: 'Resend',
+      estado: 'fallido',
+      error_detalle: resultadoEnvio.error,
+      intentado_en: new Date().toISOString()
+    }
+    invitacionesLocales.unshift(invitacionFallida)
+    guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+
+    return {
+      success: false,
+      error: resultadoEnvio.error
+    }
+  }
+
+  // Registro de envío exitoso
   const nuevaInvitacion = {
     id: `inv-${Date.now()}`,
     aula_id: aulaId,
     aula_nombre: aula.nombre,
     codigo_aula: aula.codigo,
     correo: correoLimpio,
+    servicio: 'Resend',
+    estado: 'enviada',
+    resend_id: resultadoEnvio.messageId || null,
     enviada_en: new Date().toISOString()
   }
 
@@ -344,8 +590,30 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   return {
     success: true,
-    message: `Invitación enviada a ${correoLimpio} con el código de acceso ${aula.codigo}.`
+    message: `Invitación enviada con éxito a ${correoLimpio} mediante Resend (Código: ${aula.codigo}).`,
+    invitacion: nuevaInvitacion
   }
+}
+
+/**
+ * RF100: Obtener el registro de invitaciones del aula (para verificar estados enviado/fallido)
+ */
+export async function obtenerInvitacionesAula(aulaId) {
+  if (!aulaId) return { success: true, data: [] }
+  try {
+    const { data, error } = await supabase
+      .from('invitaciones_aula')
+      .select('*')
+      .eq('aula_id', aulaId)
+      .order('enviada_en', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      return { success: true, data }
+    }
+  } catch (_) {}
+
+  const filtradas = invitacionesLocales.filter(inv => inv.aula_id === aulaId)
+  return { success: true, data: filtradas }
 }
 
 // ==========================================
@@ -495,4 +763,245 @@ export async function actualizarEstudiantesCurso({ cursoId, aulaId, estudiantesI
 
   guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
   return { success: true }
+}
+
+/**
+ * RF102: Retirar a uno o varios estudiantes del aula
+ */
+export async function retirarEstudiantesAula({ aulaId, estudiantesIds, profesorId, esAdmin }) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+  if (!estudiantesIds || estudiantesIds.length === 0) {
+    return { success: false, error: 'No se seleccionaron estudiantes para retirar.' }
+  }
+
+  // 1. Llamar a la función RPC retirar_estudiantes en Supabase (si está disponible)
+  try {
+    const { data, error } = await supabase.rpc('retirar_estudiantes', {
+      p_aula: aulaId,
+      p_usuarios: estudiantesIds
+    })
+    if (error) throw error
+  } catch (err) {
+    console.warn('Aviso: RPC retirar_estudiantes ejecutando en modo local:', err.message)
+    try {
+      await supabase
+        .from('aula_estudiantes')
+        .update({
+          estado: 'retirado',
+          retirado_en: new Date().toISOString(),
+          retirado_por: profesorId
+        })
+        .eq('aula_id', aulaId)
+        .in('usuario_id', estudiantesIds)
+
+      await supabase
+        .from('curso_estudiantes')
+        .delete()
+        .eq('aula_id', aulaId)
+        .in('usuario_id', estudiantesIds)
+    } catch (_) {}
+  }
+
+  // 2. Actualizar almacenamiento local para pruebas inmediatas y modo offline
+  aulaEstudiantesLocales = aulaEstudiantesLocales.map(e => {
+    if (e.aula_id === aulaId && estudiantesIds.includes(e.usuario_id)) {
+      return {
+        ...e,
+        estado: 'retirado',
+        retirado_en: new Date().toISOString(),
+        retirado_por: profesorId
+      }
+    }
+    return e
+  })
+  guardarEnStorage(STORAGE_AULA_ESTUDIANTES, aulaEstudiantesLocales)
+
+  // Desvincular de los cursos de esa aula
+  cursoEstudiantesLocales = cursoEstudiantesLocales.filter(
+    ce => !(ce.aula_id === aulaId && estudiantesIds.includes(ce.usuario_id))
+  )
+  guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
+
+  // 3. Registrar en auditoría
+  try {
+    const STORAGE_AUDITORIA = 'sensor_pulso_auditoria_roles'
+    const logs = JSON.parse(localStorage.getItem(STORAGE_AUDITORIA) || '[]')
+    logs.unshift({
+      id: `audit-${Date.now()}`,
+      accion: 'retiro_estudiantes',
+      tabla: 'aulas',
+      registro_id: aulaId,
+      actor_id: profesorId,
+      detalles: {
+        usuarios_retirados: estudiantesIds,
+        cantidad: estudiantesIds.length
+      },
+      creado_en: new Date().toISOString()
+    })
+    localStorage.setItem(STORAGE_AUDITORIA, JSON.stringify(logs))
+  } catch (_) {}
+
+  return {
+    success: true,
+    count: estudiantesIds.length,
+    message: `Se retiró exitosamente a ${estudiantesIds.length} estudiante(s) del aula.`
+  }
+}
+
+/**
+ * RF117: Visibilidad del profesor sobre evaluaciones asignadas.
+ * Ve de cada estudiante de su aula SOLO:
+ * - Nombre del estudiante
+ * - Calificacion (puntaje y porcentaje)
+ * - Nivel de logro (logrado, medianamente_logrado, no_logrado)
+ * - Respuestas de la evaluacion asignada
+ * - Mediciones asignadas a la evaluacion (BPM, SpO2, senal PPG)
+ *
+ * RESTRICCIONES DE SEGURIDAD (RF116/RF117):
+ * - NUNCA incluye datos personales o de salud declarados (estres, sueno, cafeina, medicacion).
+ * - Si un estudiante fue retirado del aula (RF102), el profesor pierde de inmediato el acceso.
+ */
+export async function obtenerIntentosEvaluacionAula(aulaId, evaluacionId) {
+  if (!aulaId || !evaluacionId) return { success: true, data: [] }
+
+  // 1. Obtener los estudiantes actualmente activos en el aula (RF102/RF117)
+  const resEstudiantes = await obtenerEstudiantesAula(aulaId)
+  const estudiantesActivos = resEstudiantes.data || []
+  const idsActivos = new Set(estudiantesActivos.map(e => e.usuario_id))
+
+  // 2. Intentar consultar en Supabase
+  try {
+    const { data, error } = await supabase
+      .from('intentos_evaluacion')
+      .select(`
+        id,
+        evaluacion_id,
+        usuario_id,
+        puntaje,
+        puntaje_maximo,
+        porcentaje,
+        nivel,
+        inicio,
+        fin,
+        perfiles:usuario_id(id, nombre, correo),
+        mediciones:medicion_id(id, bpm, spo2, creado_en, dentro_de_rango),
+        respuestas(id, pregunta_id, respuesta, es_correcta, puntaje, preguntas(texto))
+      `)
+      .eq('evaluacion_id', evaluacionId)
+
+    if (!error && data && data.length > 0) {
+      // Filtrar estrictamente solo estudiantes que sigan activos en el aula (RF102/RF117)
+      const filtrados = data
+        .filter(intento => idsActivos.has(intento.usuario_id))
+        .map(intento => ({
+          id: intento.id,
+          evaluacion_id: intento.evaluacion_id,
+          usuario_id: intento.usuario_id,
+          estudiante_nombre: intento.perfiles?.nombre || 'Estudiante',
+          estudiante_correo: intento.perfiles?.correo || '',
+          puntaje: Number(intento.puntaje) || 0,
+          puntaje_maximo: Number(intento.puntaje_maximo) || 100,
+          porcentaje: Number(intento.porcentaje) || 0,
+          nivel: intento.nivel || 'no_logrado',
+          inicio: intento.inicio,
+          fin: intento.fin,
+          respuestas: (intento.respuestas || []).map(r => ({
+            pregunta_id: r.pregunta_id,
+            pregunta: r.preguntas?.texto || 'Pregunta de evaluacion',
+            respuesta: typeof r.respuesta === 'object' ? JSON.stringify(r.respuesta) : String(r.respuesta),
+            es_correcta: Boolean(r.es_correcta),
+            puntaje: Number(r.puntaje) || 0
+          })),
+          medicion: intento.mediciones ? {
+            id: intento.mediciones.id,
+            bpm: intento.mediciones.bpm,
+            spo2: intento.mediciones.spo2,
+            dentroDeRango: intento.mediciones.dentro_de_rango,
+            fecha: intento.mediciones.creado_en
+          } : null
+        }))
+
+      return { success: true, data: filtrados }
+    }
+  } catch (_) {}
+
+  // 3. Fallback local offline/demostracion
+  const locales = intentosEvaluacionesLocales.filter(
+    i => i.aula_id === aulaId && i.evaluacion_id === evaluacionId && idsActivos.has(i.usuario_id)
+  ).map(i => {
+    // Sanitizacion estricta: asegurar que nunca viajen campos de salud del RF116
+    const { datos_cifrados, condicionSalud, medicacion, sueno, cafeina, estres, ...limpio } = i
+    return limpio
+  })
+
+  return { success: true, data: locales }
+}
+
+/**
+ * RF117: Estadisticas agregadas del aula sobre datos no cifrados, sin identificar a la persona.
+ */
+export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
+  const resIntentos = await obtenerIntentosEvaluacionAula(aulaId, evaluacionId)
+  const intentos = resIntentos.data || []
+
+  const resEst = await obtenerEstudiantesAula(aulaId)
+  const totalEstudiantes = (resEst.data || []).length
+  const totalEvaluados = intentos.length
+
+  if (totalEvaluados === 0) {
+    return {
+      success: true,
+      data: {
+        totalEstudiantes,
+        totalEvaluados: 0,
+        promedioCalificacion: 0,
+        tasaAprobacion: 0,
+        distribucionNiveles: {
+          logrado: 0,
+          medianamente_logrado: 0,
+          no_logrado: 0
+        },
+        promedioBpm: null,
+        promedioSpo2: null
+      }
+    }
+  }
+
+  const sumaNotas = intentos.reduce((acc, i) => acc + (i.porcentaje || 0), 0)
+  const promedioCalificacion = parseFloat((sumaNotas / totalEvaluados).toFixed(1))
+
+  const niveles = {
+    logrado: intentos.filter(i => i.nivel === 'logrado').length,
+    medianamente_logrado: intentos.filter(i => i.nivel === 'medianamente_logrado').length,
+    no_logrado: intentos.filter(i => i.nivel === 'no_logrado').length
+  }
+
+  const tasaAprobacion = parseFloat(
+    (((niveles.logrado + niveles.medianamente_logrado) / totalEvaluados) * 100).toFixed(1)
+  )
+
+  const medicionesConBpm = intentos.filter(i => i.medicion && i.medicion.bpm > 0)
+  const sumaBpm = medicionesConBpm.reduce((acc, i) => acc + i.medicion.bpm, 0)
+  const promedioBpm = medicionesConBpm.length > 0
+    ? parseFloat((sumaBpm / medicionesConBpm.length).toFixed(1))
+    : null
+
+  const medicionesConSpo2 = intentos.filter(i => i.medicion && i.medicion.spo2 > 0)
+  const sumaSpo2 = medicionesConSpo2.reduce((acc, i) => acc + i.medicion.spo2, 0)
+  const promedioSpo2 = medicionesConSpo2.length > 0
+    ? parseFloat((sumaSpo2 / medicionesConSpo2.length).toFixed(1))
+    : null
+
+  return {
+    success: true,
+    data: {
+      totalEstudiantes,
+      totalEvaluados,
+      promedioCalificacion,
+      tasaAprobacion,
+      distribucionNiveles: niveles,
+      promedioBpm,
+      promedioSpo2
+    }
+  }
 }

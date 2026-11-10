@@ -43,15 +43,16 @@ El requerimiento **RF55** garantiza la confidencialidad, autenticidad e integrid
 
 1. **ESP32 hacia API Ingest (`firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino`):**
    - Emplea `WiFiClientSecure` con capa TLS negociada sobre el puerto 443.
-   - Endpoint configurado exclusivamente con protocolo `https://sensorpulso.vercel.app/api/esp32/telemetria`.
+   - **Validación Estricta de Certificado TLS (Rechazo de Certificado Falso):** Configura la CA raíz canónica ISRG Root X1 mediante `client.setCACert(ROOT_CA_CERTIFICATE)` y prescinde de `client.setInsecure()`. mbedTLS aborta el handshake y rechaza certificados falsos o no autorizados.
+   - Endpoint configurado exclusivamente con protocolo `https://sensorpulso.vercel.app/api/esp32/telemetria` y documentación en `firmware/README.md` con `https://` sin referencias a `http://`.
    - Stack FreeRTOS de 16 KB (`16384` bytes) reservado en Core 0 para el intercambio y manejo de claves TLS sin riesgo de stack overflow.
    - Verificación de protocolo en tiempo de arranque (`setup()`) que alerta por Serial si se intenta configurar una URL no cifrada.
 
 2. **Ingest Serverless API (`api/esp32/telemetria.js`):**
-   - En entornos de producción (Vercel u hosting), audita la cabecera `x-forwarded-proto`.
-   - Rechaza activamente cualquier petición en texto plano HTTP con código `426 Upgrade Required` y solicita elevación a `TLS/1.3`.
+   - En entornos de producción (Vercel u hosting), audita la cabecera `x-forwarded-proto` y estado cifrado del socket.
+   - Rechaza activamente cualquier petición en texto plano HTTP con código `426 Upgrade Required`.
    - Emite cabecera estricta `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` y `X-Content-Type-Options: nosniff`.
-   - Retorna en las respuestas metadatos de confirmación de cifrado TLS para auditoría pedagógica.
+   - **Detección Dinámica del Protocolo Real:** Función `detectarProtocoloReal(req)` que audita el socket TLS y cabeceras edge para retornar el protocolo real en `protocolo_real` (POST) y bloque `cifrado` (GET), habiendo eliminado textos fijos como `'TLS_1_3'` o `rf55: 'cumplido'`.
 
 3. **Aplicación Web en Navegador (`vercel.json`):**
    - **HSTS Estricto:** `Strict-Transport-Security` con 2 años (`63072000` segundos), `includeSubDomains` y `preload`.
@@ -78,7 +79,7 @@ El requerimiento **RF55** garantiza la confidencialidad, autenticidad e integrid
      - **Persistencia PostgreSQL:** Almacenado en formato hexadecimal compatible con la columna `bytea` (`\x53504301...`).
      - **Detección de Manipulación (Tamper Detection):** Cualquier alteración en los bytes almacenados provoca el rechazo automático en la verificación del tag de autenticación.
      - **Retrocompatibilidad:** Capacidad de decodificar de forma transparente registros previos no cifrados o en formato JSON crudo sin pérdida de datos.
-     - **Rotación de Claves:** Soporta claves versionadas (`clave_version`) vinculadas a la variable de entorno `CLAVE_CIFRADO_CAMPOS` o `VITE_ENCRYPTION_KEY`.
+     - **Rotación de Claves:** Soporta claves versionadas (`clave_version`) vinculadas a variables de entorno **solo del servidor** (`CLAVE_CIFRADO_CAMPOS`, `SALUD_ENCRYPTION_KEY_V<n>`). El cifrado y el descifrado ocurren en `api/declaraciones/` (RF88/ISO 27001 A.8.24); el navegador no tiene claves y no existe clave por defecto.
 
 3. **Clasificación en Catálogo de Base de Datos:**
    - La tabla `clasificacion_datos` cataloga explícitamente:
@@ -98,10 +99,11 @@ El requerimiento **RF55** garantiza la confidencialidad, autenticidad e integrid
 | [`src/services/pacienteService.js`](file:///c:/Users/adan_/ERP/sensor_pulso/src/services/pacienteService.js) | Cifrado y descifrado de factores de salud antes de la inserción y lectura en `declaraciones_paciente`. |
 | [`src/services/supabase.js`](file:///c:/Users/adan_/ERP/sensor_pulso/src/services/supabase.js) | Forzado de HTTPS/TLS en canal con Supabase y exportación de metadatos de seguridad. |
 | [`api/esp32/telemetria.js`](file:///c:/Users/adan_/ERP/sensor_pulso/api/esp32/telemetria.js) | Endurecimiento TLS, rechazo de conexiones no cifradas en producción (HTTP 426) y cabeceras HSTS. |
+| [`firmware/README.md`](file:///c:/Users/adan_/ERP/sensor_pulso/firmware/README.md) | Documentación del firmware actualizada a URLs estrictamente https://. |
 | [`firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino`](file:///c:/Users/adan_/ERP/sensor_pulso/firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino) | Verificación de endpoint HTTPS y transmisión TLS 1.2+ con `WiFiClientSecure`. |
 | [`src/components/Esp32WifiStatus.vue`](file:///c:/Users/adan_/ERP/sensor_pulso/src/components/Esp32WifiStatus.vue) | Badge interactivo de Cifrado TLS 1.3 en la barra de estado de conexión del sensor. |
 | [`src/components/DatosPacienteCard.vue`](file:///c:/Users/adan_/ERP/sensor_pulso/src/components/DatosPacienteCard.vue) | Indicador visual de cifrado AES-256 + TLS en la ficha de datos de paciente y factores de salud. |
-| [`scripts/test-rf55-cifrado.js`](file:///c:/Users/adan_/ERP/sensor_pulso/scripts/test-rf55-cifrado.js) | Suite de 16 pruebas automatizadas de cifrado en tránsito y reposo. |
+| [`scripts/test-rf55-cifrado.js`](file:///c:/Users/adan_/ERP/sensor_pulso/scripts/test-rf55-cifrado.js) | Suite de 21 pruebas automatizadas (con rechazo de certificado falso en ESP32 y detección dinámica de protocolo real) de cifrado en tránsito y reposo. |
 
 ---
 
@@ -127,9 +129,11 @@ Salida esperada:
 
 --- 2. Cifrado en Tránsito en API Serverless de Telemetría (/api/esp32/telemetria.js) ---
   ✅ [PASS] API Ingest: Contiene validación y rechazo de peticiones no cifradas (HTTP plano)
-  ✅ [PASS] API Ingest: Devuelve metadatos de cifrado TLS en respuesta GET y POST
+  ✅ [PASS] API Ingest: Quita textos fijos 'TLS_1_3' y 'rf55: cumplido', e informa dinámicamente el protocolo real
+  ✅ [PASS] API Ingest: detectarProtocoloReal evalúa adecuadamente socket TLS y cabeceras edge
 
 --- 3. Cifrado en Tránsito en Firmware ESP32 (esp32_wifi_prueba.ino) ---
+  ✅ [PASS] ESP32: Configura certificado raíz con setCACert (no usa setInsecure)
   ✅ [PASS] ESP32: Utiliza WiFiClientSecure para handshake TLS
   ✅ [PASS] ESP32: Endpoint SERVER_URL configurado estrictamente con protocolo https://
   ✅ [PASS] ESP32: Stack asignado para la tarea FreeRTOS de transmisión WiFi es >= 16 KB (TLS)
@@ -148,8 +152,13 @@ Salida esperada:
 --- 6. Clasificación de Datos en Base de Datos (PostgreSQL) ---
   ✅ [PASS] Base de Datos: declaraciones_paciente.datos_cifrados catalogada como sensible_salud con cifrado_campo = true
 
+--- 7. Criterios de Aceptación RF55 (Validar Certificado TLS) ---
+  ✅ [PASS] Criterio 1: El ESP32 rechaza un certificado falso (setCACert con CA raíz y sin setInsecure)
+  ✅ [PASS] Criterio 2: El README usa https:// y no contiene URLs con http://
+  ✅ [PASS] Criterio 3: La API informa el protocolo real dinámicamente
+
 ================================================================
   RESUMEN DE PRUEBAS RF55:
-  Total: 16 | Pasadas: 16 | Falladas: 0
+  Total: 21 | Pasadas: 21 | Falladas: 0
 ================================================================
 ```

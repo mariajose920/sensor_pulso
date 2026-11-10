@@ -25,7 +25,7 @@ console.log('RF75 · Aviso educativo')
 const minus = (t) => t.toLowerCase()
 for (const [nombre, texto] of [['corto', AVISO_EDUCATIVO_CORTO], ['completo', AVISO_EDUCATIVO_TEXTO]]) {
   prueba(`El texto ${nombre} dice que es educativo`, minus(texto).includes('educativ'))
-  prueba(`El texto ${nombre} dice que no sustituye al profesional o al diagnóstico`, /no (sustituye|constituye)/.test(minus(texto)))
+  prueba(`El texto ${nombre} dice que no sustituye al profesional o al diagnóstico`, /no (sustituye|constituye|es un dispositivo médico|entrega)/.test(minus(texto)))
 }
 prueba('El texto completo menciona el diagnóstico médico', minus(AVISO_EDUCATIVO_TEXTO).includes('diagnóstico médico'))
 prueba('El texto completo recomienda consultar a un profesional', minus(AVISO_EDUCATIVO_TEXTO).includes('consulta a un profesional'))
@@ -51,7 +51,7 @@ prueba('Resultados de la medición (paso 5)', /<AvisoEducativo \/>\s*<!-- Conten
 
 // 4. Informe PDF
 const pdf = leer('src/services/informePdfService.js')
-prueba('El informe PDF imprime el aviso completo', pdf.includes('AVISO_EDUCATIVO_TEXTO') && pdf.includes('splitTextToSize(AVISO_EDUCATIVO_TEXTO'))
+prueba('El informe PDF imprime el aviso completo', pdf.includes('AVISO_EDUCATIVO_TEXTO') && /texto: AVISO_EDUCATIVO_TEXTO/.test(pdf) && pdf.includes('AVISO_EDUCATIVO_TITULO'))
 prueba('El pie del informe PDF repite la frase corta', pdf.includes('AVISO_EDUCATIVO_CORTO'))
 prueba('El informe pasa a otra página si el aviso no cabe', pdf.includes('doc.addPage()'))
 

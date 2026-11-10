@@ -17,6 +17,9 @@
       </div>
     </div>
 
+    <!-- RF94: el sensor ESP32 es un instrumento didáctico, no un dispositivo médico certificado -->
+    <AvisoEducativo dispositivo />
+
     <!-- Estadísticas Generales -->
     <div class="stats-grid">
       <div class="card stat-card">
@@ -277,6 +280,7 @@
 </template>
 
 <script setup>
+import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted } from 'vue'
 import {
   dispositivosState,

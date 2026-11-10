@@ -3,8 +3,10 @@ import HomeView from '../views/HomeView.vue'
 import MedicionView from '../views/MedicionView.vue'
 import ComparacionView from '../views/ComparacionView.vue'
 import AulasView from '../views/AulasView.vue'
+import AulaDetalleView from '../views/AulaDetalleView.vue'
 import AprendizajeView from '../views/AprendizajeView.vue'
 import LeccionView from '../views/LeccionView.vue'
+import PracticaView from '../views/PracticaView.vue'
 import SimuladorView from '../views/SimuladorView.vue'
 import LoginView from '../views/LoginView.vue'
 import DispositivosView from '../views/DispositivosView.vue'
@@ -13,10 +15,35 @@ import RangosView from '../views/RangosView.vue'
 import ContenidosView from '../views/ContenidosView.vue'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import HistorialView from '../views/HistorialView.vue'
+import PrivacidadView from '../views/PrivacidadView.vue'
+import MisDatosView from '../views/MisDatosView.vue'
+import SeguridadAdminView from '../views/SeguridadAdminView.vue'
+import EvaluacionesView from '../views/EvaluacionesView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
+import { motivoDeRuta } from '../utils/accesoSinSesion'
 
 const routes = [
+  {
+    // RF88: política de privacidad, pública (se lee antes de crear la cuenta)
+    path: '/privacidad',
+    name: 'Privacidad',
+    component: PrivacidadView
+  },
+  {
+    // RF89/RF90: cada persona ve y gestiona solo sus propios datos
+    path: '/mis-datos',
+    name: 'MisDatos',
+    component: MisDatosView,
+    meta: { requiresAuth: true }
+  },
+  {
+    // RF89/RF92: solicitudes de derechos, incidentes y brechas; solo administrador (la RLS también lo exige)
+    path: '/admin/seguridad',
+    name: 'SeguridadAdmin',
+    component: SeguridadAdminView,
+    meta: { requiresAuth: true, roles: [ROLES.ADMIN] }
+  },
   {
     path: '/',
     name: 'Home',
@@ -25,7 +52,8 @@ const routes = [
   {
     path: '/medicion',
     name: 'Medicion',
-    component: MedicionView
+    component: MedicionView,
+    meta: { requiresAuth: true }   // sin sesión no hay sensor: solo se estudia o se compara
   },
   {
     // RF13: Asistente integrado en la vista de medición
@@ -35,7 +63,8 @@ const routes = [
   {
     path: '/dispositivos',
     name: 'Dispositivos',
-    component: DispositivosView
+    component: DispositivosView,
+    meta: { requiresAuth: true }   // los sensores ESP32 son de quien tiene sesión
   },
   {
     path: '/historial',
@@ -51,7 +80,22 @@ const routes = [
   {
     path: '/aulas',
     name: 'Aulas',
-    component: AulasView
+    component: AulasView,
+    meta: { requiresAuth: true }   // sin sesión no se ven aulas
+  },
+  {
+    // RF103: Página del aula (con pestañas: estudiantes, cursos y evaluaciones)
+    path: '/aulas/:id',
+    name: 'AulaDetalle',
+    component: AulaDetalleView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
+  },
+  {
+    // RF106: tipos de evaluación; solo profesor o administrador (la RLS también lo exige)
+    path: '/evaluaciones',
+    name: 'Evaluaciones',
+    component: EvaluacionesView,
+    meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {
     path: '/aprendizaje',
@@ -63,6 +107,12 @@ const routes = [
     path: '/aprendizaje/simulador',
     name: 'Simulador',
     component: SimuladorView
+  },
+  {
+    // Práctica para las evaluaciones: abierta con o sin sesión (va antes de la lección para que no se tome como slug)
+    path: '/aprendizaje/practica',
+    name: 'Practica',
+    component: PracticaView
   },
   {
     // RF38: una lección del apartado de aprendizaje
@@ -131,7 +181,11 @@ router.beforeEach(async (to, _from, next) => {
 
   // Si la ruta requiere autenticación
   if (to.meta.requiresAuth && !isAuthenticated.value) {
-    return next({ name: 'Login' })
+    // Se avisa en el login por qué hace falta la sesión y se vuelve a la pantalla pedida al entrar
+    const query = { redirect: to.fullPath }
+    const motivo = motivoDeRuta(to.name)
+    if (motivo) query.motivo = motivo
+    return next({ name: 'Login', query })
   }
 
   // Si la ruta está restringida a ciertos roles

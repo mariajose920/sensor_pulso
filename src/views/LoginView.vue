@@ -51,6 +51,9 @@
       <div v-if="errorMessage && !cuentaBloqueada" class="alert alert-error">
         {{ errorMessage }}
       </div>
+      <div v-if="avisoSesionRequerida" class="alert alert-info" role="status" data-testid="aviso-sesion-requerida">
+        {{ avisoSesionRequerida }}
+      </div>
       <div v-if="successMessage" class="alert alert-success">
         {{ successMessage }}
       </div>
@@ -67,6 +70,9 @@
 
       <!-- RF75: aviso educativo antes de usar la plataforma -->
       <AvisoEducativo compacto />
+      <p class="nota-privacidad" style="font-size: 0.85rem; margin: 0 0 0.75rem;">
+        Al usar la plataforma tratamos tus datos según la <router-link to="/privacidad" data-testid="enlace-privacidad-login">política de privacidad</router-link>.
+      </p>
 
       <!-- Formulario de Autenticación -->
       <form @submit.prevent="handleSubmit">
@@ -150,10 +156,15 @@
           </div>
         </div>
 
+        <label v-if="mode === 'register'" class="acepta-politica" style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.88rem; margin: 0 0 1rem;">
+          <input v-model="aceptaPolitica" type="checkbox" data-testid="acepta-politica" style="margin-top: 0.2rem;" />
+          <span>He leído y acepto la <router-link to="/privacidad" target="_blank">política de privacidad</router-link>.</span>
+        </label>
+
         <button 
           type="submit" 
           class="btn btn-primary w-full"
-          :disabled="loading || (mode === 'login' && cuentaBloqueada) || (mode === 'register' && !fuerzaPassword.valida)"
+          :disabled="loading || (mode === 'login' && cuentaBloqueada) || (mode === 'register' && (!fuerzaPassword.valida || !aceptaPolitica))"
         >
           {{ loading ? 'Procesando...' : (mode === 'login' ? (cuentaBloqueada ? 'Cuenta Bloqueada' : 'Iniciar Sesión') : 'Crear Cuenta') }}
         </button>
@@ -209,10 +220,12 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { validarCorreoInstitucional } from '../utils/validators'
+import { mensajeSesionRequerida } from '../utils/accesoSinSesion'
 import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
 import { verificarEstadoBloqueo, formatearTiempoRestante } from '../services/seguridadLoginService'
 
@@ -222,10 +235,20 @@ const { login, register, resendConfirmationEmail, loading, solicitarRecuperacion
 
 const mode = ref('login')
 const nombre = ref('')
+const aceptaPolitica = ref(false)
 const email = ref('')
 const password = ref('')
 const errorMessage = ref('')
 const successMessage = ref('')
+// Quien intenta medir o entrar a las aulas sin sesión: solo puede estudiar o comparar
+const avisoSesionRequerida = ref(mensajeSesionRequerida(route.query?.motivo))
+
+// Pantalla a la que volver después de entrar: solo rutas internas de la propia aplicación
+function destinoTrasLogin() {
+  const pedido = route.query?.redirect
+  if (typeof pedido === 'string' && pedido.startsWith('/') && !pedido.startsWith('//')) return pedido
+  return '/medicion'
+}
 const needsEmailConfirmation = ref(false)
 const resending = ref(false)
 
@@ -309,7 +332,7 @@ const handleSubmit = async () => {
     const res = await login(email.value, password.value)
     if (res.success) {
       if (timerBloqueo.value) clearInterval(timerBloqueo.value)
-      router.push('/medicion')
+      router.push(destinoTrasLogin())
     } else {
       errorMessage.value = res.error
       if (res.bloqueado && res.segundosRestantes > 0) {
@@ -326,7 +349,12 @@ const handleSubmit = async () => {
       return
     }
 
-    const res = await register(email.value, password.value, nombre.value)
+    if (!aceptaPolitica.value) {
+      errorMessage.value = 'Para crear la cuenta debes aceptar la política de privacidad.'
+      return
+    }
+
+    const res = await register(email.value, password.value, nombre.value, POLITICA_VERSION)
     if (res.success) {
       successMessage.value = 'Cuenta creada correctamente. Te hemos enviado un enlace a tu correo institucional para activar tu cuenta.'
       needsEmailConfirmation.value = true

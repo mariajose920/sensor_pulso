@@ -1,35 +1,66 @@
 <template>
-  <section class="interpretacion card" data-testid="interpretacion-resultados" aria-label="Interpretación de los resultados">
-    <h3 class="titulo">¿Qué significan tus resultados?</h3>
+  <section class="interpretacion-card card" data-testid="interpretacion-resultados" aria-label="Interpretación de los resultados">
+    <!-- Encabezado de la Tarjeta alineado visualmente con el Comparador de Rangos -->
+    <div class="interpretacion-head">
+      <div class="head-title-block">
+        <div class="title-with-badge">
+          <h3 class="main-title">Significado Clínico</h3>
+          <span class="estado-pill" :class="esTodoNormal ? 'pill-in' : 'pill-out'">
+            {{ esTodoNormal ? 'Parámetros Estables' : 'Revisar Factores' }}
+          </span>
+        </div>
+        <p class="sub-title">¿Qué significan tus resultados? · Orientación médica</p>
+      </div>
+    </div>
 
-    <article
-      v-for="r in bloques"
-      :key="r.id"
-      class="resultado"
-      :class="'estado-' + r.datos.estado"
-      :data-testid="'interpretacion-' + r.id"
-    >
-      <header class="resultado-head">
-        <span class="etiqueta">{{ r.nombre }}</span>
-        <strong class="estado-titulo">{{ r.datos.titulo }}</strong>
-      </header>
-      <p class="texto">{{ r.datos.interpretacion }}</p>
+    <!-- Filas de Interpretación Sintética (Frecuencia y Saturación) -->
+    <div class="interpretacion-rows">
+      <!-- 1. Frecuencia Cardíaca -->
+      <article class="metric-interp-item" :class="'estado-' + resultado.bpm.estado" data-testid="interpretacion-bpm">
+        <header class="metric-interp-head">
+          <span class="metric-name">Frecuencia Cardíaca</span>
+          <span class="metric-chip" :class="'chip-' + resultado.bpm.estado">
+            {{ resultado.bpm.titulo }}
+          </span>
+        </header>
+        <p class="metric-text">{{ resultado.bpm.interpretacion }}</p>
 
-      <h4 class="causas-titulo">Posibles causas de variación</h4>
-      <ul class="causas">
-        <li v-for="c in r.datos.causas" :key="c.clave + c.texto" :class="{ personal: c.personal }">
-          <span v-if="c.personal" class="chip">Tu caso</span>{{ c.texto }}
-        </li>
-      </ul>
-    </article>
+        <!-- Factores relevantes (solo si aplican al caso) -->
+        <div v-if="causasBpmRelevantes.length" class="factores-wrap">
+          <span v-for="c in causasBpmRelevantes" :key="c.clave + c.texto" class="factor-chip" :class="{ 'factor-personal': c.personal }">
+            <strong v-if="c.personal" class="factor-tag">Tu caso:</strong> {{ c.texto }}
+          </span>
+        </div>
+      </article>
 
-    <p class="aviso" data-testid="aviso-interpretacion">{{ resultado.aviso }}</p>
+      <!-- 2. Saturación de Oxígeno -->
+      <article class="metric-interp-item" :class="'estado-' + resultado.spo2.estado" data-testid="interpretacion-spo2">
+        <header class="metric-interp-head">
+          <span class="metric-name">Saturación de Oxígeno</span>
+          <span class="metric-chip" :class="'chip-' + resultado.spo2.estado">
+            {{ resultado.spo2.titulo }}
+          </span>
+        </header>
+        <p class="metric-text">{{ resultado.spo2.interpretacion }}</p>
+
+        <!-- Factores relevantes (solo si aplican al caso) -->
+        <div v-if="causasSpo2Relevantes.length" class="factores-wrap">
+          <span v-for="c in causasSpo2Relevantes" :key="c.clave + c.texto" class="factor-chip" :class="{ 'factor-personal': c.personal }">
+            <strong v-if="c.personal" class="factor-tag">Tu caso:</strong> {{ c.texto }}
+          </span>
+        </div>
+      </article>
+    </div>
+
+    <footer class="interpretacion-footer">
+      <p class="aviso" data-testid="aviso-interpretacion">{{ resultado.aviso }}</p>
+    </footer>
   </section>
 </template>
 
 <script setup>
 /**
- * Interpretación textual del BPM y la SpO₂ de una medición y sus posibles causas de variación (RF23).
+ * Interpretación textual sintética del BPM y la SpO₂ de una medición y factores relevantes (RF23).
  */
 import { computed } from 'vue'
 import { interpretarResultados } from '../utils/interpretacionResultados.js'
@@ -45,24 +76,202 @@ const resultado = computed(() =>
   interpretarResultados({ bpm: props.bpm, spo2: props.spo2, paciente: props.paciente, calidad: props.calidad })
 )
 
-const bloques = computed(() => [
-  { id: 'bpm', nombre: 'Frecuencia cardíaca', datos: resultado.value.bpm },
-  { id: 'spo2', nombre: 'Saturación de oxígeno', datos: resultado.value.spo2 }
-])
+const esTodoNormal = computed(() => {
+  return resultado.value.bpm?.estado === 'dentro' && resultado.value.spo2?.estado === 'dentro'
+})
+
+// Muestra solo factores declarados en la ficha (personal) o como máximo 1 causa principal si no hay factores
+const causasBpmRelevantes = computed(() => {
+  const todas = resultado.value.bpm?.causas || []
+  const personales = todas.filter(c => c.personal)
+  if (personales.length > 0) return personales
+  if (resultado.value.bpm?.estado !== 'dentro') {
+    return todas.slice(0, 1)
+  }
+  return []
+})
+
+const causasSpo2Relevantes = computed(() => {
+  const todas = resultado.value.spo2?.causas || []
+  const personales = todas.filter(c => c.personal)
+  if (personales.length > 0) return personales
+  if (resultado.value.spo2?.estado !== 'dentro') {
+    return todas.slice(0, 1)
+  }
+  return []
+})
 </script>
 
 <style scoped>
-.interpretacion { padding: 1rem; margin: 1rem 0; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); display: grid; gap: 1rem; }
-.titulo { margin: 0; font-size: 1.1rem; }
-.resultado { padding: 0.8rem 1rem; border-left: 4px solid var(--color-success); border-radius: 6px; background: #f0fdf4; }
-.resultado.estado-alto, .resultado.estado-bajo { border-left-color: var(--color-warning); background: #fffbeb; }
-.resultado.estado-invalido { border-left-color: var(--color-muted); background: #f8fafc; }
-.resultado-head { display: flex; flex-wrap: wrap; gap: 0.25rem 0.6rem; align-items: baseline; }
-.etiqueta { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); }
-.estado-titulo { font-size: 1rem; }
-.texto { margin: 0.4rem 0 0; font-size: 0.92rem; line-height: 1.55; }
-.causas-titulo { margin: 0.8rem 0 0.3rem; font-size: 0.9rem; }
-.causas { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.35rem; font-size: 0.88rem; line-height: 1.5; }
-.chip { display: inline-block; margin-right: 0.4rem; padding: 0 0.45rem; border-radius: 999px; background: var(--color-primary); color: #fff; font-size: 0.72rem; font-weight: 700; }
-.aviso { margin: 0; font-size: 0.82rem; line-height: 1.5; color: var(--color-muted); }
+.interpretacion-card {
+  padding: 1rem 1.25rem;
+  margin-bottom: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.interpretacion-head {
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.main-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.sub-title {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin: 0.15rem 0 0 0;
+}
+
+.estado-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+
+.pill-in {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.pill-out {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.interpretacion-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.metric-interp-item {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid #16a34a;
+  transition: all 0.15s ease;
+}
+
+.metric-interp-item.estado-alto,
+.metric-interp-item.estado-bajo {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+
+.metric-interp-item.estado-invalido {
+  border-left-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.metric-interp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.metric-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.metric-chip {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+}
+
+.chip-dentro {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.chip-alto,
+.chip-bajo {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.chip-invalido {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.metric-text {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.factores-wrap {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.factor-chip {
+  font-size: 0.76rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  color: #475569;
+  line-height: 1.35;
+}
+
+.factor-chip.factor-personal {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.factor-tag {
+  color: #2563eb;
+  margin-right: 0.25rem;
+}
+
+.interpretacion-footer {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.aviso {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  line-height: 1.35;
+}
 </style>

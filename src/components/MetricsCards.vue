@@ -96,9 +96,9 @@ const statusText = computed(() => {
   if (props.currentBpm >= 60 && props.currentBpm <= 80) {
     return 'Ritmo Normal en Reposo'
   } else if (props.currentBpm > 80) {
-    return 'Por encima del reposo (Taquicardia)'
+    return 'Por encima del reposo (tiende a taquicardia)'
   } else {
-    return 'Por debajo del reposo (Bradicardia)'
+    return 'Por debajo del reposo (tiende a bradicardia)'
   }
 })
 

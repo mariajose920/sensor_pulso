@@ -128,8 +128,38 @@
               </span>
             </div>
             <small v-if="m.causaCalidad" class="causa">{{ m.causaCalidad }}</small>
+
+            <!-- Publicar después / retirar publicación (RF31, RF57, RF98): solo en mediciones propias del sensor -->
+            <div v-if="accionDe(m).accion || accionDe(m).motivo" class="fila-publicar">
+              <span v-if="m.publica" class="chip chip-publicada" data-testid="historial-publicada">Publicada (anónima)</span>
+              <button
+                v-if="accionDe(m).accion === 'publicar'"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="publicandoId === m.id"
+                data-testid="historial-publicar"
+                @click="medicionAPublicar = m"
+              >Publicar</button>
+              <button
+                v-else-if="accionDe(m).accion === 'retirar'"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="publicandoId === m.id"
+                data-testid="historial-retirar"
+                @click="retirar(m)"
+              >{{ publicandoId === m.id ? 'Retirando…' : 'Retirar publicación' }}</button>
+              <small v-else class="causa" data-testid="historial-motivo-publicar">{{ accionDe(m).motivo }}</small>
+            </div>
+            <small v-if="avisoPorId[m.id]" class="causa" role="status" data-testid="historial-aviso-publicar">{{ avisoPorId[m.id] }}</small>
           </li>
         </ul>
+
+        <PublicarDesdeHistorialModal
+          v-if="medicionAPublicar"
+          :medicion="medicionAPublicar"
+          @cerrar="medicionAPublicar = null"
+          @publicada="alPublicada"
+        />
 
         <div v-if="hayMas" style="text-align: center; margin: 1rem 0;">
           <button type="button" class="btn btn-secondary" :disabled="cargando" @click="cargar(false)">
@@ -147,9 +177,9 @@
             <label for="filtro-tipo-alerta" class="form-label">Tipo de Alerta</label>
             <select id="filtro-tipo-alerta" v-model="filtroTipoAlerta" class="form-input filtro-select">
               <option value="todos">Todas las alertas</option>
-              <option value="bpm_alto">Taquicardia (BPM Alto)</option>
-              <option value="bpm_bajo">Bradicardia (BPM Bajo)</option>
-              <option value="spo2_bajo">Desaturación SpO₂</option>
+              <option value="bpm_alto">Tendencia a taquicardia (BPM alto)</option>
+              <option value="bpm_bajo">Tendencia a bradicardia (BPM bajo)</option>
+              <option value="spo2_bajo">Tendencia a desaturación (SpO₂ baja)</option>
               <option value="irregular">Ritmo Irregular</option>
               <option value="senal_mala">Señal Deficiente</option>
             </select>
@@ -256,7 +286,10 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
 import EstadoConexionBadge from '../components/EstadoConexionBadge.vue'
 import { useAuth } from '../composables/useAuth'
-import { listarHistorial, sincronizarPendientes, contarPendientes } from '../services/medicionesService'
+import PublicarDesdeHistorialModal from '../components/PublicarDesdeHistorialModal.vue'
+import { usePuedePublicar } from '../composables/usePuedePublicar'
+import { accionHistorial, mensajeErrorHistorial } from '../utils/terminarMedicion.js'
+import { listarHistorial, sincronizarPendientes, contarPendientes, retirarPublicacion } from '../services/medicionesService'
 import { listarHistorialAlertas, obtenerMetadatosAlerta } from '../services/alertasService'
 import { ETIQUETAS_RITMO, ETIQUETAS_FUENTE } from '../utils/medicion'
 
@@ -275,6 +308,31 @@ const filtroRango = ref('todos') // 'todos' | 'dentro' | 'fuera'
 const pagina = ref(0)
 const pendientes = ref(0)
 const sincronizando = ref(false)
+
+// Publicar después / retirar publicación: permisos y sesión se consultan una vez al abrir la pantalla
+const { cuenta: cuentaPublicar, cargar: cargarCondicionesPublicar } = usePuedePublicar()
+const medicionAPublicar = ref(null)
+const publicandoId = ref(null)
+const avisoPorId = ref({})
+const accionDe = (m) => accionHistorial(m, cuentaPublicar.value)
+
+function alPublicada(id) {
+  items.value = items.value.map(m => (m.id === id ? { ...m, publica: true } : m))
+  avisoPorId.value = { ...avisoPorId.value, [id]: '' }
+}
+
+async function retirar(m) {
+  if (publicandoId.value) return
+  publicandoId.value = m.id
+  avisoPorId.value = { ...avisoPorId.value, [m.id]: '' }
+  try {
+    const r = await retirarPublicacion(m.id)
+    if (r.ok) items.value = items.value.map(x => (x.id === m.id ? { ...x, publica: false } : x))
+    else avisoPorId.value = { ...avisoPorId.value, [m.id]: mensajeErrorHistorial(r.motivo, 'retirar') }
+  } finally {
+    publicandoId.value = null
+  }
+}
 
 // Estado del registro de alertas (RF21)
 const alertasItems = ref([])
@@ -378,6 +436,7 @@ onMounted(async () => {
   if (pendientes.value > 0 && navigator.onLine) await sincronizar()
   else await cargar(true)
 
+  cargarCondicionesPublicar().catch(() => {})
   await cargarAlertas()
 })
 
@@ -455,6 +514,8 @@ onBeforeUnmount(() => window.removeEventListener('online', alVolverConexion))
 .chip { font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 9999px; background: #f1f5f9; border: 1px solid var(--color-border); color: var(--color-text); display: inline-flex; align-items: center; }
 .chip-dentro { background: #dcfce7; border-color: #86efac; color: #15803d; }
 .chip-fuera { background: #fef3c7; border-color: #fcd34d; color: #b45309; }
+.fila-publicar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
+.chip-publicada { background: #dbeafe; border-color: #bfdbfe; color: #1e40af; }
 .chip-alerta-tag { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
 
 .chip-sonora { background: #dbeafe; border-color: #bfdbfe; color: #1e40af; }

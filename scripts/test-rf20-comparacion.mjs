@@ -128,7 +128,7 @@ it('Detecta desaturación / hipoxia (SpO2 91% < 95% normoxémico)', () => {
   assert.strictEqual(res.spo2.dentro, false)
   assert.strictEqual(res.spo2.estado, 'bajo')
   assert.strictEqual(res.spo2.diferencia, 4)
-  assert.ok(res.spo2.diagnostico.includes('4% bajo el umbral'))
+  assert.ok(res.spo2.diagnostico.includes('4% bajo el mínimo'))
 })
 
 it('Detecta ambos biomarcadores fuera de rango y sintetiza el motivo clínico', () => {
@@ -136,7 +136,7 @@ it('Detecta ambos biomarcadores fuera de rango y sintetiza el motivo clínico', 
   assert.strictEqual(res.dentroDeRango, false)
   assert.strictEqual(res.bpm.dentro, false)
   assert.strictEqual(res.spo2.dentro, false)
-  assert.ok(res.resumenClinico.includes('Biomarcador fuera de rango'))
+  assert.ok(res.resumenClinico.includes('fuera del rango de referencia'))
 })
 
 // ----------------------------------------------------------------------------

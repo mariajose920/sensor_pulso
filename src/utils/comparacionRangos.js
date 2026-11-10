@@ -90,17 +90,17 @@ export function evaluarComparacionRango({
       evalBpm.dentro = false
       evalBpm.estado = 'alto'
       evalBpm.diferencia = parseFloat((numBpm - ref.bpm_max).toFixed(1))
-      evalBpm.diagnostico = `Frecuencia elevada (+${evalBpm.diferencia} BPM sobre el límite superior de ${ref.bpm_max} BPM)`
+      evalBpm.diagnostico = `Frecuencia por encima del rango de referencia (+${evalBpm.diferencia} BPM sobre el límite superior de ${ref.bpm_max} BPM): se parece a los parámetros de taquicardia`
     } else if (numBpm < ref.bpm_min) {
       evalBpm.dentro = false
       evalBpm.estado = 'bajo'
       evalBpm.diferencia = parseFloat((numBpm - ref.bpm_min).toFixed(1))
-      evalBpm.diagnostico = `Frecuencia reducida (${Math.abs(evalBpm.diferencia)} BPM bajo el límite inferior de ${ref.bpm_min} BPM)`
+      evalBpm.diagnostico = `Frecuencia por debajo del rango de referencia (${Math.abs(evalBpm.diferencia)} BPM bajo el límite inferior de ${ref.bpm_min} BPM): se parece a los parámetros de bradicardia`
     } else {
       evalBpm.dentro = true
       evalBpm.estado = 'dentro'
       evalBpm.diferencia = 0
-      evalBpm.diagnostico = `Normocardia dentro de rango (${ref.bpm_min} - ${ref.bpm_max} BPM)`
+      evalBpm.diagnostico = `Frecuencia dentro del rango de referencia (${ref.bpm_min} - ${ref.bpm_max} BPM), similar a los parámetros de normocardia`
     }
 
     // Cálculo de posición en escala visual continua (escala de 40 a 160 BPM)
@@ -127,12 +127,12 @@ export function evaluarComparacionRango({
       evalSpo2.dentro = false
       evalSpo2.estado = 'bajo'
       evalSpo2.diferencia = parseFloat((ref.spo2_min - numSpo2).toFixed(1))
-      evalSpo2.diagnostico = `Desaturación arterial (${evalSpo2.diferencia}% bajo el umbral normoxémico de ${ref.spo2_min}%)`
+      evalSpo2.diagnostico = `Saturación por debajo del rango de referencia (${evalSpo2.diferencia}% bajo el mínimo de ${ref.spo2_min}%): se parece a los parámetros de desaturación`
     } else {
       evalSpo2.dentro = true
       evalSpo2.estado = 'dentro'
       evalSpo2.diferencia = 0
-      evalSpo2.diagnostico = `Normoxemia adecuada (≥${ref.spo2_min}%)`
+      evalSpo2.diagnostico = `Saturación dentro del rango de referencia (≥${ref.spo2_min}%), similar a los parámetros de normoxemia`
     }
 
     // Escala SpO₂ (de 80% a 100%)
@@ -153,13 +153,13 @@ export function evaluarComparacionRango({
 
     if (dentroDeRango) {
       estadoGlobal = 'dentro'
-      resumenClinico = `Los biomarcadores registrados coinciden con los rangos esperados para el participante en ${actividad}.`
+      resumenClinico = `Los valores registrados están dentro de los rangos de referencia para el participante en ${actividad}.`
     } else {
       estadoGlobal = 'fuera'
       const motivos = []
       if (!evalBpm.dentro) motivos.push(evalBpm.diagnostico)
       if (tieneSpo2 && !evalSpo2.dentro) motivos.push(evalSpo2.diagnostico)
-      resumenClinico = `Biomarcador fuera de rango: ${motivos.join(' · ')}.`
+      resumenClinico = `Valor fuera del rango de referencia: ${motivos.join(' · ')}.`
     }
   }
 

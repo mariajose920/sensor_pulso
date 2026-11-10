@@ -31,7 +31,7 @@
         >
           Otras Sesiones
         </button>
-        <button type="button" class="btn btn-secondary btn-acceso" @click="logout">Salir</button>
+        <button type="button" class="btn btn-secondary btn-acceso" @click="manejarLogout">Salir</button>
       </template>
       <router-link v-else to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
         <NavIcon name="usuario" class="solo-movil" />
@@ -49,6 +49,10 @@
     <footer class="footer">
       <p>sensor_pulso — Plataforma Educativa de Monitoreo de Frecuencia Cardíaca y SpO₂ (UNACH)</p>
       <p class="footer-aviso" data-testid="aviso-pie">{{ AVISO_EDUCATIVO_CORTO }}</p>
+      <p>
+        <router-link to="/privacidad" data-testid="enlace-privacidad">Política de privacidad</router-link>
+        <template v-if="isAuthenticated"> · <router-link to="/mis-datos" data-testid="enlace-mis-datos">Mis datos y derechos</router-link></template>
+      </p>
     </footer>
 
     <!-- Barra inferior (solo móvil): íconos con texto, fácil de tocar con el pulgar. -->
@@ -76,8 +80,11 @@
 </template>
 
 <script setup>
+import { useRouter } from 'vue-router'
 import { AVISO_EDUCATIVO_CORTO } from './data/avisoEducativo.js'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { ENLACES_SOLO_CON_SESION, motivoDeRuta } from './utils/accesoSinSesion'
 import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
@@ -94,8 +101,22 @@ const enlacesBase = [
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
 
+const router = useRouter()
+
+const manejarLogout = async () => {
+  await logout()
+  router.push('/')
+}
+
 // En la desestructuración de useAuth() agrega cerrarOtrasSesiones:
 const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout, cerrarOtrasSesiones } = useAuth()
+// Si se cierra la sesión estando en una pantalla que la exige (por ejemplo Medición), se vuelve al login
+const rutaActual = useRoute()
+watch(isAuthenticated, (conSesion) => {
+  if (!conSesion && rutaActual.meta?.requiresAuth) {
+    router.push({ name: 'Login', query: { motivo: motivoDeRuta(rutaActual.name) } })
+  }
+})
 const mensajeOtrasSesiones = ref('')
 const manejarCerrarOtrasSesiones = async () => {
   const res = await cerrarOtrasSesiones()
@@ -108,9 +129,12 @@ const manejarCerrarOtrasSesiones = async () => {
 // RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
 // RF30: el historial de mediciones solo lo ve quien tiene sesión
 const enlaces = computed(() => {
-  const lista = [...enlacesBase]
+  // Sin sesión no hay sensor: Medición, Dispositivos y Aulas solo las ve quien inició sesión
+  const lista = enlacesBase.filter(e => !ENLACES_SOLO_CON_SESION.includes(e.to) || isAuthenticated.value)
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
+  if (isAdmin.value || isProfesor.value) lista.push({ to: '/evaluaciones', texto: 'Evaluaciones', corto: 'Evaluar', icono: 'aulas' })   // RF106
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
+  if (isAdmin.value) lista.push({ to: '/admin/seguridad', texto: 'Seguridad', corto: 'Seguridad', icono: 'usuario' }) // RF88/RF92
   else if (isProfesor.value) {
     lista.push({ to: '/rangos', texto: 'Rangos', corto: 'Rangos', icono: 'comparacion' })
     lista.push({ to: '/contenidos', texto: 'Contenidos', corto: 'Contenidos', icono: 'comparacion' })   // RF46

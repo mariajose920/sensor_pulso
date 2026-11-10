@@ -1,20 +1,19 @@
 <template>
   <div class="medicion-view">
+    <!-- Estado discreto del guardado de la ficha en segundo plano (RF03): no bloquea el avance de pasos -->
+    <div v-if="avisoFichaVisible" class="ficha-toast" :class="'ficha-toast-' + estadoGuardadoFicha.estado" role="status" aria-live="polite" data-testid="ficha-toast">
+      <span>{{ estadoGuardadoFicha.mensaje }}</span>
+      <button v-if="estadoGuardadoFicha.estado === 'error'" type="button" class="ficha-toast-btn" @click="reintentarGuardadoFicha">Reintentar</button>
+    </div>
+    <!-- RF01: lo primero que se ve es quién está identificado (docente, administrador, etc.) -->
+    <UserIdentifier />
+
     <!-- Encabezado de la vista -->
     <div class="view-header">
       <div>
         <h1 class="view-title">Medición y Tiempo Real</h1>
-        <p class="view-subtitle">
-          Protocolo clínico guiado: Consentimiento informado → Ficha del paciente → Reposo de 1 minuto → Medición de FC en vivo → Resultados clínicos.
-        </p>
-      </div>
-      <div class="header-modo-tag">
-        <span class="punto-verde">●</span> Paso {{ pasoActual }} de 5: <strong>{{ pasosInfo[pasoActual - 1]?.nombre }}</strong>
       </div>
     </div>
-
-    <!-- RF01: Identificador del usuario que realiza la medición -->
-    <UserIdentifier />
 
     <!-- Stepper Visual Superior (RF13: 5 Pasos Clínicos) -->
     <nav class="stepper-nav card" aria-label="Progreso del protocolo de medición">
@@ -331,21 +330,17 @@
     <!-- PASO 4: MEDICIÓN EN TIEMPO REAL (TODO LO QUE ES MEDICIÓN)             -->
     <!-- ===================================================================== -->
     <section v-else-if="pasoActual === 4" class="anim-fade" aria-labelledby="paso4-titulo">
-      <AvisoEducativo compacto />
+      <AvisoEducativo v-if="!esDocenteVista" compacto />
       <div class="card step-intro-medicion">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
           <div>
-            <span class="step-badge">Paso 4 de 5 · Adquisición en Vivo</span>
             <h2 id="paso4-titulo" class="step-heading" style="margin: 0.25rem 0;">
               Medición de la Frecuencia Cardíaca y Señal PPG
             </h2>
             <p class="step-desc" style="margin: 0;">
-              El paciente completó su reposo. Adquiriendo datos ópticos del sensor MAX30102 por WiFi en tiempo real.
+              El paciente completó su reposo. Adquiriendo datos ópticos del sensor MAX30102 en tiempo real por la fuente que elijas (WiFi o USB).
             </p>
           </div>
-          <button type="button" class="btn btn-success btn-lg" @click="finalizarMedicionYVerResultados">
-            <span>Finalizar Medición y Ver Resultados (Paso 5)</span> ➔
-          </button>
         </div>
       </div>
 
@@ -366,11 +361,15 @@
             </div>
             <span class="pac-sub">Ficha validada para adquisición de bioseñales (RF03)</span>
           </div>
-          <div v-if="consentimientoEstado.vigente" class="pac-consent-pill">
+          <div v-if="consentimientoEstado.vigente" class="pac-consent-pill" data-testid="consentimiento-valido">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
             <span>Consentimiento Válido</span>
+          </div>
+          <div v-else class="pac-consent-pill pill-sin" data-testid="consentimiento-no-valido">
+            <span>Sin consentimiento válido</span>
+            <button type="button" class="btn-enlace-docente" @click="pasoActual = 1">Abrir consentimiento</button>
           </div>
         </div>
 
@@ -394,22 +393,75 @@
         </div>
       </div>
 
+      <!-- 1) ¿Cómo se mide? WiFi o USB: el resto de la pantalla depende de la respuesta -->
+      <FuenteMedicionSelector />
+
+      <!-- Solo con fines de aprendizaje: se muestra con cualquiera de las dos fuentes -->
+      <div class="alert alert-info aviso-aprendizaje" role="note" data-testid="aviso-solo-aprendizaje">
+        <strong>Solo con fines de aprendizaje.</strong>
+        Esta medición es un ejercicio educativo: no es un dispositivo médico, no entrega diagnósticos y no reemplaza la evaluación de un profesional de la salud.
+      </div>
+
+      <!-- 2) Con la fuente conectada: pacientes y canales -->
+      <template v-if="esDocenteVista">
+        <!-- Solo un botón: al agregar el paciente aparece su gráfica y se puede agregar otro -->
+        <CanalesPacientesPanel v-if="fuenteConectada" @agregado="alAgregarCanal" />
+      </template>
+      <template v-else>
+        <!-- Estudiantes y usuarios: eligen su canal libre (RF12 / RF111) -->
+        <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+      </template>
+
       <!-- Control y Gestión de Sesión de Medición en Vivo (RF09, RF10, RF11, RF111) -->
-      <SesionMedicionControl @ver-resultados="finalizarMedicionYVerResultados" />
+      <!-- (Docente/administrador: el estado de la conexión se ve en «¿Cómo vas a medir?» y cada paciente se cierra con
+           «Terminar»; el control de sesión con cronómetro y rondas queda para estudiantes y usuarios.) -->
+      <details v-if="!esDocenteVista" class="herramientas-prueba">
+        <summary>Sesión de medición (inicio, fin y estado)</summary>
+        <SesionMedicionControl @ver-resultados="finalizarMedicionYVerResultados" />
+      </details>
 
-      <!-- Barra de Estado WiFi del ESP32 (RF05, RF54) -->
-      <Esp32WifiStatus
-        :conectado="esp32State.conectado"
-        :dispositivo="esp32State.dispositivo"
-        :ip="esp32State.ip"
-        :paquete="esp32State.paquete"
-        :rssi="esp32State.rssi"
-        :tiempoDesdeContacto="esp32State.tiempoTranscurridoSegundos"
-      />
+      <!-- RF10 / RF11: si se pierde la comunicación en plena medición, se avisa y las gráficas quedan con lo último recibido -->
+      <div v-if="esDocenteVista && perdioConexion" class="alert alert-warning" role="alert" data-testid="comunicacion-perdida">
+        <strong>Se perdió la comunicación con el sensor.</strong>
+        Las gráficas muestran lo último que llegó. Revisa la conexión por {{ fuenteActual === 'usb' ? 'USB' : 'WiFi' }}; al volver, la medición
+        continúa sola. Si no vuelve, pulsa «Terminar» en cada gráfica para guardar lo medido.
+      </div>
 
-      <!-- Componente de Vinculación de Canales por Cuenta (RF12 / RF111) -->
-      <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+      <!-- Un canal sin datos del paciente, términos y consentimiento no puede medir -->
+      <div v-if="!canalSeleccionadoListo && !docenteSinCanal && !esDocenteVista" class="alert alert-warning" role="alert" data-testid="canal-bloqueado">
+        <strong>El Canal {{ canalSeleccionado }} aún no puede medir.</strong>
+        Completa los datos del paciente, los términos y condiciones y el consentimiento de esa persona.
+      </div>
 
+      <!-- Fuente conectada pero sin datos del sensor: no se muestran valores ni gráficas inventados -->
+      <div v-if="canalSeleccionadoListo && fuenteConectada && !sensorDetectado" class="alert alert-warning" role="status" data-testid="sensor-no-detectado">
+        <strong>Sensor no detectado.</strong>
+        La fuente está conectada pero todavía no llegan datos de los sensores. Revisa que el sensor MAX30102 esté conectado al ESP32 y apoya el dedo sobre él.
+      </div>
+
+      <!-- Sensor conectado a la placa pero sin dedo apoyado: la señal es plana -->
+      <div v-if="medicionActiva && canalActivoData?.calidad === 'sin_dedo'" class="alert alert-warning" role="status" data-testid="sin-dedo">
+        <strong>Sin dedo sobre el sensor.</strong>
+        La placa envía datos, pero no detecta un dedo: apóyalo suavemente sobre el sensor para ver el pulso.
+      </div>
+
+      <!-- 3) Gráficos: uno por canal o todos juntos con un color por canal. Con WiFi aparecen al agregar el
+           paciente; con USB, al pulsar «Iniciar medición». -->
+      <div ref="zonaGraficas">
+        <GraficasCanalesPropios
+          v-if="(sensorDetectado || perdioConexion) && graficablesPropios.length >= 1"
+          :graficables="graficablesPropios"
+          :frecuenciaHz="esp32State.frecuenciaHz"
+          :sesion-id="canalesState.sesionActivaId"
+          :fuente="simuladorActivo ? 'simulador' : 'sensor'"
+          :paciente-de="pacienteDeCanal"
+          @quitar="quitarCanal"
+        />
+      </div>
+
+      <!-- Valores del canal seleccionado (plegado para el docente). La única gráfica es la del canal, más arriba. -->
+      <component :is="esDocenteVista ? 'details' : 'div'" v-if="medicionActiva" class="detalle-canal">
+      <summary v-if="esDocenteVista">Valores del canal seleccionado</summary>
       <!-- Monitores de Biomarcadores Fisiológicos en Tiempo Real (RF07: BPM, RF114: SpO₂) -->
       <div class="biomarcadores-grid">
         <!-- RF07: Monitor y Despliegue del Valor de Frecuencia Cardíaca (BPM) -->
@@ -440,9 +492,11 @@
           :perfusionIndex="monitorSpo2.stats.indicePerfusion"
         />
       </div>
+      </component>
 
-            <!-- RF21: Alerta Fuera de Rango: Visual, Sonora y con Registro en el Historial -->
+      <!-- RF21: Alerta Fuera de Rango: Visual, Sonora y con Registro en el Historial -->
       <AlertaFueraRangoBanner
+        v-if="medicionActiva"
         :alerta-activa="alertaFueraRangoActiva"
         :tipo="alertaFueraRangoTipo"
         :valor="alertaFueraRangoValor"
@@ -455,23 +509,15 @@
 
       <!-- Comparación Cuantitativa y Visual con el Rango Fisiológico (RF20) -->
       <ComparadorRangoCard
+        v-if="medicionActiva"
         :bpm="canalActivoData?.bpm || monitorBpm.stats.instantBpm || 0"
         :spo2="canalActivoData?.spo2 || monitorSpo2.stats.instantSpo2 || 0"
         :paciente="pacienteActivo"
       />
 
-      <!-- Osciloscopio en Tiempo Real de la Señal PPG recibida por WiFi -->
-      <OsciloscopioCanvas
-        :canal="canalSeleccionado"
-        :activo="esp32State.conectado"
-        :muestrasIr="senalBuffer.ir"
-        :muestrasRojo="senalBuffer.rojo"
-        :frecuenciaHz="esp32State.frecuenciaHz"
-        @repetir="repetirMedicionCanal"
-      />
-
       <!-- RF08: Visualizar hasta 5 canales a la vez, cada uno con BPM y SpO₂ (con soporte de asignación RF12) -->
       <MultiCanalMonitor
+        v-if="canalesMostrados.length && !esDocenteVista"
         :canales="canalesMostrados"
         :canalSeleccionado="canalSeleccionado"
         :miCanalAsignado="miCanalAsignado"
@@ -480,6 +526,8 @@
       />
 
       <!-- Panel de Pruebas, Diagnóstico y Firmware -->
+      <details v-if="usuarioActual.rol === 'admin'" class="herramientas-prueba">
+        <summary>Herramientas de prueba, firmware y documentación (WiFi)</summary>
       <div class="card test-panel">
         <div class="test-tabs">
           <button 
@@ -597,9 +645,7 @@
           </table>
         </div>
       </div>
-
-      <!-- RF17: detección de picos, BPM y HRV -->
-      <DeteccionPicosPanel :paciente="pacienteActivo" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+      </details>
 
       <!-- Botones de Acción Paso 4 -->
       <div class="step-nav-actions" style="margin-top: 1.5rem;">
@@ -676,8 +722,25 @@
           </div>
         </div>
 
+        <!-- Grid 50-50: Evaluación de Rangos (RF20) + Significado Clínico (RF23) -->
+        <div class="resultados-analisis-grid">
+          <!-- Columna Izquierda (50%): Evaluación Cuantitativa y Visual de Rangos (RF20) -->
+          <ComparadorRangoCard
+            :bpm="resultadosFinales.bpm"
+            :spo2="resultadosFinales.spo2"
+            :paciente="pacienteActivo"
+          />
+
+          <!-- Columna Derecha (50%): Significado Clínico y Factores del Caso (RF23) -->
+          <InterpretacionResultados
+            :bpm="resultadosFinales.bpm"
+            :spo2="resultadosFinales.spo2"
+            :paciente="pacienteActivo"
+          />
+        </div>
+
         <!-- RF22: cómo se obtuvieron el BPM y la SpO₂ de esta medición -->
-        <details class="explicacion-obtencion" open>
+        <details class="explicacion-obtencion">
           <summary>¿Cómo se obtuvieron estos resultados?</summary>
           <ExplicacionResultados
             tipo="ambos"
@@ -686,20 +749,6 @@
             :ratioR="monitorSpo2.stats.ratioR"
           />
         </details>
-
-        <!-- Comparación Cuantitativa y Visual de Resultados con el Rango Fisiológico (RF20) -->
-        <ComparadorRangoCard
-          :bpm="resultadosFinales.bpm"
-          :spo2="resultadosFinales.spo2"
-          :paciente="pacienteActivo"
-        />
-
-        <!-- Interpretación textual de los resultados y causas de variación (RF23) -->
-        <InterpretacionResultados
-          :bpm="resultadosFinales.bpm"
-          :spo2="resultadosFinales.spo2"
-          :paciente="pacienteActivo"
-        />
 
         <!-- Tarjeta de Clasificación del Ritmo Cardíaco (RF18 AHA / Mayo Clinic) -->
         <div 
@@ -780,18 +829,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import ConsentimientoModal from '../components/ConsentimientoModal.vue'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'
-import DeteccionPicosPanel from '../components/DeteccionPicosPanel.vue'
-import Esp32WifiStatus from '../components/Esp32WifiStatus.vue'
+import FuenteMedicionSelector from '../components/FuenteMedicionSelector.vue'
+import CanalesPacientesPanel from '../components/CanalesPacientesPanel.vue'
 import ValorBpmCard from '../components/ValorBpmCard.vue'
 import ValorSpo2Card from '../components/ValorSpo2Card.vue'
-import OsciloscopioCanvas from '../components/OsciloscopioCanvas.vue'
 import CanalCard from '../components/CanalCard.vue'
 import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
+import GraficasCanalesPropios from '../components/GraficasCanalesPropios.vue'
+import { canalesGraficables } from '../utils/graficasCanales.js'
+import { esDocente } from '../utils/canalesMultiples.js'
+import { contextoPaciente } from '../utils/terminarMedicion.js'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import ExplicacionResultados from '../components/ExplicacionResultados.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
@@ -807,23 +859,29 @@ import { sesionState } from '../services/sesionMedicionService'
 import { crearMonitorEstadisticasBpm } from '../services/bpmService'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
-import { pacienteService } from '../services/pacienteService'
+import { pacienteService, estadoGuardadoFicha } from '../services/pacienteService'
 import { clasificarRitmo } from '../services/ritmoService'
 import { descargarInformeClinicoPdf } from '../services/informePdfService'
 import {
   esp32State,
-  senalBuffer,
   iniciarSondeoWiFi,
   detenerSondeoWiFi,
+  fuenteElegida,
+  usbState,
+  desconectarUsb,
   emitirPaquetePruebaWiFi,
   toggleSimuladorWiFi,
   simuladorActivo,
-  setCanalOsciloscopio,
-  repetirMedicionCanal
+  setCanalOsciloscopio
 } from '../services/esp32Service'
 import {
   canalesState,
-  miCanalAsignado
+  usuarioActual,
+  miCanalAsignado,
+  misCanales,
+  requisitosCanales,
+  desvincularMiCuenta,
+  puedeMedirEnCanal
 } from '../services/canalesService'
 
 // ============================================================================
@@ -972,10 +1030,30 @@ function onPacienteActualizado(datos) {
   errorPacientePaso2.value = ''
 }
 
+// Guardado de la ficha en segundo plano: el aviso discreto sale de estadoGuardadoFicha (Guardando… / Guardada / error)
+const avisoFichaVisible = ref(false)
+let temporizadorAvisoFicha = null
+watch(() => estadoGuardadoFicha.value.estado, (estado) => {
+  clearTimeout(temporizadorAvisoFicha)
+  avisoFichaVisible.value = estado === 'guardando' || estado === 'guardado' || estado === 'error'
+  if (estado === 'guardado') temporizadorAvisoFicha = setTimeout(() => { avisoFichaVisible.value = false }, 2500)
+})
+// Cuando el servidor confirma, la ficha activa recibe el id de su fila (lo usa «Terminar» para ligar la medición)
+watch(() => estadoGuardadoFicha.value.ficha, (f) => {
+  if (f?.id && pacienteActivo.value && !pacienteActivo.value.id) {
+    pacienteActivo.value = { ...pacienteActivo.value, id: f.id, creadoEn: f.creadoEn, origen: f.origen, pendienteSync: Boolean(f.pendienteSync) }
+  }
+})
+function reintentarGuardadoFicha() {
+  pacienteService.reintentarSincronizacion()
+}
+
 async function confirmarPaso2() {
   errorPacientePaso2.value = ''
 
-  // 1. Si la tarjeta está en modo edición, le ordenamos guardar los datos ingresados
+  // 1. Si la tarjeta está en modo edición, le ordenamos guardar los datos ingresados. La tarjeta valida y guarda la copia
+  //    de la pestaña al instante y envía al servidor en segundo plano: aquí NO se espera a la red (la interfaz no se congela).
+  //    Si el usuario no cambió nada, no se vuelve a guardar.
   if (pacienteCardRef.value?.modoEdicion) {
     const guardadoExitoso = await pacienteCardRef.value.guardar()
     if (!guardadoExitoso) {
@@ -992,7 +1070,7 @@ async function confirmarPaso2() {
   }
   const edadNum = Number(datos.edad)
   if (!edadNum || edadNum < 18 || edadNum > 120) {
-    errorPacientePaso2.value = 'La edad debe ser de 18 a 120 años (solo se miden mayores de edad).'
+    errorPacientePaso2.value = 'La persona debe ser mayor de edad (18 años o más): revisa la fecha de nacimiento.'
     return
   }
   if (!datos.nivelEstres) {
@@ -1106,24 +1184,92 @@ const tokenPrueba = ref('esp_demotoken_unach_2026_rf05')
 const enviandoManual = ref(false)
 const ultimoResultadoEnvio = ref(null)
 
-const canalesPorDefecto = [
-  { canal: 1, activo: true, bpm: 72.0, spo2: 98.2, calidad: 'buena' },
-  { canal: 2, activo: true, bpm: 68.5, spo2: 97.5, calidad: 'buena' },
-  { canal: 3, activo: true, bpm: 80.0, spo2: 99.0, calidad: 'buena' },
-  { canal: 4, activo: true, bpm: 75.2, spo2: 98.0, calidad: 'regular' },
-  { canal: 5, activo: true, bpm: 65.0, spo2: 96.8, calidad: 'buena' }
-]
+// Solo datos reales del ESP32: sin sensor no se inventan canales ni valores
+const canalesMostradosTodos = computed(() => esp32State.canales || [])
 
+// ¿El sensor está enviando datos? (conectado por WiFi y con canales recibidos)
+const sensorDetectado = computed(() => Boolean(esp32State.conectado) && (esp32State.canales || []).length > 0)
+
+// Profesor/admin: solo los canales tomados; un canal libre no muestra nada
 const canalesMostrados = computed(() => {
-  if (esp32State.canales && esp32State.canales.length > 0) {
-    return esp32State.canales
-  }
-  return canalesPorDefecto
+  if (!esDocente(usuarioActual.rol)) return canalesMostradosTodos.value
+  const tomados = new Set(canalesState.canales.filter(c => c.usuario_id).map(c => c.canal))
+  return canalesMostradosTodos.value.filter(c => tomados.has(c.canal))
 })
 
 const canalActivoData = computed(() => {
   return canalesMostrados.value.find(c => c.canal === canalSeleccionado.value)
 })
+
+// RF111: un canal adicional (profesor/admin) no mide sin ficha + términos + consentimiento de su persona
+// Profesor/admin sin ningún canal: primero deben usar «Agregar canal» (ficha, términos y consentimiento)
+const docenteSinCanal = computed(() => esDocente(usuarioActual.rol) && misCanales.value.length === 0)
+const canalSeleccionadoListo = computed(() => !docenteSinCanal.value && puedeMedirEnCanal(canalSeleccionado.value))
+// Se muestran gráficas y valores solo con el canal habilitado Y el sensor detectado
+// Docente/administrador: ven su propio flujo (fuente → pacientes y canales → gráficas)
+const esDocenteVista = computed(() => esDocente(usuarioActual.rol))
+const fuenteActual = computed(() => esp32State.fuente)
+// ¿La fuente elegida está conectada? WiFi: el ESP32 envía datos; USB: el puerto está abierto
+const fuenteConectada = computed(() =>
+  fuenteActual.value === 'wifi' ? Boolean(esp32State.conectado)
+    : fuenteActual.value === 'usb' ? Boolean(usbState.conectado)
+      : false
+)
+// La gráfica aparece apenas hay un canal listo y el sensor envía datos (WiFi o USB)
+const medicionActiva = computed(() => canalSeleccionadoListo.value && sensorDetectado.value)
+
+// Al agregar un paciente se muestra su gráfica de inmediato y la pantalla se mueve para dejarla en el centro
+const zonaGraficas = ref(null)
+function centrarGraficas() {
+  nextTick(() => {
+    setTimeout(() => {
+      const zona = zonaGraficas.value
+      const tarjetas = zona ? zona.querySelectorAll('[data-testid="grafica-canal"]') : []
+      const destino = tarjetas.length ? tarjetas[tarjetas.length - 1]
+        : (zona?.firstElementChild || document.querySelector('[data-testid="sensor-no-detectado"]'))
+      if (!destino?.scrollIntoView) return
+      const reducir = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      destino.scrollIntoView({ behavior: reducir ? 'auto' : 'smooth', block: 'center' })
+    }, 150)
+  })
+}
+function alAgregarCanal(canal) {
+  seleccionarCanal(canal)
+  centrarGraficas()
+}
+async function quitarCanal(canal) {
+  try { await desvincularMiCuenta(canal) } catch { /* el panel de canales ya informa los errores */ }
+}
+
+// RF10 / RF11: la comunicación se «perdió» si estaba conectada, había pacientes midiendo y dejó de estarlo
+const perdioConexion = ref(false)
+watch(fuenteConectada, (ahora, antes) => {
+  if (ahora) perdioConexion.value = false
+  else if (antes && esDocenteVista.value && misCanales.value.length > 0) perdioConexion.value = true
+})
+watch(fuenteActual, () => { perdioConexion.value = false }) // al cambiar de WiFi a USB no hay nada «perdido»
+
+// Si el canal en pantalla no es de este docente, se pasa a su primer canal habilitado
+watch(() => misCanales.value.map(c => c.canal).join(','), () => {
+  if (!esDocenteVista.value || !misCanales.value.length) return
+  if (!misCanales.value.some(c => c.canal === canalSeleccionado.value)) seleccionarCanal(misCanales.value[0].canal)
+})
+
+// RF111: canales míos ya listos para medir (el primero solo muestra el osciloscopio; desde el segundo, vista elegible)
+const graficablesPropios = computed(() =>
+  canalesGraficables(misCanales.value, canalesMostrados.value, c => requisitosCanales[c]?.ficha?.nombre)
+)
+
+// «Terminar»: datos del paciente DE ESE CANAL (su ficha, no la de la cuenta) para guardar la medición
+function pacienteDeCanal(canal) {
+  const req = requisitosCanales[canal]
+  return contextoPaciente({
+    fichaCanal: req?.ficha || null,
+    fichaCuenta: pacienteActivo.value,
+    declaracionIdCanal: req?.declaracionId || null,
+    nombreCuenta: usuarioActual.nombre
+  })
+}
 
 function obtenerNombreAsignado(canalNum) {
   const ch = canalesState.canales.find(c => c.canal === canalNum)
@@ -1135,20 +1281,20 @@ function seleccionarCanal(canal) {
   canalSeleccionado.value = canal
   setCanalOsciloscopio(canal)
   const ch = canalesMostrados.value.find(c => c.canal === canal)
-  if (ch) {
+  if (ch && puedeMedirEnCanal(canal)) {
     if (ch.bpm) monitorBpm.registrarLectura(ch.bpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
     if (ch.spo2) monitorSpo2.registrarLectura(ch.spo2)
   }
 }
 
 watch(() => canalActivoData.value?.bpm, (nuevoBpm) => {
-  if (nuevoBpm) {
+  if (nuevoBpm && canalSeleccionadoListo.value) {
     monitorBpm.registrarLectura(nuevoBpm, pacienteActivo.value?.edad, pacienteActivo.value?.actividadPrevia)
   }
 }, { immediate: true })
 
 watch(() => canalActivoData.value?.spo2, (nuevoSpo2) => {
-  if (nuevoSpo2) {
+  if (nuevoSpo2 && canalSeleccionadoListo.value) {
     monitorSpo2.registrarLectura(nuevoSpo2)
   }
 }, { immediate: true })
@@ -1200,8 +1346,10 @@ const resultadosFinales = reactive({
 const clasificacionRitmo = ref(null)
 
 function finalizarMedicionYVerResultados() {
-  const bpmMedio = monitorBpm.stats.averageBpm || canalActivoData.value?.bpm || 74
-  const spo2Medio = monitorSpo2.stats.averageSpo2 || canalActivoData.value?.spo2 || 98
+  if (!medicionActiva.value) return // sin canal habilitado (RF111) o sin sensor detectado no hay resultados
+  const bpmMedio = monitorBpm.stats.averageBpm || canalActivoData.value?.bpm
+  const spo2Medio = monitorSpo2.stats.averageSpo2 || canalActivoData.value?.spo2
+  if (!bpmMedio || !spo2Medio) return // todavía no llegaron lecturas reales
 
   resultadosFinales.bpm = Math.round(bpmMedio)
   resultadosFinales.spo2 = Math.round(spo2Medio)
@@ -1270,6 +1418,11 @@ onMounted(async () => {
   if (dec) {
     pacienteActivo.value = dec
   }
+  // Tras volver a iniciar sesión la copia de la pestaña está vacía: se carga la ficha guardada en segundo plano (sin esperar)
+  // y ya queda descifrada en memoria cuando se llegue al paso 2.
+  pacienteService.obtenerDeclaracionActiva().then((activo) => {
+    if (activo && !activo.incompleta && !pacienteActivo.value) pacienteActivo.value = activo
+  }).catch(() => { /* la tarjeta de la ficha muestra el motivo si no se pudo leer */ })
 
   iniciarSondeoWiFi(1000)
   if (miCanalAsignado.value) {
@@ -1279,11 +1432,37 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   detenerSondeoWiFi()
+  desconectarUsb()
   pausarReposo()
 })
 </script>
 
 <style scoped>
+.ficha-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.5rem;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.ficha-toast-error { background: #92400e; }
+.ficha-toast-btn {
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  cursor: pointer;
+}
+
 .medicion-view {
   padding-bottom: 2rem;
 }
@@ -1716,6 +1895,21 @@ onBeforeUnmount(() => {
   margin-bottom: 1.25rem;
 }
 
+.resultados-analisis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.25rem;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .resultados-analisis-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
 .valor-box {
   background: #ffffff;
   border: 1px solid var(--color-border);
@@ -1887,6 +2081,13 @@ onBeforeUnmount(() => {
   margin-bottom: 1.5rem;
 }
 
+.pac-consent-pill.pill-sin { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+.btn-enlace-docente { background: none; border: 0; padding: 0 0 0 0.4rem; color: var(--color-primary); text-decoration: underline; cursor: pointer; font-size: 0.78rem; }
+.aviso-aprendizaje { margin-bottom: 1rem; }
+.detalle-canal { margin: 1rem 0; }
+.detalle-canal > summary { cursor: pointer; font-weight: 600; color: var(--color-muted); padding: 0.5rem 0; }
+.herramientas-prueba { margin: 1rem 0; }
+.herramientas-prueba > summary { cursor: pointer; font-weight: 600; color: var(--color-muted); padding: 0.5rem 0; }
 .test-panel {
   margin-bottom: 1.5rem;
   padding: 1.25rem;

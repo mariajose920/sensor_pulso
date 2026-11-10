@@ -22,7 +22,7 @@
       <!-- Cuerpo del Documento -->
       <div class="modal-body">
         <div class="alerta-medica">
-          <strong>Aviso importante:</strong> La plataforma <em>sensor pulso</em> y los dispositivos asociados son herramientas didácticas y pedagógicas de la Universidad Adventista de Chile (UNACH). <strong>No constituyen un dispositivo médico ni proporcionan diagnósticos clínicos.</strong>
+          <strong>Aviso importante:</strong> La plataforma <em>sensor pulso</em> y los dispositivos asociados son herramientas didácticas y pedagógicas de la Universidad Adventista de Chile (UNACH). <strong>No son un dispositivo médico certificado ni entregan diagnósticos clínicos.</strong>
         </div>
 
         <div class="secciones-consentimiento">

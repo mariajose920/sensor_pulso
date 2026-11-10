@@ -63,16 +63,16 @@ export function evaluarSaludCanal(canalData) {
   let severidad = 'success'
 
   if (estadoSpo2 === 'hipoxia_severa') {
-    tipoAlerta = `Hipoxia Severa (${spo2.toFixed(1)}% SpO₂)`
+    tipoAlerta = `Tendencia a hipoxia severa (${spo2.toFixed(1)}% SpO₂)`
     severidad = 'danger'
   } else if (estadoSpo2 === 'hipoxia_leve') {
-    tipoAlerta = `Hipoxia Leve (${spo2.toFixed(1)}% SpO₂)`
+    tipoAlerta = `Tendencia a hipoxia leve (${spo2.toFixed(1)}% SpO₂)`
     severidad = 'warning'
   } else if (estadoBpm === 'taquicardia') {
-    tipoAlerta = `Taquicardia (${bpm.toFixed(1)} BPM)`
+    tipoAlerta = `Tendencia a taquicardia (${bpm.toFixed(1)} BPM)`
     severidad = 'warning'
   } else if (estadoBpm === 'bradicardia') {
-    tipoAlerta = `Bradicardia (${bpm.toFixed(1)} BPM)`
+    tipoAlerta = `Tendencia a bradicardia (${bpm.toFixed(1)} BPM)`
     severidad = 'warning'
   }
 

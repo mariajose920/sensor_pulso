@@ -449,9 +449,9 @@ function evaluarBpm(bpm) {
 
 function etiquetaBpm(bpm) {
   if (!bpm || bpm <= 0) return '--'
-  if (bpm > 100) return 'Taquicardia'
-  if (bpm < 60) return 'Bradicardia'
-  return 'Normocardia'
+  if (bpm > 100) return 'Rango de taquicardia'
+  if (bpm < 60) return 'Rango de bradicardia'
+  return 'Rango normal'
 }
 
 function evaluarSpo2(spo2) {
@@ -463,8 +463,8 @@ function evaluarSpo2(spo2) {
 
 function etiquetaSpo2(spo2) {
   if (!spo2 || spo2 <= 0) return '--'
-  if (spo2 < 90) return 'Hipoxia Severa'
-  if (spo2 < 95) return 'Hipoxia Leve'
+  if (spo2 < 90) return 'Tendencia a hipoxia severa'
+  if (spo2 < 95) return 'Tendencia a hipoxia leve'
   return 'Normal'
 }
 

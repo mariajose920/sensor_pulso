@@ -8,6 +8,10 @@
 import assert from 'node:assert'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// Raíz del proyecto calculada desde este archivo (antes estaba fija en F:/sensor y fallaba en cualquier otro equipo)
+const RAIZ = fileURLToPath(new URL('..', import.meta.url))
 
 // Mock de localStorage y window para entorno Node
 const mockStorage = new Map()
@@ -170,12 +174,12 @@ async function runTests() {
 
   it('Entrega metadatos clínicos correctos para taquicardia y desaturación', () => {
     const metaBpm = obtenerMetadatosAlerta('bpm_alto')
-    assert.strictEqual(metaBpm.titulo, 'Taquicardia (BPM Alto)')
+    assert.strictEqual(metaBpm.titulo, 'Tendencia a taquicardia (BPM alto)')
     assert.strictEqual(metaBpm.unidad, 'BPM')
     assert.strictEqual(metaBpm.severidad, 'alta')
 
     const metaSpo2 = obtenerMetadatosAlerta('spo2_bajo')
-    assert.strictEqual(metaSpo2.titulo, 'Desaturación de Oxígeno (SpO₂)')
+    assert.strictEqual(metaSpo2.titulo, 'Tendencia a desaturación de oxígeno (SpO₂ baja)')
     assert.strictEqual(metaSpo2.unidad, '%')
   })
 
@@ -239,7 +243,7 @@ async function runTests() {
   console.log('\n▶ [Pilar 3: Alerta Visual e Integración UI] Componentes y Vistas...')
 
   it('Verifica existencia y estructura del componente AlertaFueraRangoBanner.vue', () => {
-    const bannerPath = path.resolve('F:/sensor/src/components/AlertaFueraRangoBanner.vue')
+    const bannerPath = path.join(RAIZ, 'src/components/AlertaFueraRangoBanner.vue')
     assert.ok(fs.existsSync(bannerPath), 'AlertaFueraRangoBanner.vue debe existir')
 
     const content = fs.readFileSync(bannerPath, 'utf8')
@@ -251,7 +255,7 @@ async function runTests() {
   })
 
   it('Verifica integración de AlertaFueraRangoBanner en MedicionView.vue (Paso 4)', () => {
-    const medicionPath = path.resolve('F:/sensor/src/views/MedicionView.vue')
+    const medicionPath = path.join(RAIZ, 'src/views/MedicionView.vue')
     const content = fs.readFileSync(medicionPath, 'utf8')
 
     assert.ok(content.includes('AlertaFueraRangoBanner'), 'MedicionView debe importar AlertaFueraRangoBanner')
@@ -261,7 +265,7 @@ async function runTests() {
   })
 
   it('Verifica pestaña de Registro de Alertas Clínicas (RF21) en HistorialView.vue', () => {
-    const historialPath = path.resolve('F:/sensor/src/views/HistorialView.vue')
+    const historialPath = path.join(RAIZ, 'src/views/HistorialView.vue')
     const content = fs.readFileSync(historialPath, 'utf8')
 
     assert.ok(content.includes('Registro de Alertas Clínicas (RF21)'), 'Debe incluir pestaña de alertas')
@@ -272,16 +276,16 @@ async function runTests() {
 
   it('AUDITORÍA ESTRICTA: Cero emojis en archivos de RF21 (regla expresa de usuario)', () => {
     const archivosRevisar = [
-      'F:/sensor/src/utils/alertaSonora.js',
-      'F:/sensor/src/services/alertasService.js',
-      'F:/sensor/src/components/AlertaFueraRangoBanner.vue',
-      'F:/sensor/src/views/HistorialView.vue'
+      'src/utils/alertaSonora.js',
+      'src/services/alertasService.js',
+      'src/components/AlertaFueraRangoBanner.vue',
+      'src/views/HistorialView.vue'
     ]
 
     const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u
 
     for (const file of archivosRevisar) {
-      const code = fs.readFileSync(path.resolve(file), 'utf8')
+      const code = fs.readFileSync(path.join(RAIZ, file), 'utf8')
       const lines = code.split('\n')
       lines.forEach((l, idx) => {
         if (emojiRegex.test(l)) {
