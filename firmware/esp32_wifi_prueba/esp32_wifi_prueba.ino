@@ -139,6 +139,16 @@ float sumaAcIr2 = 0;
 int muestrasSpo2 = 0;
 int ventanasSpo2Invalidas = 0;
 
+// ── Modo de captura cruda (diagnóstico) ─────────────────────────────────────
+// Con el comando {"cmd":"raw_on"} la placa envía por USB cada lectura SIN procesar del sensor, a 100 Hz:
+//   RAW,<n>,<millis>,<ir>,<rojo>
+// para poder medir amplitud, nivel de luz, saturación y ruido con un dedo real. Se apaga solo a los 3 minutos
+// o con {"cmd":"raw_off"}. Por defecto está apagado y no cambia nada del funcionamiento normal.
+const unsigned long RAW_DURACION_MAX_MS = 180000;
+volatile bool rawActivo = false;
+volatile unsigned long rawHasta = 0;
+volatile uint32_t rawN = 0;
+
 void reiniciarSpo2() {
   spo2Actual = 0;
   dcRojo = 0;
@@ -551,6 +561,16 @@ void emitirMuestraUsb(unsigned long t, uint16_t ir, uint16_t rojo) {
   xSemaphoreGive(serMux);
 }
 
+// Lectura cruda del sensor (solo en modo de captura): una sola escritura, con mutex.
+void emitirMuestraCruda(uint32_t n, unsigned long t, uint16_t ir, uint16_t rojo) {
+  char buf[64];
+  int largo = snprintf(buf, sizeof(buf), "RAW,%lu,%lu,%u,%u\n", (unsigned long)n, t, (unsigned)ir, (unsigned)rojo);
+  if (largo <= 0 || largo >= (int)sizeof(buf)) return;
+  xSemaphoreTake(serMux, portMAX_DELAY);
+  Serial.write((const uint8_t*)buf, (size_t)largo);
+  xSemaphoreGive(serMux);
+}
+
 // Emite una línea del protocolo: "@SP {json}\n" (una sola escritura, con mutex).
 void emitir(const String& json) {
   String linea = "@SP " + json + "\n";
@@ -947,6 +967,14 @@ void procesarComando(const String& json) {
     cfgUnlock();
     emitir("{\"ev\":\"wifi\",\"estado\":\"conectando\"}");
     pendiente = PEND_WIFI;
+  } else if (c.cmd == "raw_on") {
+    rawN = 0;
+    rawHasta = millis() + RAW_DURACION_MAX_MS;
+    rawActivo = true;
+    emitir("{\"ev\":\"raw\",\"estado\":\"on\",\"hz\":100,\"bits\":16,\"ledIrMa\":27.1,\"ledRojoMa\":7.6,\"maxSegundos\":180}");
+  } else if (c.cmd == "raw_off") {
+    rawActivo = false;
+    emitir(String("{\"ev\":\"raw\",\"estado\":\"off\",\"muestras\":") + String((unsigned long)rawN) + "}");
   } else if (c.cmd == "forget") {
     cfgLock();
     cfgSsid = "";
@@ -1201,6 +1229,7 @@ bool sensorListo = false;
 
 void setup() {
   Serial.setRxBufferSize(1024);
+  Serial.setTxBufferSize(1024);
   Serial.begin(115200);
   delay(500);
 
@@ -1271,12 +1300,19 @@ void loop() {
   for (int i = 0; i < n; i++) {
     uint16_t ir, rojo;
     if (!leerMuestra(ir, rojo)) break;
+    if (rawActivo) emitirMuestraCruda(++rawN, millis(), ir, rojo);
     procesar(ir, rojo);
   }
 
-  // Reporte periódico por Serial (cada 500 ms) sin inundar la consola
+  // Fin automático de la captura cruda
+  if (rawActivo && (long)(millis() - rawHasta) >= 0) {
+    rawActivo = false;
+    emitir(String("{\"ev\":\"raw\",\"estado\":\"fin\",\"muestras\":") + String((unsigned long)rawN) + "}");
+  }
+
+  // Reporte periódico por Serial (cada 500 ms) sin inundar la consola (se omite durante la captura cruda)
   static unsigned long ultimoLogUSB = 0;
-  if (millis() - ultimoLogUSB >= 500) {
+  if (!rawActivo && millis() - ultimoLogUSB >= 500) {
     ultimoLogUSB = millis();
     Serial.printf("[Sensor] Pulso: %d | Dedo: %s | BPM: %.1f | SpO2: %.1f%%\n",
                   valorGraficaActual,

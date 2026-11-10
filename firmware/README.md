@@ -138,3 +138,21 @@ que cerrar el Monitor Serie del Arduino IDE (solo un programa puede abrir el pue
 - **SpO2**: sin cambios (razón de razones AC/DC, ventanas de 2 s).
 - **Onda enviada** (WiFi y USB): **50 muestras/s**, promedio de cada 2 lecturas de 100 Hz, con el latido hacia arriba y centrada en 24500 (IR) / 21000 (rojo sintético). La ganancia sigue una envolvente lenta (sube con suavidad, baja en ≈10 s) para que no pulse con la respiración.
 - **Paquete WiFi**: informa `frecuencia_hz` = 50 y lleva como máximo 100 muestras por canal (límite de la API desplegada); si hay más acumuladas, las más antiguas salen primero y el resto queda para el siguiente envío. El búfer guarda 4 s (200 muestras) y se accede con una sección crítica entre el núcleo del sensor y el de red.
+
+---
+
+## Captura de la señal cruda (diagnóstico)
+
+Para ver por qué el pulso o la SpO₂ varían hace falta la señal SIN procesar. Con el comando `@SP {"cmd":"raw_on"}` la
+placa envía por USB cada lectura del sensor a 100 Hz: `RAW,<n>,<millis>,<ir>,<rojo>` (se apaga sola a los 3 minutos o con
+`{"cmd":"raw_off"}`; por defecto está apagado y no cambia nada del funcionamiento normal).
+
+Con el dedo apoyado y sin moverlo:
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\capturar-senal-cruda.ps1 -Segundos 60
+```
+
+Graba un CSV (`captura_cruda_AAAAMMDD_HHMMSS.csv`) y lo analiza (`scripts/analizar-senal-cruda.mjs`): nivel de luz de cada
+LED, saturación, pérdida de lecturas, amplitud del pulso, ruido, deriva, estabilidad del pulso y de la SpO₂ (método actual y
+una versión con filtro común) y qué corriente de LED rojo conviene. Cierra antes el Monitor Serie y la pestaña de la app con USB.
