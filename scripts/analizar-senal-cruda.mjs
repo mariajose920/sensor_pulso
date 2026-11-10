@@ -11,6 +11,7 @@ import { calcularMetricasCanal } from '../src/utils/metricasCanal.js'
 
 export const HZ = 100
 const UMBRAL_DEDO = 7000 // el mismo que usa el firmware
+const SEGUNDOS_CALENTAMIENTO = 8 // se descartan al apoyar el dedo (transitorio de presión y de la línea de base)
 
 const media = (v) => v.reduce((s, x) => s + x, 0) / (v.length || 1)
 const rms = (v) => Math.sqrt(media(v.map((x) => x * x)))
@@ -19,20 +20,21 @@ const mediana = (v) => { const o = [...v].sort((a, b) => a - b); const m = Math.
 const r1 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 10) / 10)
 const r2 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 100) / 100)
 
-/** Lee un CSV n,ms,ir,rojo (con o sin cabecera) o las líneas «RAW,n,ms,ir,rojo» tal como salen del puerto. */
+/** Lee un CSV n,ms,ir,rojo[,led] (con o sin cabecera) o las líneas «RAW,n,ms,ir,rojo[,led]» tal como salen del puerto.
+ *  `led` es el valor del registro de corriente de los LED (rojo en los 4 bits altos, infrarrojo en los bajos). */
 export function leerCaptura(texto) {
   const filas = []
   for (const linea of String(texto).split(/\r?\n/)) {
     const t = linea.trim().replace(/^RAW,/, '')
-    if (!/^\d+,\d+,\d+,\d+$/.test(t)) continue
-    const [n, ms, ir, rojo] = t.split(',').map(Number)
-    if (ir > 65535 || rojo > 65535) continue
-    filas.push({ n, ms, ir, rojo })
+    if (!/^\d+,\d+,\d+,\d+(,\d+)?$/.test(t)) continue
+    const [n, ms, ir, rojo, led] = t.split(',').map(Number)
+    if (ir > 65535 || rojo > 65535 || (led !== undefined && led > 255)) continue
+    filas.push(led === undefined ? { n, ms, ir, rojo } : { n, ms, ir, rojo, led })
   }
   return filas
 }
 
-/** Tramo más largo con dedo (ir sobre el umbral), sin los primeros 2 s de calentamiento. */
+/** Tramo más largo con dedo (ir sobre el umbral), sin los primeros 8 s: apoyar el dedo produce un transitorio enorme. */
 function tramoConDedo(filas) {
   let mejor = [0, 0], inicio = null
   for (let i = 0; i <= filas.length; i++) {
@@ -40,7 +42,7 @@ function tramoConDedo(filas) {
     if (hay && inicio === null) inicio = i
     if (!hay && inicio !== null) { if (i - inicio > mejor[1] - mejor[0]) mejor = [inicio, i]; inicio = null }
   }
-  const desde = mejor[0] + 2 * HZ
+  const desde = mejor[0] + SEGUNDOS_CALENTAMIENTO * HZ
   return desde < mejor[1] ? filas.slice(desde, mejor[1]) : []
 }
 
@@ -71,15 +73,22 @@ function spo2MetodoFirmware(ir, rojo) {
 // ── SpO2 más robusta: AC con el mismo pasa-banda (0,5–5 Hz) en los dos canales, ventanas de 6 s y DC = media ──
 function spo2MetodoBanda(ir, rojo) {
   const bi = filtrarSenalPpg(ir, HZ), br = filtrarSenalPpg(rojo, HZ)
+  const ni = filtrarSenalPpg(ir, HZ, { bajaHz: 12, altaHz: 40 }), nr = filtrarSenalPpg(rojo, HZ, { bajaHz: 12, altaHz: 40 })
   const salida = []
   const paso = 2 * HZ, ventana = 6 * HZ
+  // El ruido medido entre 12 y 40 Hz se reparte parejo; dentro de la banda del pulso (0,5–5 Hz) queda esta fracción
+  const fraccionBanda = Math.sqrt(4.5 / 28)
   for (let i = 0; i + ventana <= ir.length; i += paso) {
     const dI = media(ir.slice(i, i + ventana)), dR = media(rojo.slice(i, i + ventana))
-    const pi = rms(bi.slice(i, i + ventana)) / dI
-    const pr = rms(br.slice(i, i + ventana)) / dR
+    const aI = rms(bi.slice(i, i + ventana)), aR = rms(br.slice(i, i + ventana))
+    const nI = rms(ni.slice(i, i + ventana)) * fraccionBanda, nR = rms(nr.slice(i, i + ventana)) * fraccionBanda
+    const snrI = nI > 0 ? aI / nI : Infinity, snrR = nR > 0 ? aR / nR : Infinity
+    const aI2 = Math.sqrt(Math.max(1e-9, aI * aI - nI * nI)), aR2 = Math.sqrt(Math.max(1e-9, aR * aR - nR * nR))
+    const pi = aI2 / dI, pr = aR2 / dR
     const R = pi > 0 ? pr / pi : NaN
     const v = 110 - 25 * R
-    salida.push({ R, spo2: pi > 0.001 && pi < 0.2 && R >= 0.3 && R <= 3 && v >= 70 && v <= 100 ? v : null })
+    const aceptada = snrI >= 3 && snrR >= 3 && pi >= 0.0002 && pi < 0.2 && R >= 0.3 && R <= 3 && v >= 70 && v <= 100
+    salida.push({ R, snrIr: snrI, snrRojo: snrR, spo2: aceptada ? v : null })
   }
   return salida
 }
@@ -132,7 +141,7 @@ export function analizarSenalCruda(filas) {
   informe.dedo = { porcentaje: Math.round((conDedo / filas.length) * 100) }
   const tramo = tramoConDedo(filas)
   if (tramo.length < 10 * HZ) {
-    hallazgos.push({ nivel: 'error', texto: `Solo hay ${r1(tramo.length / HZ)} s seguidos con dedo (luz infrarroja ≥ ${UMBRAL_DEDO}). Apoya el dedo sin moverlo al menos 20 s.` })
+    hallazgos.push({ nivel: 'error', texto: `Solo hay ${r1(tramo.length / HZ)} s utilizables con dedo (luz infrarroja ≥ ${UMBRAL_DEDO}; sin los primeros ${SEGUNDOS_CALENTAMIENTO} s). Apoya el dedo sin moverlo al menos 20 s (los primeros ${SEGUNDOS_CALENTAMIENTO} s se descartan por el transitorio al apoyarlo).` })
     return informe
   }
   const ir = tramo.map((f) => f.ir), rojo = tramo.map((f) => f.rojo)
@@ -198,15 +207,26 @@ export function analizarSenalCruda(filas) {
     metodoBandaCincoSeis: { ...sb, sinLecturaPct: Math.round((robusto.filter((x) => x.spo2 === null).length / Math.max(1, robusto.length)) * 100), R: resumenSerie(robusto.map((x) => x.R)) }
   }
   if (sa.sd > 1.5) hallazgos.push({ nivel: 'aviso', texto: `La SpO₂ con el método actual del firmware varía ${sa.sd} puntos (de ${sa.min} a ${sa.max} %). Una persona sana quieta debería ver variaciones de ±1 punto o menos.` })
-  if (sb.n && sa.n && sb.sd < sa.sd) hallazgos.push({ nivel: 'info', texto: `Con el mismo filtro en rojo e infrarrojo y ventanas de 6 s la variación baja de ${sa.sd} a ${sb.sd} puntos: ese cambio ayuda.` })
+  if (sb.n >= 3 && sa.n && sb.sd < sa.sd) hallazgos.push({ nivel: 'info', texto: `Con el mismo filtro en rojo e infrarrojo y ventanas de 6 s la variación baja de ${sa.sd} a ${sb.sd} puntos: ese cambio ayuda.` })
   if (sa.media !== null && sa.media < 94) hallazgos.push({ nivel: 'aviso', texto: `La SpO₂ media (${sa.media} %) es baja para una persona sana: el sensor o la fórmula no están calibrados (razón R media ${informe.spo2.metodoActualFirmware.R.media}). Hace falta calibrar contra un oxímetro.` })
 
   // Recomendación de corriente del LED rojo (la luz crece casi lineal con la corriente)
   const niveles = [0, 4.4, 7.6, 11, 14.2, 17.4, 20.8, 24, 27.1, 30.6, 33.8, 37, 40.2, 43.6, 46.8, 50]
-  const objetivo = 7.6 * (dcI / dcR)
-  const sugerida = niveles.find((x) => x >= objetivo) ?? 50
+  const conLed = tramo.filter((f) => f.led !== undefined)
+  const regLed = conLed.length ? conLed[conLed.length - 1].led : 0x28 // el firmware antiguo no lo informaba: 0x28 = rojo 7,6 mA, IR 27,1 mA
+  const rojoActual = niveles[(regLed >> 4) & 0x0f], irActual = niveles[regLed & 0x0f]
+  informe.led = { registro: regLed, rojoMa: rojoActual, irMa: irActual, informadoPorLaPlaca: conLed.length > 0 }
+  const objetivo = rojoActual * (dcI / dcR) * 0.9 // 90 % del nivel infrarrojo, sin pasar de 56 000 para no saturar
+  const topeSaturacion = rojoActual * (56000 / dcR)
+  const sugerida = niveles.find((x) => x >= Math.min(objetivo, topeSaturacion)) ?? 50
   informe.ledRojoSugeridoMa = sugerida
-  if (Math.abs(sugerida - 7.6) >= 7) hallazgos.push({ nivel: 'info', texto: `Para igualar la luz roja con la infrarroja la corriente del LED rojo debería ser cercana a ${sugerida} mA (hoy 7,6 mA).` })
+  if (Math.abs(sugerida - rojoActual) >= 5) hallazgos.push({ nivel: 'info', texto: `Para acercar la luz roja a la infrarroja la corriente del LED rojo debería ser cercana a ${sugerida} mA (hoy ${rojoActual} mA).` })
+
+  // ¿Se puede medir la SpO2 con esta señal?
+  const aceptadas = robusto.filter((x) => x.spo2 !== null).length
+  const snrRojoMed = mediana(robusto.map((x) => x.snrRojo).filter(Number.isFinite))
+  informe.spo2.medible = { ventanasAceptadas: aceptadas, ventanas: robusto.length, snrRojoMediano: r1(snrRojoMed) }
+  if (snrRojoMed !== null && snrRojoMed < 3) hallazgos.push({ nivel: 'aviso', texto: `La señal roja casi no se distingue del ruido (relación señal/ruido mediana ${r1(snrRojoMed)} en el rango del pulso): con esto la SpO₂ NO se puede medir de forma fiable; el valor que salga es en buena parte ruido. Hay que reforzar la luz roja.` })
 
   if (!hallazgos.some((h) => h.nivel !== 'info')) hallazgos.push({ nivel: 'ok', texto: 'La señal se ve sana: sin pérdidas, con buena luz, pulso claro y poca variación.' })
   return informe

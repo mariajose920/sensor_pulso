@@ -2,6 +2,7 @@ import { ref, reactive, computed } from 'vue'
 import { evaluarCalidad, MAXIMO_MAX30102 } from '../utils/calidadSenal.js'
 import { calcularMetricasCanal } from '../utils/metricasCanal.js'
 import { crearEstabilizadorPulso } from '../utils/estabilizadorPulso.js'
+import { crearEstabilizadorSpo2 } from '../utils/estabilizadorSpo2.js'
 import { actualizarBuffersMultiCanal } from './multiCanalService.js'
 import { useSerialSensor } from '../composables/useSerialSensor.js'
 import {
@@ -101,7 +102,7 @@ function estadoPulso(canal, hz, ahora) {
   let e = estadosPulso.get(canal)
   const cambioHz = e && Math.abs(e.hz - hz) / e.hz > 0.15
   if (!e || cambioHz || ahora - e.ultimoDato > HUECO_MAX_MS) {
-    e = { ir: [], rojo: [], total: 0, hz, ultimoDato: ahora, ultimoCalculo: -Infinity, estab: crearEstabilizadorPulso(), confianza: 'baja', bpm: null }
+    e = { ir: [], rojo: [], total: 0, hz, ultimoDato: ahora, ultimoCalculo: -Infinity, estab: crearEstabilizadorPulso(), estabSpo2: crearEstabilizadorSpo2(), confianza: 'baja', bpm: null }
     estadosPulso.set(canal, e)
   }
   e.hz = hz
@@ -111,6 +112,8 @@ function estadoPulso(canal, hz, ahora) {
 function pulsoDelCanal(c, hz) {
   const ahora = Date.now()
   const e = estadoPulso(c.canal, hz, ahora)
+  // SpO2 de la placa estabilizada (mediana de lecturas válidas; 0 = sin lectura, nunca se inventa un valor)
+  const spo2 = e.estabSpo2.actualizar(c.spo2, ahora)
   const nuevas = Array.isArray(c.ir) ? c.ir : []
   if (nuevas.length > 0) {
     e.ultimoDato = ahora
@@ -128,7 +131,7 @@ function pulsoDelCanal(c, hz) {
       e.confianza = e.bpm === null ? 'baja' : m.confianza
     }
   }
-  return { bpm: e.bpm, confianza: e.confianza }
+  return { bpm: e.bpm, confianza: e.confianza, spo2 }
 }
 
 function calidadPorCanal(canales) {
@@ -142,7 +145,7 @@ function calidadPorCanal(canales) {
     if (c.calidad === 'sin_dedo') {
       ventanasCalidad.delete(c.canal)
       estadosPulso.delete(c.canal)
-      return { ...c, bpm: null, bpmPlaca: bpmDePlaca(c), confianza: 'baja', causasCalidad: [] }
+      return { ...c, bpm: null, bpmPlaca: bpmDePlaca(c), spo2: null, spo2Placa: bpmDePlaca({ bpm: c.spo2 }), confianza: 'baja', causasCalidad: [] }
     }
     const ventana = ventanasCalidad.get(c.canal) || []
     if (Array.isArray(c.ir)) ventana.push(...c.ir)
@@ -150,7 +153,7 @@ function calidadPorCanal(canales) {
     ventanasCalidad.set(c.canal, ventana)
 
     const pulso = pulsoDelCanal(c, hz)
-    const base = { ...c, bpm: pulso.bpm, bpmPlaca: bpmDePlaca(c), confianza: pulso.confianza }
+    const base = { ...c, bpm: pulso.bpm, bpmPlaca: bpmDePlaca(c), spo2: pulso.spo2, spo2Placa: bpmDePlaca({ bpm: c.spo2 }), confianza: pulso.confianza }
 
     const r = evaluarCalidad(ventana, { frecuenciaHz: hz, maximo: MAXIMO_MAX30102 })
     // Sin muestras suficientes se conserva la calidad que informó el dispositivo.

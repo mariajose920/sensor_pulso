@@ -9,7 +9,7 @@ const prueba = (nombre, cond) => { if (cond) { ok++; console.log('  ✓', nombre
 const leer = (ruta) => readFileSync(new URL(ruta, import.meta.url), 'utf8')
 
 // Lecturas crudas como las del MAX30100: el latido REDUCE la luz recibida (más sangre = más absorción)
-function capturaSintetica({ seg = 40, bpm = 72, dcIr = 30000, dcRojo = 28000, ampIr = 600, ampRojo = 280, ruido = 0.04, dedo = true, perdidas = 0, semilla = 5 } = {}) {
+function capturaSintetica({ seg = 40, bpm = 72, dcIr = 30000, dcRojo = 28000, ampIr = 600, ampRojo = 280, ruido = 0.04, dedo = true, perdidas = 0, semilla = 5, led = undefined } = {}) {
   const a = generarPpg({ bpm, hz: 100, seg, ruido, amp: ampIr, dc: 0, semilla })
   const b = generarPpg({ bpm, hz: 100, seg, ruido: ruido * 1.5, amp: ampRojo, dc: 0, semilla: semilla + 1 })
   const rnd = rng(semilla + 9)
@@ -18,7 +18,9 @@ function capturaSintetica({ seg = 40, bpm = 72, dcIr = 30000, dcRojo = 28000, am
     if (perdidas && rnd() < perdidas) continue
     const ir = dedo ? Math.round(dcIr - a.x[i]) : 600
     const rojo = dedo ? Math.round(dcRojo - b.x[i]) : 500
-    filas.push({ n: i + 1, ms: 1000 + i * 10, ir: Math.max(0, Math.min(65535, ir)), rojo: Math.max(0, Math.min(65535, rojo)) })
+    const f = { n: i + 1, ms: 1000 + i * 10, ir: Math.max(0, Math.min(65535, ir)), rojo: Math.max(0, Math.min(65535, rojo)) }
+    if (led !== undefined) f.led = led
+    filas.push(f)
   }
   return filas
 }
@@ -28,6 +30,8 @@ console.log('Lectura de la captura')
 const csv = 'n,ms,ir,rojo\n1,1000,30000,28000\nRAW,2,1010,30010,28010\nbasura\n3,1020,99999,1\n4,1030,30020,28020\n'
 const leidas = leerCaptura(csv)
 prueba('lee el CSV y las líneas RAW, e ignora cabecera, basura y valores fuera de 16 bits', leidas.length === 3 && leidas[1].ir === 30010)
+const con5 = leerCaptura('n,ms,ir,rojo,led\n1,1000,30000,28000,40\nRAW,2,1010,30010,28010,200\n3,1020,30000,28000,300\n')
+prueba('acepta el 5.º campo (registro de corriente de los LED) y descarta valores imposibles', con5.length === 2 && con5[0].led === 40 && con5[1].led === 200)
 
 console.log('Señal sana')
 {
@@ -59,6 +63,18 @@ console.log('Problemas que debe detectar')
   prueba('sin dedo → error claro, no números inventados', sinDedo.hallazgos.some((h) => h.nivel === 'error') && !sinDedo.pulso && !sinDedo.spo2)
   const corta = analizarSenalCruda(capturaSintetica({ seg: 2 }))
   prueba('captura muy corta → error claro', corta.hallazgos.some((h) => h.nivel === 'error' && /corta/.test(h.texto)))
+}
+
+console.log('Corriente de los LED y SpO2 medible')
+{
+  const sinLed = analizarSenalCruda(capturaSintetica({ dcIr: 40000, dcRojo: 8000, ampRojo: 90 }))
+  prueba('sin el dato de la placa asume la configuración antigua (rojo 7,6 mA, IR 27,1 mA)', sinLed.led.rojoMa === 7.6 && sinLed.led.irMa === 27.1 && sinLed.led.informadoPorLaPlaca === false)
+  const conLed = analizarSenalCruda(capturaSintetica({ dcIr: 40000, dcRojo: 8000, ampRojo: 90, led: 0x88 }))
+  prueba('con el dato de la placa usa la corriente real (0x88 = 27,1 y 27,1 mA)', conLed.led.rojoMa === 27.1 && conLed.led.irMa === 27.1 && conLed.led.informadoPorLaPlaca === true)
+  const rojoRuido = analizarSenalCruda(capturaSintetica({ dcIr: 56000, dcRojo: 10000, ampIr: 25, ampRojo: 2.5, ruido: 1.1 }))
+  prueba('si el rojo no se distingue del ruido dice que la SpO2 NO se puede medir', hallazgo(rojoRuido, 'NO se puede medir') && rojoRuido.spo2.medible.ventanasAceptadas === 0)
+  const buena = analizarSenalCruda(capturaSintetica())
+  prueba('con buena señal hay ventanas de SpO2 aceptadas y estables (desviación ≤ 1,5)', buena.spo2.medible.ventanasAceptadas >= 5 && buena.spo2.metodoBandaCincoSeis.sd <= 1.5)
 }
 
 console.log('Firmware y script de captura')

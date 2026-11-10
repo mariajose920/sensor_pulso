@@ -47,7 +47,7 @@ try {
   while ((Get-Date) -lt $limite) {
     try {
       $x = $sp.ReadLine().Trim()
-      if ($x -match '^RAW,\d+,\d+,\d+,\d+$') { $lineas.Add($x.Substring(4)) }
+      if ($x -match '^RAW,\d+,\d+,\d+,\d+(,\d+)?$') { $lineas.Add($x.Substring(4)) }
     } catch [System.TimeoutException] { }
     $seg = [int]((Get-Date) - $inicio).TotalSeconds
     if ($seg -ge $ultimoAviso + 10) { $ultimoAviso = $seg; Write-Host ("  {0,3} s · {1} lecturas" -f $seg, $lineas.Count) }
@@ -62,7 +62,7 @@ if ($lineas.Count -lt 100) {
   Write-Host "Solo llegaron $($lineas.Count) lecturas. ¿Está cargado el firmware con el modo de captura (comando raw_on)?" -ForegroundColor Red
   exit 1
 }
-"n,ms,ir,rojo" | Set-Content -Path $Salida -Encoding ASCII
+"n,ms,ir,rojo,led" | Set-Content -Path $Salida -Encoding ASCII
 $lineas | Add-Content -Path $Salida -Encoding ASCII
 Write-Host "Guardado: $Salida ($($lineas.Count) lecturas)" -ForegroundColor Green
 
