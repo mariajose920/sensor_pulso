@@ -5,7 +5,8 @@
  * Ramas: rf05-recepcion-wifi, rf54-token-dispositivo, rf55-cifrado-en-transito
  *
  * Arquitectura Dual-Core (FreeRTOS):
- *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz.
+ *   - CORE 1: Lectura ininterrumpida del sensor MAX30100 a 100 Hz. Equilibrio automático de la corriente de los LED
+ *             (RF114) y SpO2 por banda con compuerta de calidad (RF115). Calentamiento real del dedo (3-8 s).
  *             Filtro pasa-banda 0,5-5 Hz, detección de latidos por cresta y
  *             onda fotopletismográfica (PPG) a 50 Hz (promedio de 2 lecturas).
  *             Lector NO bloqueante de comandos "@SP" por USB (configuración).
@@ -132,30 +133,101 @@ float rr[RR_MAX];
 int rrN = 0, nAnom = 0;
 float anomalos[3];
 
-// SpO2 por razón de razones: R = (AC_rojo / DC_rojo) / (AC_ir / DC_ir), con ventanas de 2 s
-float dcRojo = 0;
-float sumaAcRojo2 = 0;
-float sumaAcIr2 = 0;
-int muestrasSpo2 = 0;
-int ventanasSpo2Invalidas = 0;
+// ── Corriente de los LED (REG_LED: rojo en los bits 7-4, infrarrojo en los bits 3-0) ─────────────────────────────
+// Código de cada nibble → mA del MAX30100: 0=0, 1=4,4, 2=7,6, 3=11,0, 4=14,2, 5=17,4, 6=20,8, 7=24,0, 8=27,1, 9=30,6,
+// A=33,8, B=37,0, C=40,2, D=43,6, E=46,8, F=50,0.
+const float LED_MA[16] = { 0.0f, 4.4f, 7.6f, 11.0f, 14.2f, 17.4f, 20.8f, 24.0f, 27.1f, 30.6f, 33.8f, 37.0f, 40.2f, 43.6f, 46.8f, 50.0f };
+const uint8_t LED_INICIAL = 0x88;       // al iniciar y sin dedo: rojo 27,1 mA e IR 27,1 mA
+const uint8_t LED_IR_MIN = 0x4;         // 14,2 mA
+const uint8_t LED_IR_MAX = 0xC;         // 40,2 mA
+const uint8_t LED_ROJO_MIN = 0x1;       // 4,4 mA
+const uint8_t LED_ROJO_MAX = 0xF;       // 50,0 mA
+// Equilibrio automático (RF114): cada 500 ms, con el dedo ya estable, el LED rojo se ajusta para que su luz continua (DC)
+// quede entre el 60 % y el 100 % de la del infrarrojo y nunca cerca del tope del ADC de 16 bits (65535).
+const int   LED_AJUSTE_N = 50;          // cada 50 muestras (500 ms)
+const int   LED_ESPERA_N = 100;         // tras un cambio: 1 s sin más ajustes periódicos (el DC lento se reajusta)
+const int   LED_PAUSA_SPO2_N = 150;     // tras un cambio: 1,5 s sin calcular SpO2 (el DC se desplaza)
+const int   LED_REPRIMAR_N = 20;        // tras un cambio el filtro se reinicia durante 0,2 s sobre el nivel nuevo (sin escalón)
+const int   LED_MASCARA_N = 100;        // tras cambiar la corriente del IR no se buscan latidos durante 1 s
+const float DC_ROJO_MAX = 56000.0f;     // el DC rojo nunca debe pasar de esto (el ADC llega a 65535)
+const float DC_ROJO_SAT = 58000.0f;     // por encima: se baja un paso de inmediato
+const float DC_IR_ALTO = 60000.0f;      // DC infrarrojo por encima: se baja un paso la corriente IR
+const float DC_IR_BAJO = 18000.0f;      // DC infrarrojo por debajo (con dedo): se sube un paso
+const float ROJO_REL_MIN = 0.60f;       // el DC rojo debe ser al menos el 60 % del infrarrojo (y como mucho el 100 %)
+volatile uint8_t ledReg = LED_INICIAL;  // valor vigente de REG_LED (lo informa el modo crudo)
+float dcRojoLento = 0;                  // DC lento del rojo (media móvil exponencial de la lectura cruda)
+int ledEspera = 0, ledRepIr = 0, ledRepRo = 0, ledMascara = 0, ledPausaSpo2 = 0;
+
+// Dedo estable: tras apoyar el dedo hay un transitorio (el nivel de luz se asienta). Pulso y SpO2 no se calculan hasta que
+// el DC infrarrojo deja de moverse: mínimo 3 s y máximo 8 s desde que se apoya, y solo cuando su variación en el último
+// segundo (media móvil rápida) baja de DC_VAR_ESTABLE de forma sostenida. Constantes ajustadas con una captura real de 60 s:
+// el escalón de apoyar el dedo da variaciones > 1 %/s hasta ≈ 1,7 s; después queda una deriva lenta de 0,1-0,65 %/s.
+const uint32_t DEDO_MIN_N = 300;        // 3 s
+const uint32_t DEDO_MAX_N = 800;        // 8 s
+const float DC_VAR_ESTABLE = 0.0015f;   // 0,15 % en 1 s
+const int   DC_SOSTENIDO_N = 30;        // debe cumplirse durante 0,3 s seguidos
+float emaIr = 0;                        // media móvil rápida del IR (α = 0,05)
+float emaAnillo[100];                   // su valor de hace 1 s
+uint32_t dedoDesdeN = 0;                // muestra en que se apoyó el dedo
+int estCont = 0;
+bool dedoEstable = false;
+
+// ── SpO2 por banda (RF115) ───────────────────────────────────────────────────────────────────────────────────────
+// APROXIMACIÓN EDUCATIVA, SIN CALIBRAR contra un oxímetro de referencia. Los DOS canales pasan por el mismo pasa-banda
+// 0,5-5 Hz (el rojo con sus propios biquads), el DC es la media de la ventana y R = (AC_rojo/DC_rojo) / (AC_ir/DC_ir).
+// SpO2 = 110 - 25·R es una recta genérica (no la curva de este sensor). Ventanas de 6 s que se recalculan cada 2 s.
+// Una ventana solo se acepta si ambos canales superan el ruido (SNR ≥ 3), la perfusión del IR es ≥ 0,02 %, la AC es parecida
+// en los 3 bloques de 2 s (sin movimiento) y no hubo un cambio de corriente de LED dentro de la ventana. Se publica la mediana
+// de las últimas 5 estimaciones aceptadas (variación máx. ±2 puntos por actualización; hacen falta 3 para mostrar algo).
+// Si no hay ventana aceptada durante 12 s: SpO2 = 0 («sin lectura»), nunca un número viejo ni inventado.
+Biquad bqAltaR = { 0.978030479f, -1.95606096f, 0.978030479f, -1.95557824f, 0.956543677f, 0, 0 };
+Biquad bqBajaR = { 0.0200833656f, 0.0401667311f, 0.0200833656f, -1.56101808f, 0.641351538f, 0, 0 };
+float filtradoRojo = 0;                 // PPG roja filtrada 0,5-5 Hz
+float refRojo = 0;                      // nivel del rojo al apoyar el dedo
+float irPrev1 = 0, irPrev2 = 0, roPrev1 = 0, roPrev2 = 0;   // lecturas crudas anteriores (segunda diferencia = ruido)
+const int   SPO2_BLOQUE_N = 200;        // bloques de 2 s; la ventana son 3 bloques (6 s)
+const int   SPO2_BLOQUES = 3;
+const float SPO2_RUIDO_K = 0.25f;       // ruido (cuentas) ≈ 0,25 · RMS de la 2.ª diferencia (≈7 en IR y ≈2,2 en rojo en la captura real)
+const float SPO2_GANANCIA_BANDA = 0.51f;    // ruido en 0,5-5 Hz / ruido calibrado, si el ruido es blanco (√Σh² del pasa-banda = 0,314, entre 0,61)
+const float SPO2_SNR_MIN = 3.0f;
+const float SPO2_PERFUSION_MIN = 0.02f; // índice de perfusión mínimo del IR, en %
+const float SPO2_CONSISTENCIA_MAX = 1.7f;   // la AC de los 3 bloques de 2 s no debe variar más de 1,7 veces (descarta movimiento)
+const int   SPO2_HIST = 5;              // mediana de las últimas 5 estimaciones aceptadas
+const int   SPO2_MIN_ACEPTADAS = 3;     // no se muestra nada hasta tener 3 estimaciones aceptadas
+const float SPO2_PASO_MAX = 2.0f;       // variación máxima por actualización (puntos)
+const int   SPO2_CADUCA_N = 1200;       // 12 s sin ventana aceptada: sin lectura
+struct Bloque { float acIr2, acRo2, d2Ir, d2Ro, sIr, sRo; int n; };
+Bloque bloques[SPO2_BLOQUES];
+Bloque bloqAct = { 0, 0, 0, 0, 0, 0, 0 };
+int idxBloque = 0, nBloques = 0;
+float histSpo2[SPO2_HIST];
+int nHist = 0, posHist = 0, sinAceptadaN = 0;
 
 // ── Modo de captura cruda (diagnóstico) ─────────────────────────────────────
 // Con el comando {"cmd":"raw_on"} la placa envía por USB cada lectura SIN procesar del sensor, a 100 Hz:
-//   RAW,<n>,<millis>,<ir>,<rojo>
-// para poder medir amplitud, nivel de luz, saturación y ruido con un dedo real. Se apaga solo a los 3 minutos
-// o con {"cmd":"raw_off"}. Por defecto está apagado y no cambia nada del funcionamiento normal.
+//   RAW,<n>,<millis>,<ir>,<rojo>,<led>
+// donde <led> es el valor decimal (0-255) de REG_LED vigente (rojo en los bits 7-4, IR en los bits 3-0; ya no es fijo
+// porque el LED rojo se equilibra solo). Sirve para medir amplitud, nivel de luz, saturación y ruido con un dedo real.
+// Se apaga solo a los 3 minutos o con {"cmd":"raw_off"}. Por defecto está apagado y no cambia nada del funcionamiento normal.
 const unsigned long RAW_DURACION_MAX_MS = 180000;
 volatile bool rawActivo = false;
 volatile unsigned long rawHasta = 0;
 volatile uint32_t rawN = 0;
 
+// Vacía la ventana de SpO2 (los bloques de 2 s) sin tocar el valor mostrado.
+void reiniciarVentanaSpo2() {
+  idxBloque = 0;
+  nBloques = 0;
+  bloqAct = Bloque{ 0, 0, 0, 0, 0, 0, 0 };
+}
+
 void reiniciarSpo2() {
   spo2Actual = 0;
-  dcRojo = 0;
-  sumaAcRojo2 = 0;
-  sumaAcIr2 = 0;
-  muestrasSpo2 = 0;
-  ventanasSpo2Invalidas = 0;
+  reiniciarVentanaSpo2();
+  nHist = 0;
+  posHist = 0;
+  sinAceptadaN = 0;
+  ledPausaSpo2 = 0;
 }
 volatile bool estadoSinDedo = true;
 volatile uint16_t valorGraficaActual = 2048;
@@ -173,8 +245,6 @@ int indiceBuffer = 0;
 // El núcleo del sensor (loop) escribe y la tarea WiFi lee/consume el búfer: se protege con una sección crítica corta
 portMUX_TYPE bufMux = portMUX_INITIALIZER_UNLOCKED;
 
-unsigned long dedoDesde = 0;
-const unsigned long CALENTAMIENTO_MS = 2000;
 bool habiaDedo = false;
 
 // Contador de paquetes WiFi transmitidos
@@ -222,7 +292,8 @@ bool iniciarSensor() {
   escribirReg(REG_FIFO_RD, 0);
   escribirReg(REG_MODE, 0x03);          // Modo SpO2 (Rojo + IR)
   escribirReg(REG_SPO2, 0x47);          // 100 muestras/s, 16 bits
-  escribirReg(REG_LED, 0x28);           // Corrientes: Rojo 7.6 mA, IR 27 mA
+  escribirReg(REG_LED, LED_INICIAL);    // Corrientes iniciales: Rojo 27,1 mA, IR 27,1 mA (luego se equilibran solas)
+  ledReg = LED_INICIAL;
   return true;
 }
 
@@ -384,6 +455,109 @@ void detectarLatido(float f) {
   }
 }
 
+// Sin dedo: vuelve a la corriente inicial de los LED (rojo 27,1 mA, IR 27,1 mA).
+void ledRestaurar() {
+  if (ledReg != LED_INICIAL) {
+    escribirReg(REG_LED, LED_INICIAL);
+    ledReg = LED_INICIAL;
+  }
+  ledEspera = 0; ledRepIr = 0; ledRepRo = 0; ledMascara = 0;
+}
+
+// Aplica un cambio de corriente: escribe REG_LED, proyecta los DC lentos al nivel nuevo (el DC se desplaza), reinicia la
+// ventana de SpO2 y la pausa ~1,5 s, y reprime los filtros / enmascara los latidos si cambió el IR.
+void cambiarLed(uint8_t nuevoRojo, uint8_t nuevoIr) {
+  uint8_t cr = ledReg >> 4, ci = ledReg & 0x0F;
+  if (nuevoRojo == cr && nuevoIr == ci) return;
+  ledReg = (uint8_t)((nuevoRojo << 4) | nuevoIr);
+  escribirReg(REG_LED, ledReg);
+  if (nuevoIr != ci) {
+    dc *= LED_MA[nuevoIr] / LED_MA[ci];
+    ledRepIr = LED_REPRIMAR_N;
+    ledMascara = LED_MASCARA_N;
+  }
+  if (nuevoRojo != cr) {
+    dcRojoLento *= LED_MA[nuevoRojo] / LED_MA[cr];
+    ledRepRo = LED_REPRIMAR_N;
+  }
+  ledEspera = LED_ESPERA_N;
+  ledPausaSpo2 = LED_PAUSA_SPO2_N;
+  reiniciarVentanaSpo2();
+}
+
+// Equilibrio automático del LED rojo e IR (se llama a 100 Hz, solo con el dedo estable). Un solo paso por vez.
+void ajustarLed() {
+  uint8_t cr = ledReg >> 4, ci = ledReg & 0x0F;
+  // Saturación del rojo: se baja un paso de inmediato
+  if (dcRojoLento > DC_ROJO_SAT && cr > LED_ROJO_MIN && ledRepRo == 0) { cambiarLed(cr - 1, ci); return; }
+  if (ledEspera > 0) { ledEspera--; return; }
+  if (nMuestra % LED_AJUSTE_N != 0) return;
+  if (dc > DC_IR_ALTO && ci > LED_IR_MIN) { cambiarLed(cr, ci - 1); return; }
+  if (dc < DC_IR_BAJO && ci < LED_IR_MAX) { cambiarLed(cr, ci + 1); return; }
+  float techo = (dc < DC_ROJO_MAX) ? dc : DC_ROJO_MAX;       // el rojo no debe superar al IR ni 56 000
+  if (dcRojoLento > techo && cr > LED_ROJO_MIN) {
+    cambiarLed(cr - 1, ci);
+  } else if (dcRojoLento < ROJO_REL_MIN * dc && cr < LED_ROJO_MAX &&
+             dcRojoLento * LED_MA[cr + 1] / LED_MA[cr] <= techo) {
+    cambiarLed(cr + 1, ci);
+  }
+}
+
+// Suma una muestra a la ventana de SpO2; cada 2 s cierra un bloque y, con 3 bloques (6 s), evalúa la ventana.
+void evaluarSpo2() {
+  float acIr2 = 0, acRo2 = 0, d2Ir = 0, d2Ro = 0, sIr = 0, sRo = 0;
+  int n = 0;
+  for (int i = 0; i < SPO2_BLOQUES; i++) {
+    acIr2 += bloques[i].acIr2; acRo2 += bloques[i].acRo2;
+    d2Ir += bloques[i].d2Ir;   d2Ro += bloques[i].d2Ro;
+    sIr += bloques[i].sIr;     sRo += bloques[i].sRo;
+    n += bloques[i].n;
+  }
+  float dcIr = sIr / n, dcRo = sRo / n;
+  float rmsIr = sqrtf(acIr2 / n), rmsRo = sqrtf(acRo2 / n);          // AC en banda 0,5-5 Hz (incluye el ruido en banda)
+  float ruidoIr = SPO2_RUIDO_K * sqrtf(d2Ir / n);                    // ruido de la lectura cruda, en cuentas
+  float ruidoRo = SPO2_RUIDO_K * sqrtf(d2Ro / n);
+  if (dcIr < 1 || dcRo < 1 || ruidoIr <= 0 || ruidoRo <= 0) return;
+  // Consistencia: la AC de cada bloque de 2 s debe ser parecida (un movimiento o un apretón del dedo la dispara)
+  float minI = 1e9f, maxI = 0, minR = 1e9f, maxR = 0;
+  for (int i = 0; i < SPO2_BLOQUES; i++) {
+    float ai = sqrtf(bloques[i].acIr2 / bloques[i].n), ar = sqrtf(bloques[i].acRo2 / bloques[i].n);
+    minI = fminf(minI, ai); maxI = fmaxf(maxI, ai); minR = fminf(minR, ar); maxR = fmaxf(maxR, ar);
+  }
+  bool consistente = maxI <= SPO2_CONSISTENCIA_MAX * minI && maxR <= SPO2_CONSISTENCIA_MAX * minR;
+  float snrIr = rmsIr / ruidoIr, snrRo = rmsRo / ruidoRo;
+  float perfusionIr = 100.0f * rmsIr / dcIr;
+  if (!consistente || snrIr < SPO2_SNR_MIN || snrRo < SPO2_SNR_MIN || perfusionIr < SPO2_PERFUSION_MIN) return;   // compuerta de calidad
+  // Se resta el ruido que cae dentro de la banda: AC² - ruido²_en_banda (con piso en 0)
+  float bIr = SPO2_GANANCIA_BANDA * ruidoIr, bRo = SPO2_GANANCIA_BANDA * ruidoRo;
+  float acIr = sqrtf(fmaxf(0.0f, rmsIr * rmsIr - bIr * bIr));
+  float acRo = sqrtf(fmaxf(0.0f, rmsRo * rmsRo - bRo * bRo));
+  if (acIr <= 0 || acRo <= 0) return;
+  float r = (acRo / dcRo) / (acIr / dcIr);
+  float est = constrain(110.0f - 25.0f * r, 70.0f, 100.0f);
+  // Ventana aceptada: mediana de las últimas 5 aceptadas, con variación limitada a ±2 puntos por actualización
+  sinAceptadaN = 0;
+  histSpo2[posHist] = est;
+  posHist = (posHist + 1) % SPO2_HIST;
+  if (nHist < SPO2_HIST) nHist++;
+  if (nHist < SPO2_MIN_ACEPTADAS) return;
+  float med = medianaArr(histSpo2, nHist);
+  spo2Actual = (spo2Actual > 0) ? constrain(med, spo2Actual - SPO2_PASO_MAX, spo2Actual + SPO2_PASO_MAX) : med;
+}
+
+void acumularSpo2(float ir, float rojo, float acIr, float acRo, float d2Ir, float d2Ro) {
+  bloqAct.acIr2 += acIr * acIr;  bloqAct.acRo2 += acRo * acRo;
+  bloqAct.d2Ir += d2Ir * d2Ir;   bloqAct.d2Ro += d2Ro * d2Ro;
+  bloqAct.sIr += ir;             bloqAct.sRo += rojo;
+  if (++bloqAct.n >= SPO2_BLOQUE_N) {
+    bloques[idxBloque] = bloqAct;
+    idxBloque = (idxBloque + 1) % SPO2_BLOQUES;
+    if (nBloques < SPO2_BLOQUES) nBloques++;
+    bloqAct = Bloque{ 0, 0, 0, 0, 0, 0, 0 };
+    if (nBloques >= SPO2_BLOQUES) evaluarSpo2();
+  }
+}
+
 void procesar(uint16_t ir, uint16_t rojo) {
   bool sinDedo = ir < UMBRAL_DEDO;
   bool midiendo = false;
@@ -397,7 +571,9 @@ void procesar(uint16_t ir, uint16_t rojo) {
     bpmActual = 0;
     reiniciarSpo2();
     dc = ir;
+    dcRojoLento = rojo;
     filtrado = 0;
+    filtradoRojo = 0;
     limpiarLatidos();
     amplitud = 60;
     nivelAbs = 0;
@@ -405,95 +581,131 @@ void procesar(uint16_t ir, uint16_t rojo) {
     buscando = false;
     fPrevio = 0;
     habiaDedo = false;
-  } else if (!habiaDedo || (millis() - dedoDesde) < CALENTAMIENTO_MS) {
-    if (!habiaDedo) { habiaDedo = true; dedoDesde = millis(); }
-    reiniciarSpo2();
-    dc = ir;
-    if ((millis() - dedoDesde) < CALENTAMIENTO_MS / 2) {
-      // Primer segundo: el nivel del IR aún se asienta al apoyar el dedo. Se reinicia el filtro en cada lectura
-      // (estado cero sobre el nivel actual) para que no arrastre un transitorio largo.
+    dedoEstable = false;
+    ledRestaurar();
+  } else {
+    if (!habiaDedo) {
+      // Dedo recién apoyado: comienza el calentamiento real (hasta que el DC deje de moverse)
+      habiaDedo = true;
+      dedoDesdeN = nMuestra;
+      dedoEstable = false;
+      estCont = 0;
+      emaIr = ir;
+      for (int k = 0; k < 100; k++) emaAnillo[k] = ir;
+      dc = ir;
+      dcRojoLento = rojo;
+      reiniciarSpo2();
+    }
+    dc += 0.02f * (ir - dc);                         // DC lento del infrarrojo
+    dcRojoLento += 0.02f * (rojo - dcRojoLento);     // DC lento del rojo
+    emaIr += 0.05f * (ir - emaIr);
+    uint32_t t = nMuestra - dedoDesdeN;              // muestras desde que se apoyó el dedo
+    float emaAntes = emaAnillo[nMuestra % 100];      // el valor de hace 1 s
+    emaAnillo[nMuestra % 100] = emaIr;
+
+    if (!dedoEstable) {
+      float variacion = fabsf(emaIr - emaAntes) / emaIr;
+      estCont = (t >= 100 && variacion < DC_VAR_ESTABLE) ? estCont + 1 : 0;
+      if (t >= DEDO_MAX_N || (t >= DEDO_MIN_N && estCont >= DC_SOSTENIDO_N)) {
+        dedoEstable = true;                          // el DC ya no se mueve: desde aquí hay pulso y SpO2
+        ultValidoIdx = nMuestra;
+        ultPicoIdx = nMuestra;
+        sinAceptadaN = 0;
+      }
+    } else {
+      // Tras un cambio de corriente el nivel salta: el filtro se reinicia sobre el nivel nuevo durante 0,2 s
+      if (ledRepIr > 0) {
+        ledRepIr--;
+        refIr = ir;
+        biquadReiniciar(bqAlta);
+        biquadReiniciar(bqBaja);
+      }
+      if (ledRepRo > 0) {
+        ledRepRo--;
+        refRojo = rojo;
+        biquadReiniciar(bqAltaR);
+        biquadReiniciar(bqBajaR);
+      }
+    }
+
+    if (t < 100) {
+      // Primer segundo: el nivel de luz aún se asienta al apoyar el dedo. Se reinician los filtros en cada lectura
+      // (estado cero sobre el nivel actual) para que no arrastren un transitorio largo.
       refIr = ir;
+      refRojo = rojo;
       biquadReiniciar(bqAlta);
       biquadReiniciar(bqBaja);
+      biquadReiniciar(bqAltaR);
+      biquadReiniciar(bqBajaR);
       filtrado = 0;
+      filtradoRojo = 0;
       fPrevio = 0;
       nivelAbs = 0;
       ventanaTot = 0;
       buscando = false;
       limpiarLatidos();
     } else {
-      // Segundo siguiente: el filtro ya corre (se asienta) pero todavía no se detectan latidos
+      // Pasa-banda 0,5-5 Hz sobre el IR invertido (la sístole, el IR baja, queda HACIA ARRIBA) y, con la misma
+      // estructura, sobre el rojo (solo para la SpO2)
       filtrado = biquadPaso(bqBaja, biquadPaso(bqAlta, refIr - ir));
+      filtradoRojo = biquadPaso(bqBajaR, biquadPaso(bqAltaR, refRojo - rojo));
       nivelAbs += 0.01f * (fabsf(filtrado) - nivelAbs);
       ventana[ventanaTot % VENTANA] = filtrado;
       ventanaTot++;
-      fPrevio = filtrado;
-      ultValidoIdx = nMuestra;
-      ultPicoIdx = nMuestra;
-    }
-  } else {
-    midiendo = true;
-    if (dc == 0) dc = ir;
-    dc += 0.02f * (ir - dc);
 
-    // Pasa-banda 0,5-5 Hz sobre el IR invertido: la sístole (el IR baja) queda HACIA ARRIBA
-    filtrado = biquadPaso(bqBaja, biquadPaso(bqAlta, refIr - ir));
-    nivelAbs += 0.01f * (fabsf(filtrado) - nivelAbs);
-    ventana[ventanaTot % VENTANA] = filtrado;
-    ventanaTot++;
+      if (!dedoEstable) {
+        // Calentamiento: el filtro corre (se asienta) pero no hay latidos ni SpO2 (pulso = 0 y SpO2 = 0)
+        fPrevio = filtrado;
+        ultValidoIdx = nMuestra;
+        ultPicoIdx = nMuestra;
+      } else {
+        midiendo = true;
 
-    // Envolvente lenta para la ganancia de la onda enviada (no interviene en el pulso): sube con rapidez moderada,
-    // baja muy despacio (≈10 s) y un artefacto brusco no la dispara (se limita a 3 × la cresta típica).
-    float a = fabsf(filtrado);
-    if (ampMedia > 0 && a > 3.0f * ampMedia) a = 3.0f * ampMedia;
-    if (a > amplitud) amplitud += 0.02f * (a - amplitud);
-    else amplitud *= 0.999f;
-    if (amplitud < 25) amplitud = 25;
+        // Envolvente lenta para la ganancia de la onda enviada (no interviene en el pulso): sube con rapidez moderada,
+        // baja muy despacio (≈10 s) y un artefacto brusco no la dispara (se limita a 3 × la cresta típica).
+        float a = fabsf(filtrado);
+        if (ampMedia > 0 && a > 3.0f * ampMedia) a = 3.0f * ampMedia;
+        if (a > amplitud) amplitud += 0.02f * (a - amplitud);
+        else amplitud *= 0.999f;
+        if (amplitud < 25) amplitud = 25;
 
-    // Sin latido válido durante 3 s: «sin lectura» (0), no se conserva el valor viejo
-    if ((uint32_t)(nMuestra - ultValidoIdx) * MUESTRA_MS > SIN_LATIDO_MS && (rrN > 0 || bpmActual > 0)) {
-      limpiarLatidos();
-      ultValidoIdx = nMuestra;
-    }
-
-    detectarLatido(filtrado);
-    fPrevio = filtrado;
-
-    // Estimación de SpO2 (aproximación educativa, sin calibrar contra un oxímetro de referencia):
-    // razón de razones R = (AC_rojo/DC_rojo) / (AC_ir/DC_ir) y la recta empírica 110 - 25·R.
-    if (rojo > 1000) {
-      if (dcRojo == 0) dcRojo = rojo;
-      dcRojo += 0.02f * (rojo - dcRojo);          // DC lento del rojo (igual que el del infrarrojo)
-      float acRojo = rojo - dcRojo;
-      float acIr = ir - dc;
-      sumaAcRojo2 += acRojo * acRojo;
-      sumaAcIr2 += acIr * acIr;
-      muestrasSpo2++;
-
-      if (muestrasSpo2 >= 200) {                  // ventana de 2 s a 100 Hz
-        float rmsRojo = sqrtf(sumaAcRojo2 / muestrasSpo2);
-        float rmsIr = sqrtf(sumaAcIr2 / muestrasSpo2);
-        float indiceIr = (dc > 1) ? rmsIr / dc : 0;           // índice de perfusión del infrarrojo
-        float indiceRojo = (dcRojo > 1) ? rmsRojo / dcRojo : 0;
-        bool valida = false;
-        if (indiceIr > 0.001f && indiceIr < 0.2f && indiceRojo > 0) {
-          float r = indiceRojo / indiceIr;
-          float calc = 110.0f - 25.0f * r;
-          if (r >= 0.3f && r <= 3.0f && calc >= 70.0f && calc <= 100.0f) {
-            spo2Actual = (spo2Actual > 0) ? (0.7f * spo2Actual + 0.3f * calc) : calc;
-            valida = true;
-          }
+        // Sin latido válido durante 3 s: «sin lectura» (0), no se conserva el valor viejo
+        if ((uint32_t)(nMuestra - ultValidoIdx) * MUESTRA_MS > SIN_LATIDO_MS && (rrN > 0 || bpmActual > 0)) {
+          limpiarLatidos();
+          ultValidoIdx = nMuestra;
         }
-        if (valida) {
-          ventanasSpo2Invalidas = 0;
-        } else if (++ventanasSpo2Invalidas >= 3) {
-          spo2Actual = 0;                         // señal inservible: sin lectura en vez de un número inventado
+
+        if (ledMascara > 0) {
+          // Cambió la corriente del IR: el nivel de la señal cambia, durante 1 s no se buscan latidos (evita un latido falso)
+          ledMascara--;
+          ultValidoIdx = nMuestra;
+          ultPicoIdx = nMuestra;
+          hayPicoPrevio = false;
+          buscando = false;
+        } else {
+          detectarLatido(filtrado);
         }
-        sumaAcRojo2 = 0;
-        sumaAcIr2 = 0;
-        muestrasSpo2 = 0;
+        fPrevio = filtrado;
+
+        // SpO2 por banda: pausada ~1,5 s tras un cambio de corriente
+        if (ledPausaSpo2 > 0) {
+          ledPausaSpo2--;
+        } else {
+          acumularSpo2(ir, rojo, filtrado, filtradoRojo,
+                       (float)ir - 2.0f * irPrev1 + irPrev2, (float)rojo - 2.0f * roPrev1 + roPrev2);
+        }
+        // 12 s sin ventana aceptada: sin lectura, nunca un número viejo
+        if (++sinAceptadaN > SPO2_CADUCA_N && (spo2Actual > 0 || nHist > 0)) {
+          spo2Actual = 0;
+          nHist = 0;
+          posHist = 0;
+        }
+
+        ajustarLed();
       }
     }
+    irPrev2 = irPrev1; irPrev1 = ir;
+    roPrev2 = roPrev1; roPrev1 = rojo;
   }
 
   // Onda para la app y el osciloscopio: 50 muestras/s = PROMEDIO de cada 2 lecturas de 100 Hz (no se tiran muestras:
@@ -564,7 +776,8 @@ void emitirMuestraUsb(unsigned long t, uint16_t ir, uint16_t rojo) {
 // Lectura cruda del sensor (solo en modo de captura): una sola escritura, con mutex.
 void emitirMuestraCruda(uint32_t n, unsigned long t, uint16_t ir, uint16_t rojo) {
   char buf[64];
-  int largo = snprintf(buf, sizeof(buf), "RAW,%lu,%lu,%u,%u\n", (unsigned long)n, t, (unsigned)ir, (unsigned)rojo);
+  int largo = snprintf(buf, sizeof(buf), "RAW,%lu,%lu,%u,%u,%u\n", (unsigned long)n, t, (unsigned)ir, (unsigned)rojo,
+                       (unsigned)ledReg);   // 6.º campo: REG_LED vigente (0-255)
   if (largo <= 0 || largo >= (int)sizeof(buf)) return;
   xSemaphoreTake(serMux, portMAX_DELAY);
   Serial.write((const uint8_t*)buf, (size_t)largo);
@@ -971,7 +1184,8 @@ void procesarComando(const String& json) {
     rawN = 0;
     rawHasta = millis() + RAW_DURACION_MAX_MS;
     rawActivo = true;
-    emitir("{\"ev\":\"raw\",\"estado\":\"on\",\"hz\":100,\"bits\":16,\"ledIrMa\":27.1,\"ledRojoMa\":7.6,\"maxSegundos\":180}");
+    emitir(String("{\"ev\":\"raw\",\"estado\":\"on\",\"hz\":100,\"bits\":16,\"ledInicial\":") + String((unsigned)LED_INICIAL) +
+           ",\"maxSegundos\":180}");
   } else if (c.cmd == "raw_off") {
     rawActivo = false;
     emitir(String("{\"ev\":\"raw\",\"estado\":\"off\",\"muestras\":") + String((unsigned long)rawN) + "}");

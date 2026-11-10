@@ -131,11 +131,13 @@ que cerrar el Monitor Serie del Arduino IDE (solo un programa puede abrir el pue
 
 ## Señal y pulso (procesamiento en la placa)
 
-- **Sensor**: MAX30100 en modo SpO2, 100 muestras/s, 16 bits, LED IR ≈27 mA y rojo ≈7,6 mA (sin cambios). Detección de dedo: IR ≥ 7000.
-- **Filtro**: pasa-banda 0,5–5 Hz con dos biquads Butterworth de 2.º orden (pasa-altas 0,5 Hz + pasa-bajas 5 Hz, fs = 100 Hz). Arranca sin transitorio largo (el filtro se reinicia durante el primer segundo de calentamiento).
+- **Sensor**: MAX30100 en modo SpO2, 100 muestras/s, 16 bits. Detección de dedo: IR ≥ 7000. Los LED arrancan con rojo 27,1 mA e IR 27,1 mA (`REG_LED` = 0x88) y la placa **equilibra sola la corriente** (ver abajo).
+- **Filtro**: pasa-banda 0,5–5 Hz con dos biquads Butterworth de 2.º orden (pasa-altas 0,5 Hz + pasa-bajas 5 Hz, fs = 100 Hz). Arranca sin transitorio largo (el filtro se reinicia durante el primer segundo tras apoyar el dedo).
+- **Calentamiento real («dedo estable»)**: tras apoyar el dedo, el pulso y la SpO₂ valen 0 (sin lectura) hasta que el DC del infrarrojo deja de moverse: mínimo 3 s y máximo 8 s, y solo cuando su variación en el último segundo es menor que 0,15 % de forma sostenida (0,3 s). Los valores se ajustaron con una captura real de 60 s (el escalón de apoyar el dedo termina a ≈1,7 s y el DC se asienta hacia los 5–6 s).
 - **Latidos**: se busca la **cresta** (máximo local confirmado al bajar al 72 % de su altura), con umbral adaptativo (0,4 × amplitud media de los últimos latidos) y refractario adaptativo (0,58 × intervalo mediano, entre 280 y 600 ms). Un intervalo fuera de ±30 % de la mediana se descarta salvo que se repita 3 veces (cambio real de ritmo).
 - **Pulso**: 60000 / mediana de los últimos ≤ 8 intervalos válidos (rango 40–180), suavizado leve y variación limitada a ±4 BPM por latido. No hay valores iniciales inventados: se muestra con ≥ 4 intervalos válidos coherentes. Con intervalos dispersos, una forma de onda que no se repite (ruido) o más de 3 s sin latido válido, el pulso es **0 (sin lectura)**.
-- **SpO2**: sin cambios (razón de razones AC/DC, ventanas de 2 s).
+- **Equilibrio automático del LED (RF114)**: con el dedo estable, cada 500 ms se compara el DC del rojo con el del IR. Si el rojo no está entre el 60 % y el 100 % del IR (y siempre ≤ 56 000, lejos del tope de 65 535 del ADC) se sube o baja **un paso** de corriente del rojo; si el DC rojo pasa de 58 000 baja un paso al instante. Si el DC del IR pasa de 60 000 baja un paso (mínimo 14,2 mA) y si queda por debajo de 18 000 con dedo sube un paso (máximo 40,2 mA). Tras cada cambio se reinicia la ventana de SpO₂, se pausa ~1,5 s, el filtro se reinicia sobre el nivel nuevo y, si cambió el IR, se enmascara 1 s la búsqueda de latidos (para que el escalón no cuente como latido). Sin dedo vuelve a 27,1/27,1 mA. Códigos de corriente (nibble de `REG_LED`: rojo en los bits 7–4, IR en 3–0): 0=0, 1=4,4, 2=7,6, 3=11,0, 4=14,2, 5=17,4, 6=20,8, 7=24,0, 8=27,1, 9=30,6, A=33,8, B=37,0, C=40,2, D=43,6, E=46,8, F=50,0 mA.
+- **SpO2 por banda (RF115)**: el rojo y el IR pasan por el **mismo** pasa-banda 0,5–5 Hz; el DC es la media de la ventana. Ventanas de 6 s que se recalculan cada 2 s. Se estima el ruido de cada canal (2.ª diferencia de la lectura cruda) y se resta en cuadratura de la AC. R = (AC_rojo/DC_rojo)/(AC_ir/DC_ir) y SpO₂ = 110 − 25·R, acotada a 70–100. Solo se acepta una ventana si el SNR de los dos canales es ≥ 3, la perfusión del IR es ≥ 0,02 %, la AC es parecida en los tres bloques de 2 s y no hubo cambio de corriente en la ventana. Se muestra la **mediana de las últimas 5 estimaciones aceptadas** (variación máxima ±2 puntos por actualización; hacen falta 3 para mostrar algo). Si pasan 12 s sin ventana aceptada, la SpO₂ es **0 (sin lectura)**, nunca un número viejo. **Es una aproximación educativa: la recta 110 − 25·R es genérica y NO está calibrada contra un oxímetro de referencia**; con el dedo muy presionado o frío (poca perfusión) lo normal es «sin lectura».
 - **Onda enviada** (WiFi y USB): **50 muestras/s**, promedio de cada 2 lecturas de 100 Hz, con el latido hacia arriba y centrada en 24500 (IR) / 21000 (rojo sintético). La ganancia sigue una envolvente lenta (sube con suavidad, baja en ≈10 s) para que no pulse con la respiración.
 - **Paquete WiFi**: informa `frecuencia_hz` = 50 y lleva como máximo 100 muestras por canal (límite de la API desplegada); si hay más acumuladas, las más antiguas salen primero y el resto queda para el siguiente envío. El búfer guarda 4 s (200 muestras) y se accede con una sección crítica entre el núcleo del sensor y el de red.
 
@@ -144,8 +146,10 @@ que cerrar el Monitor Serie del Arduino IDE (solo un programa puede abrir el pue
 ## Captura de la señal cruda (diagnóstico)
 
 Para ver por qué el pulso o la SpO₂ varían hace falta la señal SIN procesar. Con el comando `@SP {"cmd":"raw_on"}` la
-placa envía por USB cada lectura del sensor a 100 Hz: `RAW,<n>,<millis>,<ir>,<rojo>` (se apaga sola a los 3 minutos o con
-`{"cmd":"raw_off"}`; por defecto está apagado y no cambia nada del funcionamiento normal).
+placa envía por USB cada lectura del sensor a 100 Hz: `RAW,<n>,<millis>,<ir>,<rojo>,<led>` (se apaga sola a los 3 minutos o con
+`{"cmd":"raw_off"}`; por defecto está apagado y no cambia nada del funcionamiento normal). El 6.º campo `<led>` es el valor decimal
+(0–255) de `REG_LED` vigente en ese momento (rojo en los bits 7–4, IR en los bits 3–0; p. ej. 136 = 0x88 = 27,1/27,1 mA), porque la corriente
+ya no es fija. El evento `{"ev":"raw","estado":"on",...}` trae `"ledInicial":136` en lugar de los antiguos `ledIrMa`/`ledRojoMa`.
 
 Con el dedo apoyado y sin moverlo:
 
