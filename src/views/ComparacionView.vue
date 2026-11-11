@@ -90,6 +90,16 @@
 
     <AvisoEducativo />
 
+    <!-- Sincronización Temporal de Bioseñales Comparadas -->
+    <SincronizacionSenalesPanel
+      v-if="pestañaActiva !== 'senales'"
+      :bpmActual="selectedBpm"
+      :bpmReferencia="72"
+      :amplitudActual="selectedAmplitude"
+      :nombreMedicion="selectedMeasurementName"
+      nombreReferencia="Señal de Referencia"
+    />
+
     <!-- ===================================================================== -->
     <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS (se muestra directo arriba)     -->
     <!-- ===================================================================== -->
@@ -186,6 +196,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import SincronizacionSenalesPanel from '../components/SincronizacionSenalesPanel.vue'
 
 import AvisoGirar from '../components/AvisoGirar.vue'
 import MeasurementSelector from '../components/MeasurementSelector.vue'
