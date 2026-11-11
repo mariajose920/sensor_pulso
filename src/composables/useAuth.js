@@ -285,6 +285,7 @@ export function useAuth() {
               }
               localStorage.setItem('sensor_profile', JSON.stringify(profile.value))
             }
+            await registrarIntentoLogin({ correo: cuenta.email, exitoso: true })
             return { success: true, data: data.user }
           }
         } catch (_) {}
@@ -314,6 +315,7 @@ export function useAuth() {
         permisosProfesor.value = null
         permisosProfesorCargados.value = true
       }
+      await registrarIntentoLogin({ correo: cuenta.email, exitoso: true })
       return { success: true, data: mockUser }
     } finally {
       omitirLimpiezaSignOut = false
