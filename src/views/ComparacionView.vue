@@ -98,6 +98,18 @@
       :amplitudActual="selectedAmplitude"
       :nombreMedicion="selectedMeasurementName"
       nombreReferencia="Señal de Referencia"
+      @cambio-sincronizacion="onCambioSincronizacion"
+    />
+
+    <!-- Análisis Automático de la Comparación y Explicación de Diferencias -->
+    <AnalisisAutomaticoComparacionPanel
+      v-if="pestañaActiva !== 'senales'"
+      :bpmActual="selectedBpm"
+      :bpmReferencia="72"
+      :amplitudActual="selectedAmplitude"
+      :similitudPorcentaje="similitudActualSync"
+      :nombreMedicion="selectedMeasurementName"
+      nombreReferencia="Señal de Referencia"
     />
 
     <!-- ===================================================================== -->
@@ -197,6 +209,7 @@ import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import SincronizacionSenalesPanel from '../components/SincronizacionSenalesPanel.vue'
+import AnalisisAutomaticoComparacionPanel from '../components/AnalisisAutomaticoComparacionPanel.vue'
 
 import AvisoGirar from '../components/AvisoGirar.vue'
 import MeasurementSelector from '../components/MeasurementSelector.vue'
@@ -241,6 +254,13 @@ onMounted(() => {
 const selectedBpm = ref(78)
 const selectedAmplitude = ref(100)
 const selectedMeasurementName = ref('Medición Tomada')
+const similitudActualSync = ref(96.4)
+
+function onCambioSincronizacion(payload) {
+  if (payload && typeof payload.similitudPorcentaje === 'number') {
+    similitudActualSync.value = payload.similitudPorcentaje
+  }
+}
 
 // Intervalo exacto de la medición calculada: T = 60000 / BPM (en ms)
 const currentIntervalMs = computed(() => {
