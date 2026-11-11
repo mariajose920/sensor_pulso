@@ -38,6 +38,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <esp_mac.h>
+#include <time.h>
 
 // ----------------------------------------------------------------------------
 // 1. VALORES POR DEFECTO (se pueden sobrescribir desde la app, se guardan en NVS)
@@ -103,17 +104,17 @@ const char* ROOT_CA_CERTIFICATE = \
 "qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\n" \
 "rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\n" \
 "HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\n" \
-"hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZLubhzEFnT\n" \
-"IZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ3BebYhtF\n" \
-"8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KKNFtY2PwB\n" \
-"yVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5ORAzI4JM\n" \
-"PJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7UrTkXWStAm\n" \
-"zOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdCjNPElpzV\n" \
-"mbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVcoyi3B43n\n" \
-"jTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq4RgqsahD\n" \
-"YVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPAmRGunUHB\n" \
-"cnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57demyPxgcY\n" \
-"xn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n" \
+"hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\n" \
+"ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n" \
+"3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\n" \
+"NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\n" \
+"ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\n" \
+"TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\n" \
+"jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\n" \
+"oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n" \
+"4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\n" \
+"mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\n" \
+"emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n" \
 "-----END CERTIFICATE-----\n";
 
 // ----------------------------------------------------------------------------
@@ -1292,6 +1293,42 @@ void leerSerie() {
 // Envíos fallidos seguidos: ante una racha larga la placa reinicia el WiFi y, si no se recupera, se reinicia sola
 static int fallosSeguidos = 0;
 
+
+// ============================================================================
+// SINCRONIZACIÓN DE HORA POR NTP (RF55)
+// mbedTLS requiere la hora real para verificar el período de validez
+// (Not Before / Not After) del certificado del servidor (Let's Encrypt / Vercel).
+// ============================================================================
+static bool horaSincronizada = false;
+
+void sincronizarHoraNTP() {
+  if (horaSincronizada) return;
+
+  Serial.println(F("[NTP] Sincronizando hora con servidores pool.ntp.org y time.google.com..."));
+  // Configuración UTC (offset 0, daylight 0)
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+
+  time_t now = time(nullptr);
+  int intentos = 0;
+  // Esperar hasta que el año sea >= 2024 (epoch 1704067200) o máx 20 intentos (~5s)
+  while (now < 1704067200 && intentos < 20) {
+    vTaskDelay(250 / portTICK_PERIOD_MS);
+    now = time(nullptr);
+    intentos++;
+  }
+
+  if (now >= 1704067200) {
+    horaSincronizada = true;
+    struct tm timeinfo;
+    gmtime_r(&now, &timeinfo);
+    Serial.printf("[NTP] ✅ Hora sincronizada: %04d-%02d-%02d %02d:%02d:%02d UTC\n",
+                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                  timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  } else {
+    Serial.println(F("[NTP] ⚠️ Advertencia: tiempo de espera agotado. Se reintentará en la siguiente conexión."));
+  }
+}
+
 void enviarPaquete() {
   cfgLock();
   String url = cfgUrl;
@@ -1340,7 +1377,7 @@ void enviarPaquete() {
 
   // Cliente HTTPS seguro con TLS (o HTTP plano si la URL configurada es http://)
   WiFiClientSecure clienteSeguro;
-  clienteSeguro.setInsecure(); // Acepta HTTPS de Vercel
+  clienteSeguro.setCACert(ROOT_CA_CERTIFICATE); // Validación estricta de certificado TLS (RF55)
   clienteSeguro.setTimeout(6);           // lectura/escritura TLS: 6 s como máximo
   clienteSeguro.setHandshakeTimeout(6);  // handshake TLS: 6 s como máximo (no bloquear el envío)
   WiFiClient clientePlano;
@@ -1460,6 +1497,7 @@ void tareaTransmisionWiFi(void *pvParameters) {
         if (res == CON_OK) {
           Serial.printf("[WiFi] ✅ Conectado. IP: %s (Señal: %d dBm)\n",
                         WiFi.localIP().toString().c_str(), WiFi.RSSI());
+          sincronizarHoraNTP();
         } else if (res != CON_ABORTADO) {
           Serial.printf("[WiFi] ⚠️ Sin conexión (código %d). Reintento en 10 s.\n", (int)WiFi.status());
         }
@@ -1506,7 +1544,7 @@ void setup() {
     Serial.println(F("⚠️ [Seguridad RF55] ALERTA: la URL del servidor debe usar https:// con TLS."));
   } else {
     Serial.println(F("🔒 [Seguridad RF55] Cifrado en tránsito TLS 1.2+ (HTTPS) verificado."));
-    Serial.println(F("🔒 [Seguridad RF55] Validación estricta de certificado TLS habilitada (rechazo de certificados falsos)."));
+    Serial.println(F("🔒 [Seguridad RF55] Validación estricta de certificado TLS habilitada (rechazo de certificados falsos con setCACert y CA raíz ISRG Root X1)."));
   }
 
   Wire.begin(PIN_SDA, PIN_SCL);
