@@ -234,66 +234,25 @@ export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
  */
 export async function obtenerEvaluacionesAula(aulaId) {
   if (!aulaId) return { success: true, data: [] }
-  
-  // 1. Consultar en Supabase por el aulaId real
-  try {
-    const { data, error } = await supabase
-      .from('evaluaciones')
-      .select('*')
-      .eq('aula_id', aulaId)
-      .order('creado_en', { ascending: false })
 
-    if (!error && data && data.length > 0) {
-      // Consultar asignaciones reales para estas evaluaciones
-      const evalIds = data.map(e => e.id)
-      let asignaciones = []
-      try {
-        const { data: asigData } = await supabase
-          .from('evaluacion_asignaciones')
-          .select('*')
-          .in('evaluacion_id', evalIds)
-        if (asigData) asignaciones = asigData
-      } catch (_) {}
+  const { data, error } = await supabase
+    .from('evaluaciones')
+    .select('*, asignaciones:evaluacion_asignaciones(*)')
+    .eq('aula_id', aulaId)
+    .order('creado_en', { ascending: false })
 
-      return { 
-        success: true, 
-        data: data.map(e => ({
-          ...e,
-          activa: e.estado ? e.estado !== 'borrador' : true,
-          creada_en: e.creado_en,
-          asignaciones: asignaciones.filter(a => a.evaluacion_id === e.id)
-        }))
-      }
-    }
-  } catch (_) {}
-
-  // 2. Si no están en Supabase o es modo local, buscar en el almacenamiento de evaluaciones
-  const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
-  let locales = []
-  try {
-    locales = JSON.parse(localStorage.getItem(STORAGE_EVALUACIONES) || '[]')
-  } catch (_) {}
-
-  const STORAGE_ASIG = 'sensor_pulso_evaluacion_asignaciones'
-  let asigLocales = []
-  try {
-    asigLocales = JSON.parse(localStorage.getItem(STORAGE_ASIG) || '[]')
-  } catch (_) {}
-
-  const evalsLocales = locales.filter(e => e.aula_id === aulaId).map(e => ({
-    ...e,
-    activa: true,
-    creada_en: e.creado_en || e.creada_en,
-    asignaciones: asigLocales.filter(a => a.evaluacion_id === e.id)
-  }))
-
-  if (evalsLocales.length > 0) {
-    return { success: true, data: evalsLocales }
+  if (error) {
+    return { success: false, error: error.message, data: [] }
   }
 
-  // 3. Fallback de muestra para aulas demo
-  const evals = evaluacionesLocales.filter(e => !e.aula_id || e.aula_id === aulaId)
-  return { success: true, data: evals }
+  return {
+    success: true,
+    data: data.map(evaluacion => ({
+      ...evaluacion,
+      activa: ['programada', 'en_curso'].includes(evaluacion.estado),
+      creada_en: evaluacion.creado_en
+    }))
+  }
 }
 
 export async function obtenerAulas({ usuarioId, usuarioCorreo, esAdmin, esProfesor }) {
