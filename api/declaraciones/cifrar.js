@@ -4,12 +4,13 @@
  * Entrada: { factores: {...} }  ·  Salida: { ok, datosCifrados, claveVersion }
  */
 import { cifrarFactores, ErrorClave } from '../_lib/cifradoSalud.js'
-import { leerCuerpo, responder, verificarSesion } from '../_lib/sesion.js'
+import { leerCuerpo, responder, verificarSesion, verificarCsrf } from '../_lib/sesion.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 
 export function crearHandler({ verificar = verificarSesion, env = process.env } = {}) {
   return async function handler(req, res) {
     if (req.method !== 'POST') return responder(res, 405, { ok: false, error: 'Solo se acepta POST.' })
+    if (!verificarCsrf(req, res, { env })) return
     const sesion = await verificar(req, env)
     if (!sesion) return responder(res, 401, { ok: false, error: 'Se requiere una sesión válida.' })
 

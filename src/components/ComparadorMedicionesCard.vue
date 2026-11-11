@@ -472,6 +472,9 @@ const listaPublicas = ref([])
 const medicionSeleccionadaId = ref('')
 
 onMounted(async () => {
+  if (typeof window !== 'undefined' && window.location.search.includes('modo=publicas')) {
+    origenSeleccionado.value = 'publicas'
+  }
   await recargarListas()
 })
 
@@ -492,9 +495,11 @@ async function recargarListas() {
     listaPropias.value = isAuthenticated.value ? propias : []
     listaPublicas.value = publicas
 
-    // Seleccionar por defecto la primera disponible
+    // Seleccionar por defecto la primera disponible según la pestaña activa
     if (!medicionSeleccionadaId.value) {
-      if (listaPropias.value.length > 0) {
+      if (origenSeleccionado.value === 'publicas' && publicas.length > 0) {
+        medicionSeleccionadaId.value = publicas[0].id
+      } else if (listaPropias.value.length > 0) {
         medicionSeleccionadaId.value = listaPropias.value[0].id
       } else if (publicas.length > 0) {
         medicionSeleccionadaId.value = publicas[0].id

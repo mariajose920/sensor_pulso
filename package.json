@@ -21,7 +21,8 @@
     "test:rf47": "node scripts/test-rf47-contrastar-datasets.js",
     "test:rf65": "node scripts/test-rf65-validar-sanitizar.js",
     "test:rf66": "node scripts/test-rf66-limites-csv.js",
-    "test:rf67": "node scripts/test-rf67-limite-peticiones.js"
+    "test:rf67": "node scripts/test-rf67-limite-peticiones.js",
+    "test:rf68": "node scripts/test-rf68-proteccion-web.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",

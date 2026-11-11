@@ -24,12 +24,27 @@ import {
   validarMetadatosArchivoCsv
 } from './limitesCsvService.js'
 
+import {
+  escaparHtml,
+  desescaparHtml,
+  escaparAtributoHtml,
+  sanitizarContenidoUsuario,
+  esUrlSegura,
+  contieneCodigoPeligroso
+} from './proteccionWebService.js'
+
 export {
   LIMITES_CSV,
   detectarFormulaCsv,
   detectarArchivoBinario,
   validarLimitesArchivoCsv,
-  validarMetadatosArchivoCsv
+  validarMetadatosArchivoCsv,
+  escaparHtml,
+  desescaparHtml,
+  escaparAtributoHtml,
+  sanitizarContenidoUsuario,
+  esUrlSegura,
+  contieneCodigoPeligroso
 }
 
 // Límites de seguridad (RF65 / RF66)

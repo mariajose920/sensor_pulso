@@ -1,12 +1,34 @@
 /** Utilidades comunes de los endpoints: respuesta JSON, lectura del cuerpo y verificación de la sesión. */
 import { createClient } from '@supabase/supabase-js'
+import { aplicarCabecerasSeguridad, validarOrigenCsrf } from './proteccionWeb.js'
 
 export function responder(res, codigo, cuerpo) {
   res.statusCode = codigo
   res.setHeader('Content-Type', 'application/json')
-  res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('X-Content-Type-Options', 'nosniff')
+  // RF68: Cabeceras de seguridad activas en respuestas de API
+  aplicarCabecerasSeguridad(res, 'api')
   return res.end(JSON.stringify(cuerpo))
+}
+
+/**
+ * Valida la protección contra CSRF en solicitudes entrantes.
+ * Si la petición es rechazada, emite automáticamente código 403 con mensaje de error y retorna false.
+ *
+ * @param {Object} req
+ * @param {Object} res
+ * @param {Object} [opciones]
+ * @returns {boolean} True si la solicitud está permitida
+ */
+export function verificarCsrf(req, res, opciones = {}) {
+  const resultado = validarOrigenCsrf(req, opciones)
+  if (!resultado.permitido) {
+    responder(res, resultado.codigo || 403, {
+      ok: false,
+      error: resultado.error || 'Petición rechazada por protección CSRF.'
+    })
+    return false
+  }
+  return true
 }
 
 export function leerCuerpo(req) {

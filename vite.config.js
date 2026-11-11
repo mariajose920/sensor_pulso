@@ -133,7 +133,16 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       host: true, // Expone el servidor en la red local WiFi (0.0.0.0) para que el ESP32 pueda enviar datos (RF05)
-      port: 5173
+      port: 5173,
+      headers: {
+        'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://sensorpulso.vercel.app; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+      }
     },
     resolve: {
       alias: {

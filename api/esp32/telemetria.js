@@ -6,6 +6,7 @@ import {
   LIMITES_PETICIONES_CONFIG,
   getAdminSupabase
 } from '../_lib/limitePeticiones.js'
+import { aplicarCabecerasSeguridad, validarOrigenCsrf } from '../_lib/proteccionWeb.js'
 
 // Un envío HTTPS del ESP32 puede tardar varios segundos: se considera «conectado» si hubo contacto en los últimos 15 s
 const VENTANA_CONECTADO_MS = 15000
@@ -74,13 +75,23 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-ESP32-Token')
 
-  // RF55 / RNF11: Cabeceras de seguridad y cifrado en tránsito (HSTS estricto)
+  // RF55 / RF68 / RNF11: Cabeceras de seguridad activas en tránsito
   res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
-  res.setHeader('X-Content-Type-Options', 'nosniff')
+  aplicarCabecerasSeguridad(res, 'api')
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
     return res.end()
+  }
+
+  // RF68: Validación de protección contra CSRF para peticiones mutables
+  if (req.method !== 'GET') {
+    const verificacionCsrf = validarOrigenCsrf(req)
+    if (!verificacionCsrf.permitido) {
+      res.statusCode = verificacionCsrf.codigo || 403
+      res.setHeader('Content-Type', 'application/json')
+      return res.end(JSON.stringify({ ok: false, error: verificacionCsrf.error || 'Petición rechazada por protección CSRF.' }))
+    }
   }
 
   // --------------------------------------------------------------------------
