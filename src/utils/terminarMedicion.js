@@ -45,6 +45,7 @@ export const MENSAJES_TERMINAR = {
   publicar_sin_sesion: 'La medición se guardó, pero para publicar necesitas iniciar sesión.',
   publicar_conexion: 'La medición se guardó, pero no se pudo publicar: no hay conexión. Inténtalo más tarde.',
   publicar_no_sensor: 'La medición se guardó, pero solo se publican las mediciones hechas con el sensor.',
+  publicar_falta_confirmacion: 'La medición se guardó en privado, pero ninguna medición se publica sin una confirmación adicional y explícita del titular.',
   publicar_generico: 'La medición se guardó, pero no se pudo publicar. Intenta de nuevo más tarde.'
 }
 
@@ -445,6 +446,77 @@ export function vistaPreviaSinDatosIdentificables(vista, nombre) {
   return !enCampos && !enTarjeta
 }
 
+// ───────────────────────────── Confirmación Explícita del Titular (RF91) ─────────────────────────────
+
+/** Formatea la fecha y hora exacta en que el titular otorgó su confirmación explícita. */
+export function formatearFechaConfirmacionTitular(fecha = new Date()) {
+  const d = fecha instanceof Date ? fecha : new Date(fecha)
+  if (Number.isNaN(d.getTime())) return ''
+  const dia = String(d.getDate()).padStart(2, '0')
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const anio = d.getFullYear()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${dia}/${mes}/${anio}, ${hh}:${mm} hrs`
+}
+
+/**
+ * Valida que el titular haya otorgado una confirmación adicional y explícita (`confirmado === true`)
+ * antes de permitir cualquier publicación comunitaria. Por defecto toda medición es privada.
+ */
+export function validarConfirmacionExplicitaTitular({
+  confirmado = false,
+  titularNombre = '',
+  titularCorreo = '',
+  fechaConfirmacion = null
+} = {}) {
+  const esConfirmacionValida = confirmado === true
+  const identidadTitular = String(titularCorreo || titularNombre || 'Cuenta autenticada UNACH').trim()
+
+  if (!esConfirmacionValida) {
+    return {
+      autorizado: false,
+      puedePublicar: false,
+      confirmado: false,
+      titular: identidadTitular,
+      codigo: 'falta_confirmacion',
+      mensaje: MENSAJES_TERMINAR.publicar_falta_confirmacion,
+      estadoEtiqueta: 'Protección del Titular · Privada por Defecto',
+      textoDeclaracion:
+        'Confirmo de forma explícita y voluntaria como titular de esta medición que autorizo su publicación anónima en la Galería Pública UNACH. Comprendo que puedo retirar esta publicación en cualquier momento.',
+      mensajeEstado:
+        'Requisito obligatorio: Ninguna medición se publica automáticamente. Debes marcar la casilla de confirmación explícita del titular para habilitar el botón de publicación.',
+      textoBotonPublicar: 'Confirmar y Publicar de Forma Anónima (Bloqueado)',
+      fechaIso: null,
+      fechaTexto: null,
+      confirmadaEnIso: null,
+      confirmadaEnTexto: null
+    }
+  }
+
+  const instante = fechaConfirmacion ? new Date(fechaConfirmacion) : new Date()
+  const iso = instante.toISOString()
+  const textoFecha = formatearFechaConfirmacionTitular(instante)
+  return {
+    autorizado: true,
+    puedePublicar: true,
+    confirmado: true,
+    titular: identidadTitular,
+    codigo: 'confirmacion_verificada',
+    mensaje: null,
+    estadoEtiqueta: 'Confirmación Registrada',
+    textoDeclaracion:
+      'Confirmo de forma explícita y voluntaria como titular de esta medición que autorizo su publicación anónima en la Galería Pública UNACH. Comprendo que puedo retirar esta publicación en cualquier momento.',
+    mensajeEstado:
+      `Confirmación explícita verificada · Titular: ${identidadTitular} · Se registrará fecha y hora exacta de confirmación`,
+    textoBotonPublicar: 'Confirmar y Publicar de Forma Anónima',
+    fechaIso: iso,
+    fechaTexto: textoFecha,
+    confirmadaEnIso: iso,
+    confirmadaEnTexto: textoFecha
+  }
+}
+
 // ───────────────────────────── Mensajes de resultado y errores ─────────────────────────────
 
 /** Mensaje de resultado de guardar (+ publicar). El motivo de por qué no se publicó va siempre incluido. */
@@ -503,6 +575,7 @@ export function clasificarErrorPublicacion(error) {
   if (!error) return 'generico'
   const texto = `${error.message || ''} ${error.details || ''}`.toLowerCase()
   const codigo = String(error.code || '')
+  if (texto.includes('confirmaci') && (texto.includes('titular') || texto.includes('explicita') || texto.includes('explícita'))) return 'falta_confirmacion'
   if (texto.includes('requiere sesi')) return 'sin_sesion'
   if (texto.includes('no tiene permiso')) return 'sin_permiso'
   if (texto.includes('consentimiento')) return 'consentimiento'
@@ -521,6 +594,7 @@ const CAUSAS_HISTORIAL = {
   sin_sesion: 'necesitas iniciar sesión.',
   sin_permiso: 'tu cuenta no tiene el permiso de publicar (lo da el administrador).',
   consentimiento: 'no tienes un consentimiento informado vigente.',
+  falta_confirmacion: 'ninguna medición se publica sin una confirmación adicional y explícita del titular.',
   no_sensor: 'solo se publican las mediciones hechas con el sensor y ya terminadas.',
   conexion: 'no hay conexión. Inténtalo más tarde.',
   sin_id: 'no se obtuvo el identificador de la medición.'
