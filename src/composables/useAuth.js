@@ -4,12 +4,13 @@ import { validarCorreoInstitucional } from '../utils/validators'
 import { ROLES, tienePermiso, obtenerEtiquetaPerfil } from '../utils/roles'
 import { PRIMER_ADMIN } from '../../scripts/seedAdmin.js'
 import { limpiarDatosLocales } from '../pwa/limpiarAlSalir.js'
-import { 
-  verificarEstadoBloqueo, 
-  registrarIntentoLogin, 
-  formatearTiempoRestante, 
-  solicitarRecuperacionContrasena 
+import {
+  verificarEstadoBloqueo,
+  registrarIntentoLogin,
+  formatearTiempoRestante,
+  solicitarRecuperacionContrasena
 } from '../services/seguridadLoginService'
+import { obtenerPermisosProfesor } from '../services/adminService'
 
 // Estado reactivo global
 const user = ref(JSON.parse(localStorage.getItem('sensor_user') || 'null'))
@@ -17,6 +18,30 @@ const profile = ref(JSON.parse(localStorage.getItem('sensor_profile') || 'null')
 const session = ref(null)
 const loading = ref(false)
 const authError = ref(null)
+const permisosProfesor = ref(JSON.parse(localStorage.getItem('sensor_profesor_permisos') || 'null'))
+const permisosProfesorCargados = ref(false)
+const permisoConsultado = ref(true)
+
+async function cargarPermisosProfesorActual(userId) {
+  if (!userId) {
+    permisosProfesor.value = null
+    permisosProfesorCargados.value = false
+    permisoConsultado.value = true
+    return
+  }
+  try {
+    const res = await obtenerPermisosProfesor(userId)
+    permisosProfesor.value = res?.data || null
+    permisoConsultado.value = res?.consultado !== false
+    if (permisosProfesor.value) {
+      localStorage.setItem('sensor_profesor_permisos', JSON.stringify(permisosProfesor.value))
+    }
+  } catch (_) {
+    permisoConsultado.value = false
+  } finally {
+    permisosProfesorCargados.value = true
+  }
+}
 
 function extraerNombreGoogle(usuario) {
   const meta = usuario?.user_metadata || {}
@@ -72,6 +97,9 @@ async function cargarPerfilDesdeBD(userId, nombreFallback = '') {
       }
       profile.value = data
       localStorage.setItem('sensor_profile', JSON.stringify(data))
+      if (data.rol === ROLES.PROFESOR && !data.es_admin) {
+        await cargarPermisosProfesorActual(userId)
+      }
     }
   } catch (err) {
     console.warn('Aviso cargando perfil:', err)
@@ -82,6 +110,8 @@ async function cargarPerfilDesdeBD(userId, nombreFallback = '') {
 supabase.auth.getSession().then(async ({ data }) => {
   if (data?.session?.user) {
     await validarYAplicarSesion(data.session)
+  } else if (user.value?.id && profile.value?.rol === ROLES.PROFESOR && !profile.value?.es_admin) {
+    await cargarPermisosProfesorActual(user.value.id)
   }
 }).catch(() => {}).finally(() => {
   loading.value = false
@@ -106,13 +136,19 @@ supabase.auth.onAuthStateChange(async (event, currentSession) => {
         es_admin: false
       }
       localStorage.setItem('sensor_profile', JSON.stringify(profile.value))
+      if (esProfesor) {
+        await cargarPermisosProfesorActual(currentSession.user.id)
+      }
     }
   } else if (event === 'SIGNED_OUT' && !omitirLimpiezaSignOut) {
     session.value = null
     user.value = null
     profile.value = null
+    permisosProfesor.value = null
+    permisosProfesorCargados.value = false
     localStorage.removeItem('sensor_user')
     localStorage.removeItem('sensor_profile')
+    localStorage.removeItem('sensor_profesor_permisos')
   }
 })
 
@@ -144,7 +180,8 @@ export function useAuth() {
   const tienePermisoProfesor = (permiso) => {
     if (isAdmin.value) return true
     if (!isProfesor.value) return false
-    return true
+    if (!permisosProfesor.value) return false
+    return Boolean(permisosProfesor.value[permiso])
   }
 
   // RF02: Inicio de sesión con Google OAuth institucional protegido
@@ -271,6 +308,12 @@ export function useAuth() {
       session.value = { user: mockUser }
       localStorage.setItem('sensor_user', JSON.stringify(mockUser))
       localStorage.setItem('sensor_profile', JSON.stringify(mockProfile))
+      if (mockProfile.rol === ROLES.PROFESOR && !mockProfile.es_admin) {
+        await cargarPermisosProfesorActual(mockProfile.id)
+      } else {
+        permisosProfesor.value = null
+        permisosProfesorCargados.value = true
+      }
       return { success: true, data: mockUser }
     } finally {
       omitirLimpiezaSignOut = false
@@ -453,9 +496,12 @@ export function useAuth() {
     user.value = null
     profile.value = null
     session.value = null
+    permisosProfesor.value = null
+    permisosProfesorCargados.value = false
 
     localStorage.removeItem('sensor_user')
     localStorage.removeItem('sensor_profile')
+    localStorage.removeItem('sensor_profesor_permisos')
     sessionStorage.clear()
   }
 
@@ -481,6 +527,12 @@ export function useAuth() {
   const refrescarPerfil = async () => {
     if (user.value?.id) {
       await cargarPerfilDesdeBD(user.value.id)
+    }
+  }
+
+  const recargarPermisosProfesor = async () => {
+    if (user.value?.id && isProfesor.value && !isAdmin.value) {
+      await cargarPermisosProfesorActual(user.value.id)
     }
   }
 
@@ -513,7 +565,11 @@ export function useAuth() {
     isEstudiante,
     roleLabel,
     can,
+    permisosProfesor,
+    permisosProfesorCargados,
+    permisoConsultado,
     tienePermisoProfesor,
+    recargarPermisosProfesor,
     login,
     loginWithGoogle,
     loginGoogleDemo,
