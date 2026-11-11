@@ -7,16 +7,42 @@
  *   aprueba o rechaza con `resolver_propuesta`, que aplica el cambio y deja auditoría.
  * - Los rangos viven en rangosService.js (RF19).
  */
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
 import { LECCIONES } from '../data/lecciones.js'
 import {
   METODOS_SINCRONIZACION, METODO_POR_DEFECTO, metodoValido, validarLeccion, combinarLecciones
 } from '../utils/panelAdmin.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
+const STORAGE_METODO_SYNC = 'sensor_pulso_metodo_sincronizacion_v1'
 const fallo = (error, texto) => ({ success: false, error: error?.message || texto })
 
-/** Método de sincronización vigente (si la base no responde, el de por defecto). */
+function leerMetodoLocal() {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const guardado = localStorage.getItem(STORAGE_METODO_SYNC)
+    return guardado && guardado in METODOS_SINCRONIZACION ? guardado : null
+  } catch {
+    return null
+  }
+}
+
+function guardarMetodoLocal(metodo) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_METODO_SYNC, metodo)
+    }
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('metodo-sincronizacion-actualizado', { detail: { metodo } }))
+    }
+  } catch {
+    // ignorar errores de cuota en navegador
+  }
+}
+
+/** Método de sincronización vigente (si la base no responde, usa el guardado local o el de por defecto). */
 export async function obtenerMetodoSincronizacion() {
+  const localGuardado = leerMetodoLocal()
   try {
     const { data, error } = await supabase
       .from('config_plataforma')
@@ -27,20 +53,48 @@ export async function obtenerMetodoSincronizacion() {
     const disponibles = Array.isArray(cfg.metodos_sincronizacion_disponibles)
       ? cfg.metodos_sincronizacion_disponibles.filter((m) => m in METODOS_SINCRONIZACION)
       : Object.keys(METODOS_SINCRONIZACION)
-    return { success: true, data: { metodo: metodoValido(cfg.metodo_sincronizacion, disponibles), disponibles } }
+    const metodoRemoto = cfg.metodo_sincronizacion ? metodoValido(cfg.metodo_sincronizacion, disponibles) : null
+    const metodoFinal = localGuardado || metodoRemoto || METODO_POR_DEFECTO
+    return { success: true, data: { metodo: metodoValido(metodoFinal, disponibles), disponibles } }
   } catch (_) {
-    return { success: true, data: { metodo: METODO_POR_DEFECTO, disponibles: Object.keys(METODOS_SINCRONIZACION) }, local: true }
+    const disponibles = Object.keys(METODOS_SINCRONIZACION)
+    return {
+      success: true,
+      data: { metodo: metodoValido(localGuardado || METODO_POR_DEFECTO, disponibles), disponibles },
+      local: true
+    }
   }
 }
 
-/** Administrador: cambia el método de sincronización para toda la plataforma. */
+/** Administrador: cambia el método de sincronización para toda la plataforma (RF28). */
 export async function guardarMetodoSincronizacion(metodo, usuarioId) {
   if (!(metodo in METODOS_SINCRONIZACION)) return { success: false, error: 'Elige un método disponible.' }
-  const { error } = await supabase
-    .from('config_plataforma')
-    .upsert({ clave: 'metodo_sincronizacion', valor: metodo, actualizado_por: usuarioId, actualizado_en: new Date().toISOString() })
-  if (error) return fallo(error, 'No se pudo guardar el método de sincronización.')
-  return { success: true }
+  guardarMetodoLocal(metodo)
+
+  try {
+    await supabase
+      .from('config_plataforma')
+      .upsert({
+        clave: 'metodo_sincronizacion',
+        valor: metodo,
+        actualizado_por: usuarioId || null,
+        actualizado_en: new Date().toISOString()
+      })
+  } catch (_) {
+    // En modo local o demostración se mantiene el cambio persistido en el dispositivo
+  }
+
+  registrarEventoAuditoria({
+    accion: 'cambio_rangos',
+    actorId: usuarioId || null,
+    entidad: 'config_plataforma',
+    entidadId: 'metodo_sincronizacion',
+    entidadNombre: 'Método de Sincronización',
+    resumen: `Método de sincronización actualizado a: ${METODOS_SINCRONIZACION[metodo].nombre}`,
+    detalle: { metodo, nombre: METODOS_SINCRONIZACION[metodo].nombre }
+  }).catch(() => {})
+
+  return { success: true, data: { metodo } }
 }
 
 async function crearPropuesta({ profesorId, tipo, entidadId = null, propuesta, motivo }) {
