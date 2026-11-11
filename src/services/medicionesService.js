@@ -12,6 +12,7 @@ import {
 import { listarPendientes, agregarPendiente, quitarPendiente } from '../pwa/medicionesPendientes.js'
 import { guardarMedicionVista, listarMedicionesVistas } from '../pwa/medicionesOffline.js'
 import { clasificarErrorPublicacion, mensajeErrorPublicacion, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 export const TAMANO_PAGINA = 20
 
@@ -124,6 +125,14 @@ export async function publicarMedicion(medicionId, titulo = null, confirmarExpli
       p_titulo: titulo
     })
     if (error) throw error
+    registrarEventoAuditoria({
+      accion: 'publicacion',
+      entidad: 'mediciones',
+      entidadId: medicionId,
+      entidadNombre: 'Galería Pública Anónima',
+      resumen: 'Publicación confirmada por titular (Vista anonimizada)',
+      detalle: { medicion_id: medicionId, publicacion_id: data || null, titulo: titulo || null }
+    }).catch(() => {})
     return { ok: true, publicacionId: data || undefined, mensaje: MENSAJES_TERMINAR.guardada_publicada }
   } catch (error) {
     const motivo = clasificarErrorPublicacion(error)
@@ -165,6 +174,14 @@ export async function retirarPublicacion(medicionId) {
   try {
     const { error } = await supabase.rpc('retirar_publicacion', { p_medicion: medicionId })
     if (error) throw error
+    registrarEventoAuditoria({
+      accion: 'retiro_publicacion',
+      entidad: 'mediciones',
+      entidadId: medicionId,
+      entidadNombre: 'Retiro de Galería Pública',
+      resumen: 'Publicación retirada de la Galería Pública por su titular',
+      detalle: { medicion_id: medicionId }
+    }).catch(() => {})
     return { ok: true }
   } catch (error) {
     const motivo = clasificarErrorPublicacion(error)
@@ -222,6 +239,14 @@ export function registrarPublicacionAnonimaLocal({
     }
     const actualizada = [nueva, ...actual].slice(0, 30)
     localStorage.setItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES, JSON.stringify(actualizada))
+    registrarEventoAuditoria({
+      accion: 'publicacion',
+      entidad: 'mediciones',
+      entidadId: nueva.id,
+      entidadNombre: 'Galería Pública Anónima',
+      resumen: `Publicación confirmada por titular (Vista anonimizada: ${nueva.bpm} BPM, ${nueva.spo2}% SpO2)`,
+      detalle: { publicacion_id: nueva.id, rango_edad: nueva.rangoEdad, actividad: nueva.actividadNombre }
+    }).catch(() => {})
     return nueva
   } catch {
     return null
@@ -237,10 +262,39 @@ export function retirarPublicacionAnonimaLocal(id) {
     const actual = leerPublicacionesAnonimasLocales()
     const filtrada = actual.filter(item => item.id !== id && item.medicionId !== id)
     localStorage.setItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES, JSON.stringify(filtrada))
+    registrarEventoAuditoria({
+      accion: 'retiro_publicacion',
+      entidad: 'mediciones',
+      entidadId: id,
+      entidadNombre: 'Retiro de Galería Pública',
+      resumen: 'Publicación retirada de la Galería Pública por su titular',
+      detalle: { id_retirado: id }
+    }).catch(() => {})
     return { ok: true }
   } catch {
     return { ok: false }
   }
+}
+
+/**
+ * Elimina una medición del historial personal del usuario y registra el evento de auditoría (RF62).
+ */
+export async function eliminarMedicion(medicionId) {
+  if (!medicionId) return { ok: false, motivo: 'sin_id' }
+  try {
+    await supabase.from('mediciones').delete().eq('id', medicionId)
+  } catch {
+    // En modo offline o demostración continúa con el registro de auditoría local
+  }
+  await registrarEventoAuditoria({
+    accion: 'eliminacion',
+    entidad: 'mediciones',
+    entidadId: medicionId,
+    entidadNombre: `Medición #${String(medicionId).slice(0, 8)}`,
+    resumen: 'Registro eliminado del historial personal por su titular',
+    detalle: { medicion_id: medicionId }
+  }).catch(() => {})
+  return { ok: true }
 }
 
 /**
