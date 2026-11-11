@@ -1,12 +1,14 @@
 import { validarCorreoInstitucional } from '../../src/utils/validators.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
+import { escaparHtml, aplicarCabecerasSeguridad, validarOrigenCsrf } from '../_lib/proteccionWeb.js'
 
 // Handler compatible con Vercel Serverless Functions y Vite Middleware
 export default async function handler(req, res) {
-  // Configuración de cabeceras CORS
+  // Configuración de cabeceras CORS y de seguridad (RF68)
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+  aplicarCabecerasSeguridad(res, 'api')
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
@@ -17,6 +19,14 @@ export default async function handler(req, res) {
     res.statusCode = 405
     res.setHeader('Content-Type', 'application/json')
     return res.end(JSON.stringify({ ok: false, error: 'Método no permitido. Solo se acepta POST.' }))
+  }
+
+  // RF68: Validación de protección contra CSRF para peticiones mutables
+  const verificacionCsrf = validarOrigenCsrf(req)
+  if (!verificacionCsrf.permitido) {
+    res.statusCode = verificacionCsrf.codigo || 403
+    res.setHeader('Content-Type', 'application/json')
+    return res.end(JSON.stringify({ ok: false, error: verificacionCsrf.error || 'Petición rechazada por protección CSRF.' }))
   }
 
   // RF67: Límite de peticiones para envío de invitaciones (anti-spam)
@@ -70,6 +80,12 @@ export default async function handler(req, res) {
   const codigoLimpio = codigo.trim().toUpperCase()
   const correoLimpio = correo.trim().toLowerCase()
 
+  // RF68: Escapar contenido proporcionado por el usuario para prevenir XSS en correos (CWE-79)
+  const nombreAulaEscapado = escaparHtml(nombreAula)
+  const nombreDocenteEscapado = escaparHtml(nombreDocente)
+  const codigoEscapado = escaparHtml(codigoLimpio)
+  const correoEscapado = escaparHtml(correoLimpio)
+
   // 3. Obtener API Key de Resend
   const resendApiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
 
@@ -82,13 +98,13 @@ export default async function handler(req, res) {
     }))
   }
 
-  // 4. Construir plantilla HTML profesional del correo
+  // 4. Construir plantilla HTML profesional del correo con variables sanitizadas
   const htmlContenido = `
     <!DOCTYPE html>
     <html lang="es">
     <head>
       <meta charset="utf-8">
-      <title>Invitación al Aula: ${nombreAula}</title>
+      <title>Invitación al Aula: ${nombreAulaEscapado}</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px; color: #0f172a; }
         .card { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
@@ -113,19 +129,19 @@ export default async function handler(req, res) {
         </div>
         <div class="content">
           <p>Hola,</p>
-          <p>El docente <strong>${nombreDocente}</strong> te ha invitado a unirte al aula virtual <strong>${nombreAula}</strong>.</p>
+          <p>El docente <strong>${nombreDocenteEscapado}</strong> te ha invitado a unirte al aula virtual <strong>${nombreAulaEscapado}</strong>.</p>
           
           <div class="code-box">
             <div class="code-label">Tu Código de Acceso</div>
-            <div class="code-value">${codigoLimpio}</div>
+            <div class="code-value">${codigoEscapado}</div>
           </div>
 
           <div class="steps">
             <strong>Instrucciones para unirte:</strong>
             <ol>
-              <li>Inicia sesión en la plataforma con tu correo institucional <code>${correoLimpio}</code>.</li>
+              <li>Inicia sesión en la plataforma con tu correo institucional <code>${correoEscapado}</code>.</li>
               <li>Ingresa a la sección <strong>Aulas y Cursos</strong>.</li>
-              <li>En el campo <em>"Unirse a un Aula Virtual"</em>, ingresa el código <strong>${codigoLimpio}</strong>.</li>
+              <li>En el campo <em>"Unirse a un Aula Virtual"</em>, ingresa el código <strong>${codigoEscapado}</strong>.</li>
               <li>Haz clic en <strong>Unirme al Aula</strong>.</li>
             </ol>
           </div>
