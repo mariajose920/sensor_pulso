@@ -90,6 +90,18 @@
 
     <AvisoEducativo />
 
+    <!-- ===================================================================== -->
+    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS (se muestra directo arriba)     -->
+    <!-- ===================================================================== -->
+    <template v-if="pestañaActiva === 'guardadas'">
+      <ComparadorMedicionesCard
+        :currentBpm="selectedBpm"
+        :lastIntervalMs="currentIntervalMs"
+        :amplitude="selectedAmplitude"
+        :measurementName="selectedMeasurementName"
+      />
+    </template>
+
     <!-- 1. Cargar o Ingresar Medición Tomada con el Sensor (Compartido) -->
     <MeasurementSelector
       v-model:bpm="selectedBpm"
@@ -138,18 +150,6 @@
     <!-- ===================================================================== -->
     <template v-else-if="pestañaActiva === 'patologias'">
       <ComparadorPatologiasCard
-        :currentBpm="selectedBpm"
-        :lastIntervalMs="currentIntervalMs"
-        :amplitude="selectedAmplitude"
-        :measurementName="selectedMeasurementName"
-      />
-    </template>
-
-    <!-- ===================================================================== -->
-    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS                                 -->
-    <!-- ===================================================================== -->
-    <template v-else-if="pestañaActiva === 'guardadas'">
-      <ComparadorMedicionesCard
         :currentBpm="selectedBpm"
         :lastIntervalMs="currentIntervalMs"
         :amplitude="selectedAmplitude"

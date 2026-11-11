@@ -169,12 +169,64 @@ export async function retirarPublicacion(medicionId) {
   }
 }
 
+const CLAVE_PUBLICACIONES_ANONIMAS_LOCALES = 'sensor_publicaciones_anonimas_locales'
+
+function leerPublicacionesAnonimasLocales() {
+  try {
+    const crudo = typeof localStorage !== 'undefined' ? localStorage.getItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES) : null
+    const lista = crudo ? JSON.parse(crudo) : []
+    return Array.isArray(lista) ? lista : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Registra localmente una medición publicada de forma estrictamente anonimizada (RF31 y RF57),
+ * sin almacenar jamás nombre, correo ni identificador de usuario.
+ */
+export function registrarPublicacionAnonimaLocal({
+  titulo = null,
+  rangoEdad = '18-24',
+  actividadNombre = 'Reposo Basal',
+  bpm = 74,
+  spo2 = 98,
+  calidad = 'buena',
+  ritmo = 'normal',
+  dentroDeRango = true
+} = {}) {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const actual = leerPublicacionesAnonimasLocales()
+    const nueva = {
+      id: `pub-local-${Date.now()}`,
+      medicionId: null,
+      titulo: (titulo && String(titulo).trim()) || `Medición Comunitaria (${rangoEdad} años)`,
+      rangoEdad: String(rangoEdad || '18-24'),
+      actividadNombre: String(actividadNombre || 'Reposo Basal'),
+      bpm: Number(bpm) || 74,
+      spo2: Number(spo2) || 98,
+      calidad: String(calidad || 'buena'),
+      ritmo: String(ritmo || 'normal'),
+      dentroDeRango: Boolean(dentroDeRango),
+      creadaEn: new Date().toISOString(),
+      autorAnonimo: 'Participante UNACH (Anónimo)'
+    }
+    const actualizada = [nueva, ...actual].slice(0, 30)
+    localStorage.setItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES, JSON.stringify(actualizada))
+    return nueva
+  } catch {
+    return null
+  }
+}
+
 /**
  * Obtiene las mediciones publicadas vigentes desde la tabla `publicaciones` (anonimizadas, RF31 y RF57).
  * Accesible para cualquier usuario con o sin sesión iniciada (RLS `publicaciones_publicas`).
  * Nunca solicita `autor_id` ni datos personales identificables.
  */
 export async function listarPublicacionesPublicas() {
+  const locales = leerPublicacionesAnonimasLocales()
   try {
     const { data, error } = await supabase
       .from('publicaciones')
@@ -184,7 +236,7 @@ export async function listarPublicacionesPublicas() {
       .limit(50)
 
     if (!error && Array.isArray(data)) {
-      return data
+      const remotas = data
         .filter(p => Number(p.bpm_promedio) > 0)
         .map(p => ({
           id: `pub-bd-${p.id}`,
@@ -200,9 +252,10 @@ export async function listarPublicacionesPublicas() {
           creadaEn: p.creada_en || p.confirmada_en || null,
           autorAnonimo: 'Participante UNACH (Anónimo)'
         }))
+      return [...locales, ...remotas]
     }
   } catch (_) {}
-  return []
+  return locales
 }
 
 /** Reenvía las mediciones pendientes de la cuenta con sesión. Devuelve cuántas se enviaron y cuántas quedan. */
