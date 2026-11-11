@@ -142,19 +142,41 @@ async function ejecutarPruebas() {
   const inoCode = fs.readFileSync(inoPath, 'utf8')
 
   test('ESP32: Configura certificado raíz con setCACert (no usa setInsecure)', () => {
-    assert(!inoCode.includes('client.setInsecure()'), 'Firmware NO debe usar client.setInsecure()')
+    assert(!inoCode.includes('setInsecure()'), 'Firmware NO debe usar setInsecure()')
     assert(inoCode.includes('ROOT_CA_CERTIFICATE'), 'Firmware debe definir ROOT_CA_CERTIFICATE')
-    assert(inoCode.includes('client.setCACert(ROOT_CA_CERTIFICATE)'), 'Firmware debe invocar client.setCACert con el certificado raíz')
+    const invocaSetCACert = inoCode.includes('clienteSeguro.setCACert(ROOT_CA_CERTIFICATE)') || inoCode.includes('client.setCACert(ROOT_CA_CERTIFICATE)')
+    assert(invocaSetCACert, 'Firmware debe invocar setCACert con el certificado raíz')
     assert(inoCode.includes('ISRG Root X1'), 'Certificado raíz debe ser el estándar ISRG Root X1')
+  })
+
+  test('ESP32: Certificado raíz oficial ISRG Root X1 sin líneas dañadas (formato estándar PEM de 64 caracteres)', () => {
+    const match = inoCode.match(/const char\* ROOT_CA_CERTIFICATE = \\([\s\S]*?);/)
+    assert(match, 'Debe definirse ROOT_CA_CERTIFICATE')
+    const lineas = match[1].split('\n').filter(l => l.includes('"') && !l.includes('BEGIN') && !l.includes('END'))
+    assert(lineas.length > 20, 'Debe contener las líneas base64 del certificado')
+    for (let i = 0; i < lineas.length - 1; i++) {
+      const m = lineas[i].match(/"([^"]*)"/)
+      assert(m, `Línea ${i + 1} debe contener una cadena C entre comillas`)
+      const contenido = m[1].replace(/\\n$/, '')
+      assert.strictEqual(contenido.length, 64, `La línea ${i + 1} de base64 debe tener exactamente 64 caracteres (tenía ${contenido.length})`)
+    }
+  })
+
+  test('ESP32: Sincronización de hora NTP para validación temporal de certificados TLS', () => {
+    assert(inoCode.includes('configTime'), 'Firmware debe configurar sincronización horaria con configTime')
+    assert(inoCode.includes('pool.ntp.org'), 'Firmware debe usar pool.ntp.org como servidor de tiempo')
+    assert(inoCode.includes('sincronizarHoraNTP'), 'Firmware debe definir e invocar sincronizarHoraNTP tras conectarse a WiFi')
   })
 
   test('ESP32: Utiliza WiFiClientSecure para handshake TLS', () => {
     assert(inoCode.includes('#include <WiFiClientSecure.h>'), 'Firmware debe incluir WiFiClientSecure.h')
-    assert(inoCode.includes('WiFiClientSecure client;'), 'Firmware debe instanciar WiFiClientSecure')
+    const instanciaSegura = inoCode.includes('WiFiClientSecure clienteSeguro;') || inoCode.includes('WiFiClientSecure client;')
+    assert(instanciaSegura, 'Firmware debe instanciar WiFiClientSecure')
   })
 
   test('ESP32: Endpoint SERVER_URL configurado estrictamente con protocolo https://', () => {
-    assert(inoCode.includes('const char* SERVER_URL    = "https://'), 'SERVER_URL debe usar https://')
+    assert(inoCode.includes('SERVER_URL') && inoCode.includes('https://'), 'SERVER_URL debe tener esquema https://')
+    assert(!inoCode.includes('http://sensorpulso.vercel.app'), 'No debe existir URL insegura hacia Vercel')
   })
 
   test('ESP32: Stack asignado para la tarea FreeRTOS de transmisión WiFi es >= 16 KB (TLS)', () => {
@@ -162,7 +184,8 @@ async function ejecutarPruebas() {
   })
 
   test('ESP32: Verificación activa de protocolo seguro en setup con aviso por Serial', () => {
-    assert(inoCode.includes('strncmp(SERVER_URL, "https://", 8)'), 'Setup debe validar protocolo https')
+    const validaHttps = (inoCode.includes('cfgUrl.startsWith("https://")') || inoCode.includes('strncmp(SERVER_URL, "https://", 8)')) && inoCode.includes('[Seguridad RF55]')
+    assert(validaHttps, 'Setup debe validar protocolo https y avisar por Serial')
   })
 
   console.log('\n--- 4. Conexión Segura Cliente-Base de Datos (supabase.js) ---')
@@ -262,8 +285,9 @@ async function ejecutarPruebas() {
 
   test('Criterio 1: El ESP32 rechaza un certificado falso (setCACert con CA raíz y sin setInsecure)', () => {
     // Al usar setCACert y eliminar setInsecure, mbedTLS valida la cadena y rechaza certificados falsos
-    assert(!inoCode.includes('client.setInsecure()'), 'No debe existir client.setInsecure() en el firmware')
-    assert(inoCode.includes('client.setCACert(ROOT_CA_CERTIFICATE)'), 'Debe configurarse client.setCACert con la CA raíz')
+    assert(!inoCode.includes('setInsecure()'), 'No debe existir setInsecure() en el firmware')
+    const invocaSetCACert = inoCode.includes('clienteSeguro.setCACert(ROOT_CA_CERTIFICATE)') || inoCode.includes('client.setCACert(ROOT_CA_CERTIFICATE)')
+    assert(invocaSetCACert, 'Debe configurarse setCACert con la CA raíz')
     assert(inoCode.includes('-----BEGIN CERTIFICATE-----'), 'Debe incluir el bloque del certificado PEM')
   })
 

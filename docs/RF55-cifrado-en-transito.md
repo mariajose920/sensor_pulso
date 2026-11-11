@@ -43,7 +43,8 @@ El requerimiento **RF55** garantiza la confidencialidad, autenticidad e integrid
 
 1. **ESP32 hacia API Ingest (`firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino`):**
    - Emplea `WiFiClientSecure` con capa TLS negociada sobre el puerto 443.
-   - **Validación Estricta de Certificado TLS (Rechazo de Certificado Falso):** Configura la CA raíz canónica ISRG Root X1 mediante `client.setCACert(ROOT_CA_CERTIFICATE)` y prescinde de `client.setInsecure()`. mbedTLS aborta el handshake y rechaza certificados falsos o no autorizados.
+   - **Validación Estricta de Certificado TLS (Rechazo de Certificado Falso):** Configura la CA raíz canónica oficial ISRG Root X1 con formato estándar PEM (64 caracteres por línea) mediante `clienteSeguro.setCACert(ROOT_CA_CERTIFICATE)` y prescinde totalmente de `setInsecure()`. mbedTLS aborta el handshake y rechaza certificados falsos o no autorizados.
+   - **Sincronización de Hora NTP:** El ESP32 sincroniza su reloj en el arranque y tras conectarse a la red mediante NTP (`configTime(0, 0, "pool.ntp.org", "time.google.com")`), permitiendo a mbedTLS validar con precisión temporal los períodos de vigencia (*Not Before* y *Not After*) de los certificados TLS emitidos por Let's Encrypt / Vercel.
    - Endpoint configurado exclusivamente con protocolo `https://sensorpulso.vercel.app/api/esp32/telemetria` y documentación en `firmware/README.md` con `https://` sin referencias a `http://`.
    - Stack FreeRTOS de 16 KB (`16384` bytes) reservado en Core 0 para el intercambio y manejo de claves TLS sin riesgo de stack overflow.
    - Verificación de protocolo en tiempo de arranque (`setup()`) que alerta por Serial si se intenta configurar una URL no cifrada.
