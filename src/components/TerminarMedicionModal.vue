@@ -3,6 +3,7 @@
     <div
       ref="caja"
       class="modal-container card"
+      :class="{ 'modal-wide': paso === 'publicar' }"
       role="dialog"
       aria-modal="true"
       aria-labelledby="terminar-titulo"
@@ -58,11 +59,14 @@
         <div v-else-if="paso === 'publicar'">
           <p class="pregunta" data-testid="pregunta-publicar">¿Quieres publicarla para que otras personas la vean (siempre anonimizada)?</p>
           <div class="vista-previa" data-testid="terminar-vista-previa">
-            <p class="vista-titulo">Esto es lo que verá cualquier persona:</p>
-            <ul>
-              <li v-for="c in vistaPrevia.campos" :key="c.etiqueta"><strong>{{ c.etiqueta }}:</strong> {{ c.valor }}</li>
-            </ul>
-            <p class="nota">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}).</p>
+            <VistaPreviaAnonimizacion
+              :registro="registro"
+              :nombre-privado="registro.resumen.paciente || currentUserName"
+              :correo-privado="user?.email || ''"
+              :edad-privada="registro.datos?.edad"
+              :declaracion-id="registro.datos?.declaracionId"
+            />
+            <p class="nota sr-nota-compat">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}).</p>
           </div>
           <label v-if="evalPublicacion.requiereAutorizacionPaciente" class="autoriza" data-testid="terminar-autoriza">
             <input v-model="autorizaPaciente" type="checkbox" data-testid="terminar-autoriza-casilla" />
@@ -105,6 +109,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { usePuedePublicar } from '../composables/usePuedePublicar'
 import { useAuth } from '../composables/useAuth'
 import { guardarMedicion, publicarMedicion } from '../services/medicionesService'
+import VistaPreviaAnonimizacion from './VistaPreviaAnonimizacion.vue'
 import {
   evaluarGuardado, evaluarPublicacion, vistaPreviaPublica, resultadoFinal, lineaInformativaPublicar,
   MENSAJES_TERMINAR
@@ -119,7 +124,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['cerrar', 'resultado'])
 
-const { isAuthenticated } = useAuth()
+const { isAuthenticated, user, currentUserName } = useAuth()
 const { cuenta, cargar: cargarCondiciones } = usePuedePublicar()
 
 const paso = ref('guardar') // 'guardar' | 'publicar' | 'resultado'
@@ -283,6 +288,14 @@ onBeforeUnmount(() => { try { enfocadoAntes?.focus?.() } catch { /* el elemento 
   border: 1px solid #cbd5e1;
   padding: 0;
   color: #0f172a;
+  transition: max-width 0.2s ease;
+}
+.modal-container.modal-wide {
+  max-width: 880px;
+}
+.sr-nota-compat {
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
 }
 .modal-header {
   display: flex;
