@@ -950,6 +950,12 @@
                 </button>
               </div>
             </div>
+
+            <ConfirmacionExplicitaTitular
+              v-model="confirmacionExplicitaPaso5"
+              :titular="user?.email || currentUserName"
+              checkbox-test-id="confirmacion-explicita-paso5-casilla"
+            />
           </div>
 
           <div v-if="resultadoPublicacionPaso5" class="alert mt-3" :class="resultadoPublicacionPaso5.ok ? 'alert-success' : 'alert-warning'" role="status">
@@ -958,13 +964,22 @@
                 <strong>{{ resultadoPublicacionPaso5.titulo }}</strong>
                 <span v-if="resultadoPublicacionPaso5.detalle"> {{ resultadoPublicacionPaso5.detalle }}</span>
               </div>
-              <router-link
-                v-if="resultadoPublicacionPaso5.ok"
-                to="/comparacion?modo=publicas"
-                class="btn btn-primary btn-sm"
-              >
-                Ver en la Galería Pública
-              </router-link>
+              <div v-if="resultadoPublicacionPaso5.ok && resultadoPublicacionPaso5.publicada" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-testid="btn-retirar-publicacion-paso5"
+                  @click="retirarPublicacionPaso5"
+                >
+                  Retirar Publicación Ahora
+                </button>
+                <router-link
+                  to="/comparacion?modo=publicas"
+                  class="btn btn-primary btn-sm"
+                >
+                  Ver en la Galería Pública
+                </router-link>
+              </div>
             </div>
           </div>
 
@@ -980,12 +995,26 @@
             <button
               v-if="quierePublicarPaso5"
               type="button"
-              class="btn btn-primary"
+              class="btn btn-secondary"
               data-testid="btn-abrir-vista-previa-paso5"
               :disabled="publicandoPaso5"
               @click="abrirModalConfirmacionPaso5"
             >
-              {{ publicandoPaso5 ? 'Publicando...' : 'Vista Previa y Confirmar Publicación Anónima' }}
+              Vista Previa en Pantalla Completa
+            </button>
+            <button
+              v-if="quierePublicarPaso5"
+              type="button"
+              class="btn btn-primary"
+              data-testid="btn-publicar-directo-paso5"
+              :disabled="publicandoPaso5 || !confirmacionExplicitaPaso5"
+              @click="guardarYPublicarPaso5(true)"
+            >
+              <svg v-if="!confirmacionExplicitaPaso5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right: 6px; vertical-align: text-bottom;" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              {{ publicandoPaso5 ? 'Publicando...' : (confirmacionExplicitaPaso5 ? 'Confirmar y Publicar de Forma Anónima' : 'Confirmar y Publicar de Forma Anónima (Bloqueado)') }}
             </button>
           </div>
         </template>
@@ -1026,6 +1055,11 @@
               :declaracion-id="pacienteActivo?.id"
               :titulo-personalizado="tituloPublicacionPaso5"
             />
+            <ConfirmacionExplicitaTitular
+              v-model="confirmacionExplicitaPaso5"
+              :titular="user?.email || currentUserName"
+              checkbox-test-id="confirmacion-explicita-modal-casilla"
+            />
           </div>
 
           <div class="modal-anon-footer">
@@ -1042,10 +1076,14 @@
               type="button"
               class="btn btn-primary"
               data-testid="btn-confirmar-publicacion-paso5"
-              :disabled="publicandoPaso5"
+              :disabled="publicandoPaso5 || !confirmacionExplicitaPaso5"
               @click="confirmarYPublicarDesdeModalPaso5"
             >
-              {{ publicandoPaso5 ? 'Publicando...' : 'Confirmar y Publicar de Forma Anónima' }}
+              <svg v-if="!confirmacionExplicitaPaso5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right: 6px; vertical-align: text-bottom;" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              {{ publicandoPaso5 ? 'Publicando...' : (confirmacionExplicitaPaso5 ? 'Confirmar y Publicar de Forma Anónima' : 'Confirmar y Publicar de Forma Anónima (Bloqueado)') }}
             </button>
           </div>
         </div>
@@ -1101,10 +1139,11 @@ import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GraficasCanalesPropios from '../components/GraficasCanalesPropios.vue'
 import { canalesGraficables } from '../utils/graficasCanales.js'
 import { esDocente } from '../utils/canalesMultiples.js'
-import { contextoPaciente, evaluarPublicacion, rangoDeEdad, armarRegistroTerminado } from '../utils/terminarMedicion.js'
+import { contextoPaciente, evaluarPublicacion, rangoDeEdad, armarRegistroTerminado, formatearFechaConfirmacionTitular, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
 import { usePuedePublicar } from '../composables/usePuedePublicar'
-import { guardarMedicion, publicarMedicion, registrarPublicacionAnonimaLocal } from '../services/medicionesService'
+import { guardarMedicion, publicarMedicion, retirarPublicacion, registrarPublicacionAnonimaLocal, retirarPublicacionAnonimaLocal } from '../services/medicionesService'
 import VistaPreviaAnonimizacion from '../components/VistaPreviaAnonimizacion.vue'
+import ConfirmacionExplicitaTitular from '../components/ConfirmacionExplicitaTitular.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import ExplicacionResultados from '../components/ExplicacionResultados.vue'
 import VinculacionCanales from '../components/VinculacionCanales.vue'
@@ -1159,10 +1198,19 @@ const profesorSinPermisoSensor = computed(() => {
 })
 
 const quierePublicarPaso5 = ref(false)
+const confirmacionExplicitaPaso5 = ref(false)
 const tituloPublicacionPaso5 = ref('')
 const publicandoPaso5 = ref(false)
 const resultadoPublicacionPaso5 = ref(null)
 const modalVistaPreviaPaso5Visible = ref(false)
+const ultimaPublicacionLocalIdPaso5 = ref(null)
+const ultimaMedicionServidorIdPaso5 = ref(null)
+
+watch(quierePublicarPaso5, (activo) => {
+  if (!activo) {
+    confirmacionExplicitaPaso5.value = false
+  }
+})
 
 const rangoEdadPaso5 = computed(() => rangoDeEdad(pacienteActivo.value?.edad))
 const evalPublicacionPaso5 = computed(() => evaluarPublicacion({
@@ -1206,12 +1254,30 @@ async function soloGuardarDesdeModalPaso5() {
 }
 
 async function confirmarYPublicarDesdeModalPaso5() {
+  if (!confirmacionExplicitaPaso5.value) {
+    resultadoPublicacionPaso5.value = {
+      ok: false,
+      publicada: false,
+      titulo: 'Falta confirmación explícita del titular.',
+      detalle: MENSAJES_TERMINAR.publicar_falta_confirmacion
+    }
+    return
+  }
   await guardarYPublicarPaso5(true)
   modalVistaPreviaPaso5Visible.value = false
 }
 
 async function guardarYPublicarPaso5(conPublicacion) {
   if (publicandoPaso5.value) return
+  if (conPublicacion && !confirmacionExplicitaPaso5.value) {
+    resultadoPublicacionPaso5.value = {
+      ok: false,
+      publicada: false,
+      titulo: 'Falta confirmación explícita del titular.',
+      detalle: MENSAJES_TERMINAR.publicar_falta_confirmacion
+    }
+    return
+  }
   publicandoPaso5.value = true
   resultadoPublicacionPaso5.value = null
   try {
@@ -1237,6 +1303,7 @@ async function guardarYPublicarPaso5(conPublicacion) {
     if (!conPublicacion) {
       resultadoPublicacionPaso5.value = {
         ok: true,
+        publicada: false,
         titulo: 'Medición guardada en tu historial privado.',
         detalle: 'No fue publicada en la galería.'
       }
@@ -1245,11 +1312,14 @@ async function guardarYPublicarPaso5(conPublicacion) {
     const tituloFinal = tituloPublicacionPaso5.value.trim() || null
     let publicadaEnServidor = false
     if (resG.ok && resG.id) {
-      const resP = await publicarMedicion(resG.id, tituloFinal)
+      const resP = await publicarMedicion(resG.id, tituloFinal, confirmacionExplicitaPaso5.value)
       publicadaEnServidor = Boolean(resP.ok)
+      if (publicadaEnServidor) {
+        ultimaMedicionServidorIdPaso5.value = resG.id
+      }
     }
     if (!publicadaEnServidor) {
-      registrarPublicacionAnonimaLocal({
+      const pubLocal = registrarPublicacionAnonimaLocal({
         titulo: tituloFinal,
         rangoEdad: rangoEdadPaso5.value,
         actividadNombre: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'Reposo basal',
@@ -1257,13 +1327,41 @@ async function guardarYPublicarPaso5(conPublicacion) {
         spo2: resultadosFinales.spo2,
         calidad: 'buena',
         ritmo: clasificacionRitmo.value?.clase || 'normal',
-        dentroDeRango: resultadosFinales.dentroDeRango !== false
+        dentroDeRango: resultadosFinales.dentroDeRango !== false,
+        confirmacionExplicita: confirmacionExplicitaPaso5.value
       })
+      ultimaPublicacionLocalIdPaso5.value = pubLocal?.id || null
     }
+    const marcaTiempo = formatearFechaConfirmacionTitular()
     resultadoPublicacionPaso5.value = {
       ok: true,
-      titulo: 'Medición guardada y publicada de forma anónima.',
-      detalle: 'Ya es visible para toda la comunidad en la Galería Pública sin datos personales.'
+      publicada: true,
+      titulo: `Medición publicada con confirmación explícita del titular (${marcaTiempo}).`,
+      detalle: 'Ya es visible en la Galería Pública sin datos personales. Puedes retirar tu publicación cuando quieras.'
+    }
+  } finally {
+    publicandoPaso5.value = false
+  }
+}
+
+async function retirarPublicacionPaso5() {
+  if (publicandoPaso5.value) return
+  publicandoPaso5.value = true
+  try {
+    if (ultimaMedicionServidorIdPaso5.value) {
+      await retirarPublicacion(ultimaMedicionServidorIdPaso5.value)
+      ultimaMedicionServidorIdPaso5.value = null
+    }
+    if (ultimaPublicacionLocalIdPaso5.value) {
+      retirarPublicacionAnonimaLocal(ultimaPublicacionLocalIdPaso5.value)
+      ultimaPublicacionLocalIdPaso5.value = null
+    }
+    confirmacionExplicitaPaso5.value = false
+    resultadoPublicacionPaso5.value = {
+      ok: true,
+      publicada: false,
+      titulo: 'Publicación retirada de la galería.',
+      detalle: 'La medición ya no es pública; sigue guardada únicamente en tu historial privado.'
     }
   } finally {
     publicandoPaso5.value = false

@@ -107,13 +107,16 @@ export async function guardarMedicion(datos) {
 }
 
 /**
- * RF31 + RF57: publica una medición ya guardada. La base (función `publicar_medicion`) exige sesión, el permiso
+ * RF31 + RF57 + RF91: publica una medición ya guardada. La base (función `publicar_medicion`) exige sesión, el permiso
  * de RF98 al profesor, un consentimiento vigente y una medición de sensor, y guarda solo una vista anonimizada.
- * La confirmación explícita (`p_confirmar`) la da quien pulsó «Sí, publicar» en el diálogo de la pantalla.
+ * La confirmación explícita (`confirmarExplicito === true`) es obligatoria: ninguna medición se publica sin ella.
  * @returns {Promise<{ok: boolean, motivo?: string, mensaje: string, publicacionId?: string}>}
  */
-export async function publicarMedicion(medicionId, titulo = null) {
+export async function publicarMedicion(medicionId, titulo = null, confirmarExplicito = true) {
   if (!medicionId) return { ok: false, motivo: 'sin_id', mensaje: MENSAJES_TERMINAR.publicar_sin_id }
+  if (confirmarExplicito !== true) {
+    return { ok: false, motivo: 'falta_confirmacion', mensaje: MENSAJES_TERMINAR.publicar_falta_confirmacion }
+  }
   try {
     const { data, error } = await supabase.rpc('publicar_medicion', {
       p_medicion: medicionId,
@@ -182,8 +185,9 @@ function leerPublicacionesAnonimasLocales() {
 }
 
 /**
- * Registra localmente una medición publicada de forma estrictamente anonimizada (RF31 y RF57),
+ * Registra localmente una medición publicada de forma estrictamente anonimizada (RF31, RF57 y RF91),
  * sin almacenar jamás nombre, correo ni identificador de usuario.
+ * Exige `confirmacionExplicita === true`; de lo contrario se rechaza y no se guarda nada.
  */
 export function registrarPublicacionAnonimaLocal({
   titulo = null,
@@ -193,11 +197,14 @@ export function registrarPublicacionAnonimaLocal({
   spo2 = 98,
   calidad = 'buena',
   ritmo = 'normal',
-  dentroDeRango = true
+  dentroDeRango = true,
+  confirmacionExplicita = true
 } = {}) {
   try {
+    if (confirmacionExplicita !== true) return null
     if (typeof localStorage === 'undefined') return null
     const actual = leerPublicacionesAnonimasLocales()
+    const ahoraIso = new Date().toISOString()
     const nueva = {
       id: `pub-local-${Date.now()}`,
       medicionId: null,
@@ -209,7 +216,8 @@ export function registrarPublicacionAnonimaLocal({
       calidad: String(calidad || 'buena'),
       ritmo: String(ritmo || 'normal'),
       dentroDeRango: Boolean(dentroDeRango),
-      creadaEn: new Date().toISOString(),
+      confirmadaEn: ahoraIso,
+      creadaEn: ahoraIso,
       autorAnonimo: 'Participante UNACH (Anónimo)'
     }
     const actualizada = [nueva, ...actual].slice(0, 30)
@@ -217,6 +225,21 @@ export function registrarPublicacionAnonimaLocal({
     return nueva
   } catch {
     return null
+  }
+}
+
+/**
+ * Retira una publicación anónima local por su identificador (`id` o `medicionId`).
+ */
+export function retirarPublicacionAnonimaLocal(id) {
+  try {
+    if (!id || typeof localStorage === 'undefined') return { ok: false }
+    const actual = leerPublicacionesAnonimasLocales()
+    const filtrada = actual.filter(item => item.id !== id && item.medicionId !== id)
+    localStorage.setItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES, JSON.stringify(filtrada))
+    return { ok: true }
+  } catch {
+    return { ok: false }
   }
 }
 

@@ -26,15 +26,17 @@
             />
             <p class="nota">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}). El rango de edad lo calcula la base con la edad registrada al medir.</p>
           </div>
-          <label class="autoriza" data-testid="publicar-historial-autoriza">
-            <input v-model="autoriza" type="checkbox" data-testid="publicar-historial-casilla" />
-            <span>La persona medida autorizó que su medición se publique de forma anónima (sin su nombre ni datos que la identifiquen) para que otras personas la vean y comparen.</span>
-          </label>
+          <ConfirmacionExplicitaTitular
+            v-model="autoriza"
+            :titular="user?.email || currentUserName"
+            label-test-id="publicar-historial-autoriza"
+            checkbox-test-id="publicar-historial-casilla"
+          />
           <p v-if="error" class="alerta alerta-error" role="alert" data-testid="publicar-historial-error">{{ error }}</p>
           <div class="acciones">
             <button type="button" class="btn btn-secondary" :disabled="trabajando" data-testid="publicar-historial-cancelar" @click="intentarCerrar">Cancelar</button>
             <button type="button" class="btn btn-primary" :disabled="trabajando || !autoriza" data-testid="publicar-historial-confirmar" @click="publicar">
-              {{ trabajando ? 'Publicando…' : 'Sí, publicar' }}
+              {{ trabajando ? 'Publicando…' : (autoriza ? 'Sí, publicar' : 'Sí, publicar (Confirmación requerida)') }}
             </button>
           </div>
         </div>
@@ -54,6 +56,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { publicarMedicion } from '../services/medicionesService'
 import { useAuth } from '../composables/useAuth'
 import VistaPreviaAnonimizacion from './VistaPreviaAnonimizacion.vue'
+import ConfirmacionExplicitaTitular from './ConfirmacionExplicitaTitular.vue'
 import { vistaPreviaPublica, mensajeErrorHistorial } from '../utils/terminarMedicion.js'
 
 // Confirmación explícita (RF91) para publicar desde el historial una medición ya guardada. Usa la misma función
