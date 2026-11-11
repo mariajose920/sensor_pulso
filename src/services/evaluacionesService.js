@@ -584,21 +584,6 @@ export async function obtenerEvaluacionesAula(aulaId) {
 // ============================================================================
 // RF104: ASIGNACIÓN DE EVALUACIONES (AULA, CURSO, ESTUDIANTE)
 // ============================================================================
-const STORAGE_ASIGNACIONES = 'sensor_pulso_evaluacion_asignaciones'
-
-function cargarAsignacionesLocales() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_ASIGNACIONES) || '[]')
-  } catch (_) {
-    return []
-  }
-}
-
-function guardarAsignacionesLocales(lista) {
-  try {
-    localStorage.setItem(STORAGE_ASIGNACIONES, JSON.stringify(lista))
-  } catch (_) {}
-}
 
 /**
  * RF104: Asignar una evaluación al aula, a un curso o a estudiantes concretos.
@@ -606,8 +591,11 @@ function guardarAsignacionesLocales(lista) {
  */
 export async function asignarEvaluacion({
   evaluacionId,
-  aulaId,
+  modo,
   alcance,
+  abreEn = null,
+  cierraEn = null,
+  tiempoLimiteS = null,
   cursoId = null,
   estudiantesIds = [],
   puedeGestionar = true
@@ -615,66 +603,32 @@ export async function asignarEvaluacion({
   if (!puedeGestionar) {
     return { success: false, error: 'No tienes permiso para asignar evaluaciones.' }
   }
-  if (!evaluacionId) {
-    return { success: false, error: 'Debes seleccionar una evaluación para asignar.' }
-  }
-  if (!['aula', 'curso', 'estudiante'].includes(alcance)) {
-    return { success: false, error: 'Alcance no válido (debe ser aula, curso o estudiante).' }
-  }
-  if (alcance === 'curso' && !cursoId) {
-    return { success: false, error: 'Debes seleccionar un curso o sección para este alcance.' }
-  }
-  if (alcance === 'estudiante' && (!Array.isArray(estudiantesIds) || estudiantesIds.length === 0)) {
-    return { success: false, error: 'Debes seleccionar al menos un estudiante para este alcance.' }
-  }
 
-  // Estructurar filas según reglas CHECK de Postgres en public.evaluacion_asignaciones
-  let filas = []
-  if (alcance === 'aula') {
-    filas.push({
-      evaluacion_id: evaluacionId,
-      alcance: 'aula',
-      curso_id: null,
-      usuario_id: null
-    })
-  } else if (alcance === 'curso') {
-    filas.push({
-      evaluacion_id: evaluacionId,
-      alcance: 'curso',
-      curso_id: cursoId,
-      usuario_id: null
-    })
-  } else if (alcance === 'estudiante') {
-    filas = estudiantesIds.map(uid => ({
-      evaluacion_id: evaluacionId,
-      alcance: 'estudiante',
-      curso_id: null,
-      usuario_id: uid
-    }))
-  }
+  const { data, error } = await supabase.rpc('asignar_evaluacion_rf109', {
+    p_evaluacion_id: evaluacionId,
+    p_modo: modo,
+    p_alcance: alcance,
+    p_abre_en: abreEn,
+    p_cierra_en: cierraEn,
+    p_tiempo_limite_s: tiempoLimiteS,
+    p_curso_id: cursoId,
+    p_estudiantes_ids: estudiantesIds
+  })
 
-  // 1. Guardar en Supabase (si hay sesión y conexión)
-  try {
-    // Reemplazar asignaciones previas de esta evaluación para evitar inconsistencias
-    await supabase.from('evaluacion_asignaciones').delete().eq('evaluacion_id', evaluacionId)
+  return error
+    ? { success: false, error: error.message }
+    : { success: true, data }
+}
 
-    const { data, error } = await supabase.from('evaluacion_asignaciones').insert(filas).select()
-    if (!error && data) {
-      const sinEval = cargarAsignacionesLocales().filter(a => a.evaluacion_id !== evaluacionId)
-      guardarAsignacionesLocales([...sinEval, ...data])
-      return { success: true, origen: 'supabase', data }
-    }
-  } catch (_) {}
+export async function controlarEvaluacionEnVivo(evaluacionId, accion) {
+  const { data, error } = await supabase.rpc('controlar_evaluacion_en_vivo', {
+    p_evaluacion_id: evaluacionId,
+    p_accion: accion
+  })
 
-  // 2. Respaldo local
-  const nuevasLocales = filas.map((f, i) => ({
-    ...f,
-    id: `asig-${Date.now()}-${i}`,
-    creado_en: new Date().toISOString()
-  }))
-  const sinEval = cargarAsignacionesLocales().filter(a => a.evaluacion_id !== evaluacionId)
-  guardarAsignacionesLocales([...sinEval, ...nuevasLocales])
-  return { success: true, origen: 'local', data: nuevasLocales }
+  return error
+    ? { success: false, error: error.message }
+    : { success: true, data }
 }
 
 /**
@@ -682,13 +636,13 @@ export async function asignarEvaluacion({
  */
 export async function obtenerAsignacionesEvaluacion(evaluacionId) {
   if (!evaluacionId) return { success: true, data: [] }
-  try {
-    const { data, error } = await supabase
-      .from('evaluacion_asignaciones')
-      .select('*')
-      .eq('evaluacion_id', evaluacionId)
-    if (!error && data) return { success: true, data }
-  } catch (_) {}
-  const locales = cargarAsignacionesLocales().filter(a => a.evaluacion_id === evaluacionId)
-  return { success: true, data: locales }
+
+  const { data, error } = await supabase
+    .from('evaluacion_asignaciones')
+    .select('*')
+    .eq('evaluacion_id', evaluacionId)
+
+  return error
+    ? { success: false, error: error.message, data: [] }
+    : { success: true, data }
 }

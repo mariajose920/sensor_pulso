@@ -98,6 +98,12 @@ const routes = [
     meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {
+    path: '/mis-evaluaciones',
+    name: 'MisEvaluaciones',
+    component: () => import('../views/MisEvaluacionesView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/aprendizaje',
     name: 'Aprendizaje',
     component: AprendizajeView

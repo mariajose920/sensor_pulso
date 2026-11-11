@@ -4,6 +4,9 @@
       <div class="aulas-header">
         <div>
           <h1 class="card-title">🏫 Aulas y Cursos</h1>
+          <RouterLink :to="{ name: 'MisEvaluaciones' }" class="btn btn-secondary">
+            Mis evaluaciones
+          </RouterLink>
           <p class="header-desc">
             Espacio académico para cursos y evaluaciones prácticas de pulso cardíaco.
           </p>
