@@ -310,6 +310,27 @@ function guardarLocales(lista) {
   } catch (_) {}
 }
 
+async function tieneSesionSupabaseReal() {
+  try {
+    const { data } = await supabase.auth.getSession()
+    return Boolean(data?.session?.access_token)
+  } catch (_) {
+    return false
+  }
+}
+
+function mapearPreguntasEvaluacion(evaluacion) {
+  return (evaluacion?.evaluacion_preguntas || [])
+    .slice()
+    .sort((a, b) => (a.orden || 0) - (b.orden || 0))
+    .map(ep => ({
+      ...(ep.preguntas || {}),
+      id: ep.pregunta_id,
+      bancoId: ep.pregunta_id,
+      puntaje: ep.puntaje ?? ep.preguntas?.puntaje ?? 10
+    }))
+}
+
 /**
  * RF105: Listar plantillas precargadas disponibles
  */
@@ -367,42 +388,76 @@ export async function crearEvaluacion({
     ...camposTipoParaGuardar(modelo)
   }
 
-  // 1. Guardar en Supabase si hay sesión activa
-  try {
+  // 1. Guardar en Supabase si hay sesión real activa (sin ocultar errores reales)
+  const conSesion = await tieneSesionSupabaseReal()
+  if (conSesion) {
     const { data, error } = await supabase.from('evaluaciones').insert(fila).select().single()
-    if (!error && data) {
-      // Guardar preguntas asociadas si se proporcionaron
-      if (preguntas && preguntas.length > 0) {
-        for (let i = 0; i < preguntas.length; i++) {
-          const p = preguntas[i]
-          try {
-            const { data: pregData } = await supabase.from('preguntas').insert({
-              autor_id: creadorId,
-              enunciado: p.enunciado,
-              tipo: p.tipo || 'opcion_multiple',
-              opciones: p.opciones || null,
-              puntaje: Number(p.puntaje) || 10
-            }).select().single()
+    if (error || !data) {
+      if (error?.code === CODIGO_VIOLA_CHECK) {
+        return { success: false, origen: 'supabase', error: 'La base rechazó el tipo o el criterio de la evaluación.' }
+      }
+      return {
+        success: false,
+        origen: 'supabase',
+        error: error?.message || 'No se pudo guardar la evaluación en Supabase.'
+      }
+    }
 
-            if (pregData) {
-              await supabase.from('evaluacion_preguntas').insert({
-                evaluacion_id: data.id,
-                pregunta_id: pregData.id,
-                orden: i + 1,
-                puntaje: Number(p.puntaje) || 10
-              })
+    // Guardar o vincular preguntas asociadas si se proporcionaron
+    if (preguntas && preguntas.length > 0) {
+      for (let i = 0; i < preguntas.length; i++) {
+        const p = preguntas[i]
+        const esUuidBanco = /^[0-9a-f-]{36}$/i.test(String(p.bancoId || ''))
+        let preguntaIdFinal = esUuidBanco ? p.bancoId : null
+
+        if (!preguntaIdFinal) {
+          const { data: pregData, error: errPreg } = await supabase.from('preguntas').insert({
+            autor_id: creadorId,
+            enunciado: p.enunciado,
+            tipo: p.tipo || 'opcion_multiple',
+            opciones: p.tipo === 'opcion_multiple' ? (p.opciones || null) : null,
+            puntaje: Number(p.puntaje) || 10,
+            etiquetas: Array.isArray(p.etiquetas) ? p.etiquetas : [],
+            compartida: !!p.compartida
+          }).select().single()
+
+          if (errPreg || !pregData) {
+            return {
+              success: false,
+              origen: 'supabase',
+              error: `Evaluación creada, pero falló guardar la pregunta #${i + 1}: ${errPreg?.message || 'error desconocido'}`
             }
-          } catch (_) {}
+          }
+
+          preguntaIdFinal = pregData.id
+          if (p.tipo !== 'abierta' && p.respuesta_correcta !== undefined && p.respuesta_correcta !== null && p.respuesta_correcta !== '') {
+            await supabase.from('preguntas_claves').upsert({
+              pregunta_id: pregData.id,
+              correcta: p.respuesta_correcta,
+              explicacion: p.explicacion || null
+            })
+          }
+        }
+
+        const { error: errVinculo } = await supabase.from('evaluacion_preguntas').insert({
+          evaluacion_id: data.id,
+          pregunta_id: preguntaIdFinal,
+          orden: i + 1,
+          puntaje: Number(p.puntaje) || 10
+        })
+        if (errVinculo) {
+          return {
+            success: false,
+            origen: 'supabase',
+            error: `Evaluación creada, pero falló vincular la pregunta #${i + 1}: ${errVinculo.message}`
+          }
         }
       }
-      return { success: true, origen: 'supabase', data: { ...data, preguntas, precargadaBaseId } }
     }
-    if (error?.code === CODIGO_VIOLA_CHECK) {
-      return { success: false, error: 'La base rechazó el tipo o el criterio de la evaluación.' }
-    }
-  } catch (_) {}
+    return { success: true, origen: 'supabase', data: { ...data, preguntas, precargadaBaseId, origen: 'supabase' } }
+  }
 
-  // 2. Respaldo local si no hay conexión
+  // 2. Respaldo local en pruebas Node o sesión demo sin JWT
   const local = { 
     ...fila, 
     id: `eval-${Date.now()}`, 
@@ -431,8 +486,14 @@ export async function duplicarEvaluacion({ evaluacionOriginalId, aulaId, creador
   }
   if (!origen) {
     try {
-      const { data } = await supabase.from('evaluaciones').select('*').eq('id', evaluacionOriginalId).maybeSingle()
-      if (data) origen = data
+      const { data } = await supabase
+        .from('evaluaciones')
+        .select('*, evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
+        .eq('id', evaluacionOriginalId)
+        .maybeSingle()
+      if (data) {
+        origen = { ...data, preguntas: mapearPreguntasEvaluacion(data) }
+      }
     } catch (_) {}
   }
 
@@ -500,17 +561,24 @@ export async function actualizarTipoEvaluacion({ evaluacionId, modelo, puedeGest
 
 /** Evaluaciones de un aula */
 export async function obtenerEvaluacionesAula(aulaId) {
-  let remotas = []
-  try {
+  const conSesion = await tieneSesionSupabaseReal()
+  if (conSesion) {
     const { data, error } = await supabase
       .from('evaluaciones')
-      .select('*')
+      .select('*, evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
       .eq('aula_id', aulaId)
       .order('creado_en', { ascending: false })
-    if (!error && data) remotas = data.map((e) => ({ ...e, origen: 'supabase' }))
-  } catch (_) {}
+    if (error) return { success: false, error: error.message, data: [] }
+    const remotas = (data || []).map((e) => ({
+      ...e,
+      preguntas: mapearPreguntasEvaluacion(e),
+      origen: 'supabase'
+    }))
+    return { success: true, data: remotas }
+  }
+
   const locales = cargarLocales().filter((e) => e.aula_id === aulaId).map((e) => ({ ...e, origen: 'local' }))
-  return { success: true, data: [...locales, ...remotas] }
+  return { success: true, data: locales }
 }
 
 // ============================================================================

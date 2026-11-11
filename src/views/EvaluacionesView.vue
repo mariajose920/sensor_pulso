@@ -18,7 +18,7 @@
         <p v-if="!aulas.length" class="alert alert-info">Primero crea un aula en la sección Aulas.</p>
 
         <div v-else>
-          <!-- Selector de Modo: Crear desde Cero o Usar Plantilla Precargada -->
+          <!-- Selector de Modo: Crear desde Cero, Precargada o Banco de Preguntas -->
           <div class="modo-tabs">
             <button 
               type="button" 
@@ -36,7 +36,29 @@
             >
               📦 Usar Plantilla Precargada ({{ plantillasPrecargadas.length }})
             </button>
+            <button 
+              type="button" 
+              class="modo-tab-btn" 
+              :class="{ activo: modoCreacion === 'banco' }"
+              @click="seleccionarModo('banco')"
+              data-testid="tab-banco-preguntas"
+            >
+              🏦 Banco de Preguntas ({{ bancoPreguntas.length }})
+            </button>
           </div>
+
+          <!-- BANCO DE PREGUNTAS PERSONAL Y COMPARTIDO (RF108) -->
+          <BancoPreguntasPanel
+            v-if="modoCreacion === 'banco'"
+            :usuario-id="currentUserId || ''"
+            :usuario-nombre="currentUserName || 'Docente'"
+            :es-admin="isAdmin"
+            :puede-gestionar="puedeGestionar"
+            :ids-en-evaluacion="idsPreguntasEnEvaluacion"
+            @agregar-pregunta="agregarPreguntaDesdeBanco"
+            @actualizado="bancoPreguntas = $event"
+            @cerrar="seleccionarModo('cero')"
+          />
 
           <!-- CATÁLOGO DE EVALUACIONES PRECARGADAS (RF105) -->
           <div v-if="modoCreacion === 'precargada'" class="catalogo-precargadas">
@@ -69,8 +91,8 @@
             </div>
           </div>
 
-          <!-- FORMULARIO DE EVALUACIÓN (RF105) -->
-          <form class="nueva" novalidate @submit.prevent="guardar">
+          <!-- FORMULARIO DE EVALUACIÓN (RF105 / RF108) -->
+          <form v-if="modoCreacion !== 'banco'" class="nueva" novalidate @submit.prevent="guardar">
             <div v-if="plantillaSeleccionadaId" class="banner-precargada">
               <span>✓ Plantilla cargada en el formulario. Puedes personalizar el título, criterios y preguntas antes de guardar.</span>
               <button type="button" class="btn-link" @click="limpiarPlantilla">Restablecer formulario</button>
@@ -108,30 +130,73 @@
 
             <!-- TIPO DE EVALUACIÓN (RF106) -->
             <TipoEvaluacionForm v-model="modelo" :mostrar-errores="intentado" />
-
-            <!-- SECCIÓN DE PREGUNTAS (RF105) -->
+            <!-- SECCIÓN DE PREGUNTAS (RF105 / RF108) -->
             <div class="seccion-preguntas">
               <div class="preguntas-header">
                 <div>
                   <h3 class="preguntas-titulo">📝 Preguntas de la Evaluación ({{ preguntas.length }})</h3>
-                  <p class="preguntas-desc">Agrega preguntas con alternativas o enunciados para complementar la evaluación.</p>
+                  <p class="preguntas-desc">Agrega preguntas manuales, reutilízalas o tómalas al azar desde el banco.</p>
                 </div>
-                <button type="button" class="btn btn-secondary btn-sm" @click="agregarPreguntaVacia">
-                  + Agregar Pregunta
-                </button>
+                <div class="preguntas-acciones">
+                  <button type="button" class="btn btn-secondary btn-sm" @click="seleccionarModo('banco')">
+                    📚 Elegir del Banco
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" @click="agregarPreguntaVacia">
+                    + Agregar Pregunta
+                  </button>
+                </div>
+              </div>
+
+              <!-- Selección al azar desde el banco (RF108) -->
+              <div class="azar-box" data-testid="selector-azar-banco">
+                <span class="azar-label">🎲 Agregar al azar del banco:</span>
+                <div class="azar-controles">
+                  <input
+                    v-model.number="cantidadAzar"
+                    type="number"
+                    min="1"
+                    max="50"
+                    class="form-input form-input-sm azar-num"
+                    title="Cantidad de preguntas al azar"
+                    data-testid="azar-cantidad"
+                  />
+                  <select v-model="alcanceAzar" class="form-select form-input-sm" data-testid="azar-alcance">
+                    <option value="ambos">Personal + Compartido</option>
+                    <option value="personal">Solo mi banco personal</option>
+                    <option value="compartido">Solo banco compartido</option>
+                  </select>
+                  <input
+                    v-model="etiquetaAzar"
+                    type="text"
+                    class="form-input form-input-sm"
+                    placeholder="Etiqueta opcional (ej: spo2)"
+                    data-testid="azar-etiqueta"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    @click="agregarDesdeBancoAlAzar"
+                    data-testid="btn-agregar-azar"
+                  >
+                    🎲 Seleccionar {{ cantidadAzar || 1 }} al azar
+                  </button>
+                </div>
+                <small v-if="avisoAzar" class="azar-aviso">{{ avisoAzar }}</small>
               </div>
 
               <div v-if="preguntas.length === 0" class="preguntas-vacio">
-                <p>No has agregado preguntas todavía. Puedes añadir preguntas opcionales o pulsar "+ Agregar Pregunta".</p>
+                <p>No has agregado preguntas todavía. Puedes añadir preguntas manuales, elegir del banco o seleccionar al azar.</p>
               </div>
 
               <div v-else class="preguntas-lista">
                 <div v-for="(preg, idx) in preguntas" :key="idx" class="pregunta-box">
                   <div class="pregunta-top">
-                    <span class="pregunta-numero">Pregunta #{{ idx + 1 }}</span>
+                    <span class="pregunta-numero">
+                      Pregunta #{{ idx + 1 }}
+                      <span v-if="preg.bancoId" class="badge badge-banco">Del banco</span>
+                    </span>
                     <button type="button" class="btn-borrar-pregunta" @click="eliminarPregunta(idx)" title="Eliminar pregunta">✕</button>
                   </div>
-
                   <div class="form-group">
                     <label class="form-label">Enunciado de la pregunta *</label>
                     <input 
@@ -148,6 +213,7 @@
                       <select v-model="preg.tipo" class="form-select">
                         <option value="opcion_multiple">Opción Múltiple</option>
                         <option value="verdadero_falso">Verdadero / Falso</option>
+                        <option value="numerica">Numérica</option>
                         <option value="abierta">Respuesta Abierta</option>
                       </select>
                     </div>
@@ -195,7 +261,9 @@
                   <strong>{{ e.titulo }}</strong>
                   <span v-if="e.precargadaBaseId" class="badge badge-precargada">Basada en plantilla precargada</span>
                   <span v-else class="badge badge-personalizada">Personalizada</span>
-                  <span v-if="e.origen === 'local'" class="badge badge-local" title="Guardada en este navegador">Local</span>
+                  <span v-if="Array.isArray(e.preguntas)" class="badge badge-banco">📝 {{ e.preguntas.length }} pregunta(s)</span>
+                  <span v-if="e.origen === 'supabase'" class="badge badge-bd" title="Guardada en PostgreSQL">☁️ Supabase</span>
+                  <span v-else-if="e.origen === 'local'" class="badge badge-local" title="Guardada en este navegador">Local</span>
                 </div>
                 <p v-if="e.descripcion" class="lista-item-desc">{{ e.descripcion }}</p>
                 <div class="lista-footer">
@@ -225,6 +293,8 @@ import TipoEvaluacionForm from '../components/TipoEvaluacionForm.vue'
 import TipoEvaluacionBadge from '../components/TipoEvaluacionBadge.vue'
 import { useAuth } from '../composables/useAuth'
 import { obtenerAulas } from '../services/aulasService'
+import BancoPreguntasPanel from '../components/BancoPreguntasPanel.vue'
+import { listarBancoPreguntas, seleccionarPreguntasAlAzar } from '../services/bancoPreguntasService.js'
 import { 
   crearEvaluacion, 
   obtenerEvaluacionesAula, 
@@ -233,7 +303,7 @@ import {
 } from '../services/evaluacionesService'
 import { modeloVacio, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
 
-const { currentUserId, currentUserEmail, isAdmin, isProfesor, can } = useAuth()
+const { currentUserId, currentUserName, currentUserEmail, isAdmin, isProfesor, can } = useAuth()
 const puedeGestionar = computed(() => isAdmin.value || isProfesor.value || can('GESTIONAR_EVALUACIONES'))
 
 const aulas = ref([])
@@ -252,6 +322,59 @@ const modoCreacion = ref('cero') // 'cero' | 'precargada'
 const plantillasPrecargadas = ref([])
 const plantillaSeleccionadaId = ref(null)
 const preguntas = ref([])
+
+// RF108: Banco de preguntas y selección al azar
+const bancoPreguntas = ref([])
+const cantidadAzar = ref(3)
+const alcanceAzar = ref('ambos')
+const etiquetaAzar = ref('')
+const avisoAzar = ref('')
+
+const idsPreguntasEnEvaluacion = computed(() =>
+  preguntas.value.map(p => p.bancoId).filter(Boolean)
+)
+
+function convertirPreguntaBanco(p) {
+  return {
+    bancoId: p.id,
+    enunciado: p.enunciado,
+    tipo: p.tipo || 'opcion_multiple',
+    opciones: p.opciones ? JSON.parse(JSON.stringify(p.opciones)) : [],
+    respuesta_correcta: p.respuesta_correcta ?? 'a',
+    puntaje: Number(p.puntaje) || 10,
+    etiquetas: Array.isArray(p.etiquetas) ? [...p.etiquetas] : [],
+    compartida: !!p.compartida
+  }
+}
+
+function agregarPreguntaDesdeBanco(p) {
+  if (p.id && idsPreguntasEnEvaluacion.value.includes(p.id)) return
+  preguntas.value.push(convertirPreguntaBanco(p))
+  avisoAzar.value = `Se agregó "${p.enunciado.slice(0, 50)}..." a la evaluación.`
+}
+
+async function agregarDesdeBancoAlAzar() {
+  avisoAzar.value = ''
+  const res = await seleccionarPreguntasAlAzar({
+    usuarioId: currentUserId.value,
+    cantidad: cantidadAzar.value,
+    alcance: alcanceAzar.value,
+    etiqueta: etiquetaAzar.value,
+    excluirIds: idsPreguntasEnEvaluacion.value
+  })
+  if (!res.success) {
+    avisoAzar.value = res.error
+    return
+  }
+  res.data.forEach(p => preguntas.value.push(convertirPreguntaBanco(p)))
+  const via = res.origen === 'supabase' ? 'desde Supabase' : 'modo local'
+  avisoAzar.value = `✓ Se añadieron ${res.data.length} pregunta(s) al azar (${via}).`
+}
+
+async function cargarBanco() {
+  const res = await listarBancoPreguntas({ usuarioId: currentUserId.value, alcance: 'ambos' })
+  bancoPreguntas.value = res.data || []
+}
 
 function seleccionarModo(modo) {
   modoCreacion.value = modo
@@ -332,13 +455,15 @@ async function guardar() {
     return
   }
 
+  const totalPreg = preguntas.value.length
   mensaje.value = res.origen === 'local'
-    ? 'Evaluación guardada localmente.'
-    : '¡Evaluación guardada exitosamente en la base de datos!'
+    ? 'Evaluación guardada localmente (sesión demo).'
+    : `¡Evaluación guardada en Supabase con ${totalPreg} pregunta(s) vinculada(s)!`
 
   limpiarPlantilla()
   intentado.value = false
   await cargarLista()
+  await cargarBanco()
 }
 
 async function duplicarExistente(ev) {
@@ -379,6 +504,9 @@ onMounted(async () => {
   // 2. Cargar Evaluaciones Precargadas
   const resPre = await obtenerEvaluacionesPrecargadas()
   plantillasPrecargadas.value = resPre.data || []
+
+  // 3. Cargar Banco de Preguntas (RF108)
+  await cargarBanco()
 })
 </script>
 
@@ -549,4 +677,21 @@ onMounted(async () => {
 .badge-personalizada { background: #f1f5f9; color: #334155; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
 .badge-local { background: #fef3c7; color: #92400e; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
 .btn-block { width: 100%; margin-top: 1rem; }
+
+.preguntas-acciones { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.azar-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.azar-label { font-size: 0.85rem; font-weight: 700; color: #1e40af; }
+.azar-controles { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.azar-num { width: 70px; }
+.azar-aviso { font-size: 0.8rem; color: #1e3a8a; font-weight: 500; }
+.badge-banco { background: #dbeafe; color: #1d4ed8; font-size: 0.7rem; padding: 0.12rem 0.45rem; border-radius: 4px; margin-left: 0.4rem; }
+.badge-bd { background: #ecfeff; color: #0e7490; font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; }
 </style>
