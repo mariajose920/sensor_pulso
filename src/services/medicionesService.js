@@ -11,8 +11,40 @@ import {
 } from '../utils/medicion.js'
 import { listarPendientes, agregarPendiente, quitarPendiente } from '../pwa/medicionesPendientes.js'
 import { guardarMedicionVista, listarMedicionesVistas } from '../pwa/medicionesOffline.js'
+import { clasificarErrorPublicacion, mensajeErrorPublicacion, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
 
 export const TAMANO_PAGINA = 20
+
+/** ¿El error dice que la columna no existe en la tabla (base sin la migración que la crea)? */
+export function esErrorColumnaFaltante(error, columna) {
+  if (!error) return false
+  const texto = `${error.message || ''} ${error.details || ''}`.toLowerCase()
+  const codigo = String(error.code || '')
+  return (codigo === 'PGRST204' || codigo === '42703' || texto.includes('schema cache') || texto.includes('does not exist'))
+    && texto.includes(String(columna).toLowerCase())
+}
+
+/**
+ * Inserta una fila de medición. Si la base todavía no tiene la columna `id_cliente` (RF30, migración
+ * 20261102000100) se reintenta sin ella: la medición se guarda igual, solo sin la protección contra duplicados.
+ */
+async function insertarMedicion(fila) {
+  let r = await supabase.from('mediciones').insert(fila).select('id').single()
+  if (r.error && 'id_cliente' in fila && esErrorColumnaFaltante(r.error, 'id_cliente')) {
+    const { id_cliente: _omitido, ...sinIdCliente } = fila
+    r = await supabase.from('mediciones').insert(sinIdCliente).select('id').single()
+  }
+  return r
+}
+
+async function buscarIdPorIdCliente(idCliente) {
+  try {
+    const { data, error } = await supabase.from('mediciones').select('id').eq('id_cliente', idCliente).maybeSingle()
+    return error ? undefined : (data?.id || undefined)
+  } catch {
+    return undefined
+  }
+}
 
 function nuevoIdCliente() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
@@ -47,11 +79,7 @@ export async function guardarMedicion(datos) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('mediciones')
-      .insert(armada.fila)
-      .select('id')
-      .single()
+    const { data, error } = await insertarMedicion(armada.fila)
 
     if (error) throw error
     return { ok: true, estado: 'guardada', id: data?.id, mensaje: 'Medición guardada en tu historial.' }
@@ -59,7 +87,8 @@ export async function guardarMedicion(datos) {
     const motivo = clasificarErrorGuardado(error)
 
     if (motivo === 'duplicada') {
-      return { ok: true, estado: 'guardada', mensaje: 'Esta medición ya estaba guardada en tu historial.' }
+      // Se recupera el id de la medición ya guardada para poder publicarla (si la base no tiene id_cliente, no hay duplicados)
+      return { ok: true, estado: 'guardada', id: await buscarIdPorIdCliente(idCliente), mensaje: 'Esta medición ya estaba guardada en tu historial.' }
     }
     if (motivo === 'conexion') {
       // RNF03: sin internet se conserva en el dispositivo y se reenvía después
@@ -68,7 +97,75 @@ export async function guardarMedicion(datos) {
         ? { ok: true, estado: 'pendiente', motivo, mensaje: MENSAJES_GUARDADO.conexion }
         : { ok: false, estado: 'rechazada', motivo: 'generico', mensaje: MENSAJES_GUARDADO.generico }
     }
-    return { ok: false, estado: 'rechazada', motivo, mensaje: MENSAJES_GUARDADO[motivo] || MENSAJES_GUARDADO.generico }
+    return {
+      ok: false, estado: 'rechazada', motivo,
+      mensaje: MENSAJES_GUARDADO[motivo] || MENSAJES_GUARDADO.generico,
+      // Para no esconder la causa real cuando el motivo es genérico (ayuda a quien administra la base)
+      detalle: motivo === 'generico' ? (error?.message || null) : null
+    }
+  }
+}
+
+/**
+ * RF31 + RF57: publica una medición ya guardada. La base (función `publicar_medicion`) exige sesión, el permiso
+ * de RF98 al profesor, un consentimiento vigente y una medición de sensor, y guarda solo una vista anonimizada.
+ * La confirmación explícita (`p_confirmar`) la da quien pulsó «Sí, publicar» en el diálogo de la pantalla.
+ * @returns {Promise<{ok: boolean, motivo?: string, mensaje: string, publicacionId?: string}>}
+ */
+export async function publicarMedicion(medicionId, titulo = null) {
+  if (!medicionId) return { ok: false, motivo: 'sin_id', mensaje: MENSAJES_TERMINAR.publicar_sin_id }
+  try {
+    const { data, error } = await supabase.rpc('publicar_medicion', {
+      p_medicion: medicionId,
+      p_confirmar: true,
+      p_titulo: titulo
+    })
+    if (error) throw error
+    return { ok: true, publicacionId: data || undefined, mensaje: MENSAJES_TERMINAR.guardada_publicada }
+  } catch (error) {
+    const motivo = clasificarErrorPublicacion(error)
+    return { ok: false, motivo, mensaje: mensajeErrorPublicacion(motivo) }
+  }
+}
+
+/**
+ * Lo que la base dice de la sesión y del consentimiento de quien va a publicar (solo lectura, con su propia sesión).
+ * Cada valor es true/false, o null si no se pudo comprobar (sin conexión o error): en ese caso decide la base al publicar.
+ * @returns {Promise<{sesionReal: boolean|null, consentimientoVigente: boolean|null, usuarioId: string|null}>}
+ */
+export async function consultarCondicionesPublicar() {
+  let sesionReal = null
+  let consentimientoVigente = null
+  let usuarioId = null
+  try {
+    const { data, error } = await supabase.auth.getSession()
+    if (!error) {
+      usuarioId = data?.session?.user?.id || null
+      sesionReal = Boolean(usuarioId)
+    }
+    if (usuarioId) {
+      const r = await supabase
+        .from('consentimientos_aceptados')
+        .select('id')
+        .eq('usuario_id', usuarioId)
+        .is('revocado_en', null)
+        .limit(1)
+      if (!r.error) consentimientoVigente = (r.data || []).length > 0
+    }
+  } catch { /* sin conexión: queda null */ }
+  return { sesionReal, consentimientoVigente, usuarioId }
+}
+
+/** Retira una publicación propia (RF90). Usa la función `retirar_publicacion` de la base. */
+export async function retirarPublicacion(medicionId) {
+  if (!medicionId) return { ok: false, motivo: 'sin_id' }
+  try {
+    const { error } = await supabase.rpc('retirar_publicacion', { p_medicion: medicionId })
+    if (error) throw error
+    return { ok: true }
+  } catch (error) {
+    const motivo = clasificarErrorPublicacion(error)
+    return { ok: false, motivo }
   }
 }
 
@@ -79,7 +176,7 @@ export async function sincronizarPendientes() {
 
   let enviadas = 0
   for (const p of listarPendientes(usuarioId)) {
-    const { error } = await supabase.from('mediciones').insert(p.fila)
+    const { error } = await insertarMedicion(p.fila)
     const motivo = error ? clasificarErrorGuardado(error) : null
     if (!error || motivo === 'duplicada') {
       quitarPendiente(p.fila.id_cliente)
@@ -99,7 +196,7 @@ export function contarPendientes(usuarioId = null) {
 
 const COLUMNAS_HISTORIAL =
   'id, inicio, duracion_s, fuente, canal, bpm_promedio, spo2_promedio, hrv_rmssd_ms, ritmo, calidad, ' +
-  'causa_calidad, dentro_de_rango, actividad:actividades(nombre)'
+  'causa_calidad, dentro_de_rango, usuario_id, fin, publica, actividad:actividades(nombre)'
 
 /**
  * Historial de mediciones de la cuenta, de la más reciente a la más antigua.
@@ -119,7 +216,8 @@ export async function listarHistorial({ pagina = 0, fuente = null } = {}) {
     const { data, error, count } = await consulta
     if (error) throw error
 
-    const items = (data || []).map(resumirParaHistorial)
+    // usuarioId / fin / publica: para ofrecer «Publicar» o «Retirar publicación» solo donde corresponde
+    const items = (data || []).map((m) => ({ ...resumirParaHistorial(m), usuarioId: m.usuario_id || null, fin: m.fin || null, publica: m.publica === true }))
     if (pagina === 0 && !fuente) {
       for (const m of items.slice(0, 10)) {
         await guardarMedicionVista({

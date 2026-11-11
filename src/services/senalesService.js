@@ -11,6 +11,17 @@
 import { supabase } from './supabase.js'
 import { filtroSuavizadoEMA } from '../utils/dspFiltros.js'
 import { validarYSanitizarArchivoCsv } from './sanitizacionService.js'
+import {
+  validarLimitesArchivoCsv,
+  validarMetadatosArchivoCsv,
+  LIMITES_CSV
+} from './limitesCsvService.js'
+
+export {
+  validarLimitesArchivoCsv,
+  validarMetadatosArchivoCsv,
+  LIMITES_CSV
+}
 
 // ============================================================================
 // 1. DATASETS PÚBLICOS ACREDITADOS (Indexados y Validados)
@@ -452,9 +463,28 @@ export const senalesService = {
   },
 
   /**
-   * Carga y procesa un archivo CSV de bioseñal
+   * Carga y procesa un archivo CSV de bioseñal, aplicando primero la verificación
+   * estricta de límites y contenido peligroso (RF66).
+   * Criterio de aceptación: Un archivo grande, de otro tipo o con fórmulas se rechaza antes de procesarse.
    */
-  cargarDesdeCsv(contenidoTexto, nombreArchivo) {
+  cargarDesdeCsv(contenidoTexto, nombreArchivo = 'senal.csv', tamanoBytes = null) {
+    // 1. Verificación previa de límites y seguridad (RF66)
+    const validacionLimites = validarLimitesArchivoCsv(contenidoTexto, {
+      nombreArchivo,
+      tamanoBytes
+    })
+
+    if (!validacionLimites.valido) {
+      return {
+        valido: false,
+        error: validacionLimites.error,
+        motivoRechazo: validacionLimites.motivoRechazo,
+        detalle: validacionLimites.detalle,
+        rf66: 'rechazado'
+      }
+    }
+
+    // 2. Parseo y procesamiento de la bioseñal (RF27 / RF65)
     return parsearArchivoCsv(contenidoTexto, nombreArchivo)
   },
 

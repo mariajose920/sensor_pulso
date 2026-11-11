@@ -22,15 +22,48 @@ function deHex(texto) {
 
 const esSobre = (b) => b.length >= 32 && MAGIA.every((c, i) => b[i] === c)
 
+/**
+ * Error tipado del cifrado en servidor. `codigo` dice por qué falló, para poder explicárselo a la persona:
+ *  - 'sesion'   : sin sesión o sesión vencida (401/403).
+ *  - 'clave'    : el sobre no se pudo verificar (422): se cifró con otra clave (p. ej. otro entorno) o está alterado.
+ *  - 'servidor' : el servidor no tiene el cifrado disponible o falló (503/500/otros).
+ *  - 'noEncontrada': la fila no existe o la RLS no la deja ver (404).
+ *  - 'red'      : no hubo respuesta (sin conexión, caída).
+ */
+export class ErrorCifrado extends Error {
+  constructor(mensaje, codigo, estado = null) {
+    super(mensaje)
+    this.name = 'ErrorCifrado'
+    this.codigo = codigo
+    this.estado = estado
+  }
+}
+
+export function codigoDeEstado(estado) {
+  if (estado === 401 || estado === 403) return 'sesion'
+  if (estado === 422) return 'clave'
+  if (estado === 404) return 'noEncontrada'
+  return 'servidor'
+}
+
+const DEV = Boolean(import.meta.env?.DEV)
+
 async function llamar(ruta, token, cuerpo) {
-  if (!token) throw new Error('Se requiere una sesión iniciada para cifrar o descifrar datos de salud.')
-  const resp = await fetch(ruta, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(cuerpo)
-  })
+  if (!token) throw new ErrorCifrado('Se requiere una sesión iniciada para cifrar o descifrar datos de salud.', 'sesion')
+  const t0 = DEV ? performance.now() : 0
+  let resp
+  try {
+    resp = await fetch(ruta, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(cuerpo)
+    })
+  } catch (e) {
+    throw new ErrorCifrado(e?.message || 'No hubo respuesta del servidor.', 'red')
+  }
   const json = await resp.json().catch(() => ({}))
-  if (!resp.ok || !json.ok) throw new Error(json.error || `El servidor respondió ${resp.status}.`)
+  if (DEV) console.debug(`[ficha] POST ${ruta}: ${(performance.now() - t0).toFixed(0)} ms (HTTP ${resp.status})`)
+  if (!resp.ok || !json.ok) throw new ErrorCifrado(json.error || `El servidor respondió ${resp.status}.`, codigoDeEstado(resp.status), resp.status)
   return json
 }
 

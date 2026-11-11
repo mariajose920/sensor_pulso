@@ -82,7 +82,9 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { AVISO_EDUCATIVO_CORTO } from './data/avisoEducativo.js'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { ENLACES_SOLO_CON_SESION, motivoDeRuta } from './utils/accesoSinSesion'
 import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
 import { useScrollDirection } from './composables/useScrollDirection.js'
@@ -108,6 +110,13 @@ const manejarLogout = async () => {
 
 // En la desestructuración de useAuth() agrega cerrarOtrasSesiones:
 const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout, cerrarOtrasSesiones } = useAuth()
+// Si se cierra la sesión estando en una pantalla que la exige (por ejemplo Medición), se vuelve al login
+const rutaActual = useRoute()
+watch(isAuthenticated, (conSesion) => {
+  if (!conSesion && rutaActual.meta?.requiresAuth) {
+    router.push({ name: 'Login', query: { motivo: motivoDeRuta(rutaActual.name) } })
+  }
+})
 const mensajeOtrasSesiones = ref('')
 const manejarCerrarOtrasSesiones = async () => {
   const res = await cerrarOtrasSesiones()
@@ -120,7 +129,8 @@ const manejarCerrarOtrasSesiones = async () => {
 // RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
 // RF30: el historial de mediciones solo lo ve quien tiene sesión
 const enlaces = computed(() => {
-  const lista = [...enlacesBase]
+  // Sin sesión no hay sensor: Medición, Dispositivos y Aulas solo las ve quien inició sesión
+  const lista = enlacesBase.filter(e => !ENLACES_SOLO_CON_SESION.includes(e.to) || isAuthenticated.value)
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
   if (isAdmin.value || isProfesor.value) lista.push({ to: '/evaluaciones', texto: 'Evaluaciones', corto: 'Evaluar', icono: 'aulas' })   // RF106
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })

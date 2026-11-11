@@ -46,9 +46,9 @@ marcar(/consentimiento|aviso/i.test(A.LUGARES_AVISO.join()) && A.LUGARES_AVISO.l
 
 // ---------------------------------------------------------------- PDF: aviso al comienzo
 const pdf = lee('../src/services/informePdfService.js')
-const iTitulo = pdf.indexOf('INFORME EDUCATIVO')
-const iAviso = pdf.indexOf('doc.text(AVISO_EDUCATIVO_CORTO, margin, 43)')
-marcar(iTitulo > 0 && iAviso > iTitulo && iAviso < pdf.indexOf('1. FICHA DEL PARTICIPANTE'), 'El informe PDF muestra el aviso justo bajo el título, antes del contenido')
+const iTitulo = pdf.indexOf('Informe educativo de ritmo')
+const iAviso = pdf.indexOf('parrafo(AVISO_EDUCATIVO_CORTO')
+marcar(iTitulo > 0 && iAviso > iTitulo && iAviso < pdf.indexOf("seccion(1, 'Datos del participante')"), 'El informe PDF muestra el aviso justo bajo el título, antes del contenido')
 marcar(!/INFORME DE EVALUACI.N CL.NICA/.test(pdf), 'El informe ya no se titula evaluación clínica')
 
 // ---------------------------------------------------------------- Lo que se le dice a quien midió no afirma una condición

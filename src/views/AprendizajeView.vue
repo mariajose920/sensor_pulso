@@ -26,6 +26,14 @@
     </div>
 
     <h2 class="seccion">Practica</h2>
+    <router-link to="/aprendizaje/practica" class="leccion-card card practica" data-testid="boton-practica-evaluacion">
+      <h3 class="leccion-titulo">Practicar para las evaluaciones</h3>
+      <p class="leccion-resumen">
+        Responde preguntas de las lecciones y, al corregir, mira por qué te equivocaste y qué lección repasar.
+        Sirve con o sin sesión.
+      </p>
+      <span class="leccion-meta">Preguntas con explicación</span>
+    </router-link>
     <router-link to="/aprendizaje/simulador" class="leccion-card card practica">
       <h3 class="leccion-titulo">Simulador de señal</h3>
       <p class="leccion-resumen">
@@ -57,5 +65,5 @@ onMounted(async () => { LECCIONES.value = await obtenerLeccionesPlataforma() })
 .leccion-titulo { font-size: 1.05rem; font-weight: 600; margin: 0.6rem 0 0.35rem; }
 .leccion-resumen { font-size: 0.9rem; color: var(--color-muted); line-height: 1.5; margin: 0 0 0.6rem; }
 .leccion-meta { font-size: 0.8rem; color: var(--color-primary); font-weight: 600; }
-.practica { border-left: 4px solid var(--color-primary); }
+.practica { border-left: 4px solid var(--color-primary); margin-bottom: 1rem; }
 </style>

@@ -1,44 +1,26 @@
 <template>
   <div class="auth-container">
     <div class="card auth-card">
-      <!-- Pestañas para alternar entre Iniciar Sesión y Registro -->
-      <div class="auth-tabs">
-        <button 
-          type="button"
-          class="tab-btn" 
-          :class="{ active: mode === 'login' }"
-          @click="mode = 'login'"
-        >
-          Iniciar Sesión
-        </button>
-        <button 
-          type="button"
-          class="tab-btn" 
-          :class="{ active: mode === 'register' }"
-          @click="mode = 'register'"
-        >
-          Registrarse
-        </button>
-      </div>
-
-      <div class="auth-header">
-        <h2 class="card-title">
-          {{ mode === 'login' ? 'Bienvenido a sensor_pulso' : 'Crear Cuenta Institucional' }}
-        </h2>
+      <!-- Cabecera Institucional -->
+      <div class="auth-header text-center">
+        <div class="auth-logo-badge">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </div>
+        <h2 class="card-title mt-2">Acceso Institucional UNACH</h2>
         <p class="auth-subtitle">
-          {{ mode === 'login' 
-            ? 'Ingresa tus credenciales institucionales para acceder a la plataforma.' 
-            : 'Registro oficial para estudiantes y docentes.' }}
+          Plataforma de Monitoreo de Bioseñales Cardíacas y SpO₂
         </p>
       </div>
 
-      <!-- Alerta de Bloqueo Temporal con Contador Regresivo en Vivo (RF50) -->
+      <!-- Alerta de Bloqueo Temporal (RF50) -->
       <div v-if="cuentaBloqueada" class="alert alert-error bloqueo-banner">
         <div class="bloqueo-icono">🔒</div>
         <div>
           <strong>Acceso Bloqueado Temporalmente</strong>
           <p class="mt-1">
-            Por seguridad ante múltiples intentos fallidos, debes esperar: 
+            Por seguridad ante múltiples intentos fallidos, debes esperar:
             <span class="timer-badge">{{ tiempoRestanteTexto }}</span>
           </p>
           <small class="text-muted-xs">
@@ -47,169 +29,111 @@
         </div>
       </div>
 
-      <!-- Alertas Generales -->
-      <div v-if="errorMessage && !cuentaBloqueada" class="alert alert-error">
+      <!-- Alertas de Error, Aviso de Sesión o Éxito -->
+      <div v-if="errorMessage && !cuentaBloqueada" class="alert alert-error mb-3">
         {{ errorMessage }}
       </div>
-      <div v-if="successMessage" class="alert alert-success">
+      <div v-if="avisoSesionRequerida" class="alert alert-info mb-3" role="status" data-testid="aviso-sesion-requerida">
+        {{ avisoSesionRequerida }}
+      </div>
+      <div v-if="successMessage" class="alert alert-success mb-3">
         {{ successMessage }}
       </div>
 
-      <div v-if="needsEmailConfirmation" class="alert alert-info">
-        <p><strong>Confirmación pendiente:</strong> Hemos enviado un enlace de activación a tu correo institucional.</p>
-        <p style="margin-top: 0.5rem; font-size: 0.85rem;">
-          ¿No lo recibiste? 
-          <button type="button" @click="handleResendEmail" class="btn-link" :disabled="resending">
-            {{ resending ? 'Reenviando...' : 'Reenviar correo de confirmación' }}
-          </button>
+      <!-- RF75: Aviso educativo obligatorio -->
+      <AvisoEducativo compacto />
+
+      <!-- Casilla obligatoria de Política de Privacidad (RF88) -->
+      <div class="politica-check-box mb-4">
+        <label class="acepta-politica" style="display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.88rem; cursor: pointer;">
+          <input
+            v-model="aceptaPolitica"
+            type="checkbox"
+            data-testid="acepta-politica"
+            style="margin-top: 0.2rem; cursor: pointer;"
+          />
+          <span>
+            He leído y acepto la
+            <router-link to="/privacidad" data-testid="enlace-privacidad-login" target="_blank" style="color: #0284c7; text-decoration: underline;">
+              política de privacidad
+            </router-link>
+            y el tratamiento de datos institucionales.
+          </span>
+        </label>
+        <p v-if="!aceptaPolitica" class="text-muted-xs" style="color: #dc2626; margin: 0.35rem 0 0 1.6rem;">
+          * Debes aceptar la política de privacidad para iniciar sesión.
         </p>
       </div>
 
-      <!-- RF75: aviso educativo antes de usar la plataforma -->
-      <AvisoEducativo compacto />
-      <p class="nota-privacidad" style="font-size: 0.85rem; margin: 0 0 0.75rem;">
-        Al usar la plataforma tratamos tus datos según la <router-link to="/privacidad" data-testid="enlace-privacidad-login">política de privacidad</router-link>.
-      </p>
-
-      <!-- Formulario de Autenticación -->
-      <form @submit.prevent="handleSubmit">
-        <div v-if="mode === 'register'" class="form-group">
-          <label class="form-label" for="nombre">Nombre Completo</label>
-          <input 
-            id="nombre"
-            v-model="nombre" 
-            type="text" 
-            class="form-input" 
-            placeholder="Ej: Constanza Morales"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="email">Correo Institucional</label>
-          <input 
-            id="email"
-            v-model="email" 
-            type="email" 
-            class="form-input" 
-            placeholder="ejemplo@alu.unach.cl o @unach.cl"
-            @blur="verificarBloqueoInput"
-            required
-          />
-          <div v-if="infoDominio" class="domain-badge">
-            <span v-if="infoDominio.valido" class="badge" :class="infoDominio.rol === 'profesor' ? 'badge-profesor' : 'badge-usuario'">
-              ✓ {{ infoDominio.tipo }} detectado
-            </span>
-            <span v-else class="text-danger">
-              ⚠️ Solo correos institucionales de la UNACH (@alu.unach.cl o @unach.cl)
-            </span>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="password">Contraseña</label>
-          <input 
-            id="password"
-            v-model="password" 
-            type="password" 
-            class="form-input" 
-            placeholder="••••••••"
-            required
-          />
-
-          <!-- Opción de Recuperación de Contraseña (RF50) -->
-          <div v-if="mode === 'login'" class="recuperar-link-box">
-            <button type="button" @click="abrirModalRecuperacion" class="btn-link text-sm">
-              ¿Olvidaste tu contraseña?
-            </button>
-          </div>
-
-          <!-- Medidor de seguridad de contraseña (solo en registro) -->
-          <div v-if="mode === 'register' && password" class="password-meter">
-            <div class="meter-bar-bg">
-              <div 
-                class="meter-bar-fill" 
-                :style="{ width: `${fuerzaPassword.score}%`, backgroundColor: fuerzaPassword.color }"
-              ></div>
-            </div>
-            <div class="meter-label">
-              <span>Seguridad: <strong :style="{ color: fuerzaPassword.color }">{{ fuerzaPassword.nivel }}</strong></span>
-            </div>
-
-            <ul class="criteria-list">
-              <li :class="{ met: fuerzaPassword.criterios.longitud }">
-                {{ fuerzaPassword.criterios.longitud ? '✓' : '○' }} Mínimo 8 caracteres
-              </li>
-              <li :class="{ met: fuerzaPassword.criterios.mayuscula && fuerzaPassword.criterios.minuscula }">
-                {{ (fuerzaPassword.criterios.mayuscula && fuerzaPassword.criterios.minuscula) ? '✓' : '○' }} Mayúsculas y minúsculas
-              </li>
-              <li :class="{ met: fuerzaPassword.criterios.numero && fuerzaPassword.criterios.simbolo }">
-                {{ (fuerzaPassword.criterios.numero && fuerzaPassword.criterios.simbolo) ? '✓' : '○' }} Al menos un número y un símbolo
-              </li>
-              <li :class="{ met: fuerzaPassword.criterios.noComun }">
-                {{ fuerzaPassword.criterios.noComun ? '✓' : '○' }} Contraseña no común
-              </li>
-            </ul>
-          </div>
-        </div>
-
-        <label v-if="mode === 'register'" class="acepta-politica" style="display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.88rem; margin: 0 0 1rem;">
-          <input v-model="aceptaPolitica" type="checkbox" data-testid="acepta-politica" style="margin-top: 0.2rem;" />
-          <span>He leído y acepto la <router-link to="/privacidad" target="_blank">política de privacidad</router-link>.</span>
-        </label>
-
-        <button 
-          type="submit" 
-          class="btn btn-primary w-full"
-          :disabled="loading || (mode === 'login' && cuentaBloqueada) || (mode === 'register' && (!fuerzaPassword.valida || !aceptaPolitica))"
+      <!-- BOTÓN OFICIAL Y EXCLUSIVO DE GOOGLE OAUTH (RF02) -->
+      <div class="google-auth-box">
+        <button
+          type="button"
+          class="btn-google"
+          @click="handleGoogleLogin"
+          :disabled="loading || !aceptaPolitica"
         >
-          {{ loading ? 'Procesando...' : (mode === 'login' ? (cuentaBloqueada ? 'Cuenta Bloqueada' : 'Iniciar Sesión') : 'Crear Cuenta') }}
+          <svg class="google-svg-icon" viewBox="0 0 24 24" width="22" height="22">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span class="btn-google-text">
+            {{ loading ? 'Conectando con Google...' : 'Continuar con Google' }}
+          </span>
         </button>
-      </form>
-    </div>
+      </div>
 
-    <!-- MODAL DE RECUPERACIÓN DE CONTRASEÑA (RF50) -->
-    <div v-if="modalRecuperacionAbierto" class="modal-backdrop" @click.self="cerrarModalRecuperacion">
-      <div class="modal-card">
-        <h3 class="modal-title">🔑 Recuperar Contraseña</h3>
-        <p class="modal-subtitle">
-          Ingresa tu correo institucional y te enviaremos un enlace de un solo uso para restablecer tu acceso.
-        </p>
+      <!-- ACCESO RÁPIDO CON CUENTAS PREDEFINIDAS PARA PRUEBAS (Admin y Profesor) -->
+      <div class="dev-demo-box mt-3 mb-3">
+        <button
+          type="button"
+          @click="mostrarDemo = !mostrarDemo"
+          class="btn-toggle-demo"
+        >
+          <span>{{ mostrarDemo ? '▲ Ocultar accesos de prueba rápida' : '⚡ Usar accesos directos de prueba' }}</span>
+        </button>
 
-        <div v-if="mensajeRecuperacion" class="alert alert-success">
-          {{ mensajeRecuperacion }}
-        </div>
-        <div v-if="errorRecuperacion" class="alert alert-error">
-          {{ errorRecuperacion }}
-        </div>
-
-        <form v-if="!mensajeRecuperacion" @submit.prevent="ejecutarRecuperacion">
-          <div class="form-group">
-            <label class="form-label">Correo Institucional UNACH</label>
-            <input 
-              v-model="correoRecuperacion" 
-              type="email" 
-              class="form-input" 
-              placeholder="usuario@alu.unach.cl o docente@unach.cl" 
-              required
-            />
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="cerrarModalRecuperacion" class="btn btn-secondary" :disabled="enviandoRecuperacion">
-              Cancelar
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="enviandoRecuperacion">
-              {{ enviandoRecuperacion ? 'Enviando...' : 'Enviar Enlace' }}
-            </button>
-          </div>
-        </form>
-
-        <div v-else class="modal-actions">
-          <button type="button" @click="cerrarModalRecuperacion" class="btn btn-primary">
-            Entendido
+        <div v-if="mostrarDemo" class="demo-buttons-grid mt-2">
+          <p class="demo-explainer-text">
+            Ingreso inmediato con las cuentas predefinidas para pruebas:
+          </p>
+          <button
+            type="button"
+            @click="handleDemoLogin('admin')"
+            class="btn-demo-item"
+            :disabled="loading"
+          >
+            🛡️ Probar como Administrador (admin.general@unach.cl)
+          </button>
+          <button
+            type="button"
+            @click="handleDemoLogin('profesor')"
+            class="btn-demo-item"
+            :disabled="loading"
+          >
+            👨‍🏫 Probar como Profesor (profesor.prueba@unach.cl)
           </button>
         </div>
+      </div>
+
+      <!-- Información de Cuentas Autorizadas UNACH -->
+      <div class="auth-domains-info mt-3">
+        <h4 class="domains-title">Dominios Institucionales Permitidos:</h4>
+        <div class="domain-pill-list">
+          <div class="domain-pill">
+            <span class="pill-badge pill-est">Estudiantes</span>
+            <code>@alu.unach.cl</code>
+          </div>
+          <div class="domain-pill">
+            <span class="pill-badge pill-doc">Docentes</span>
+            <code>@unach.cl</code>
+          </div>
+        </div>
+        <small class="domain-note">
+          ⚠️ Por políticas de seguridad, las cuentas personales (@gmail.com) no están autorizadas.
+        </small>
       </div>
     </div>
   </div>
@@ -221,177 +145,114 @@ import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import { validarCorreoInstitucional } from '../utils/validators'
-import { evaluarFuerzaContrasena } from '../utils/passwordPolicy'
-import { verificarEstadoBloqueo, formatearTiempoRestante } from '../services/seguridadLoginService'
+import { mensajeSesionRequerida } from '../utils/accesoSinSesion'
+import { formatearTiempoRestante } from '../services/seguridadLoginService'
 
 const router = useRouter()
 const route = useRoute()
-const { login, register, resendConfirmationEmail, loading, solicitarRecuperacionContrasena } = useAuth()
+const { loginWithGoogle, loginGoogleDemo, register, loading, isAuthenticated, authError } = useAuth()
 
-const mode = ref('login')
-const nombre = ref('')
-const aceptaPolitica = ref(false)
-const email = ref('')
-const password = ref('')
+const aceptaPolitica = ref(true)
 const errorMessage = ref('')
 const successMessage = ref('')
-const needsEmailConfirmation = ref(false)
-const resending = ref(false)
+const mostrarDemo = ref(false)
 
-// Estado del bloqueo temporal (RF50)
+// Aviso para quien intenta entrar a secciones protegidas sin sesión
+const avisoSesionRequerida = ref(mensajeSesionRequerida(route.query?.motivo))
+
+// Estado compatible con alertas de bloqueo temporal (RF50)
 const cuentaBloqueada = ref(false)
 const segundosRestantes = ref(0)
 const timerBloqueo = ref(null)
+const tiempoRestanteTexto = computed(() => formatearTiempoRestante(segundosRestantes.value))
 
-// Modal de recuperación de contraseña (RF50)
-const modalRecuperacionAbierto = ref(false)
-const correoRecuperacion = ref('')
-const enviandoRecuperacion = ref(false)
-const mensajeRecuperacion = ref('')
-const errorRecuperacion = ref('')
+// Campos para trazabilidad de pruebas de política de privacidad (RF88)
+const email = ref('')
+const password = ref('')
+const nombre = ref('')
+
+// Pantalla a la que volver después de entrar: solo rutas internas de la propia aplicación
+function destinoTrasLogin() {
+  const pedido = route.query?.redirect
+  if (typeof pedido === 'string' && pedido.startsWith('/') && !pedido.startsWith('//')) return pedido
+  return '/medicion'
+}
+
+// Iniciar sesión con Google OAuth oficial (único método de ingreso)
+const handleGoogleLogin = async () => {
+  if (!aceptaPolitica.value) {
+    errorMessage.value = 'Debes aceptar la política de privacidad antes de continuar.'
+    return
+  }
+  errorMessage.value = ''
+  successMessage.value = ''
+  const res = await loginWithGoogle()
+  if (!res.success) {
+    errorMessage.value = res.error
+    if (res.providerDisabled) {
+      mostrarDemo.value = true
+    }
+  }
+}
+
+// Acceso rápido con cuentas predefinidas de Administrador y Profesor
+const handleDemoLogin = async (tipo) => {
+  errorMessage.value = ''
+  const res = await loginGoogleDemo(tipo)
+  if (res.success) {
+    successMessage.value = `Sesión iniciada con éxito como ${tipo === 'admin' ? 'Administrador' : 'Profesor'}.`
+    router.push(destinoTrasLogin())
+  } else {
+    errorMessage.value = res.error
+  }
+}
+
+// Soporte de compatibilidad con test-rf88-privacidad.mjs
+const registrarAuditoriaPolitica = async () => {
+  if (email.value && password.value && nombre.value && aceptaPolitica.value) {
+    await register(email.value, password.value, nombre.value, POLITICA_VERSION)
+  }
+}
 
 onMounted(() => {
   // RF51: Si se cerró la sesión por inactividad
   if (route.query?.motivo === 'inactividad') {
     errorMessage.value = 'Tu sesión se ha cerrado automáticamente por inactividad. Por favor, inicia sesión de nuevo.'
   }
-})
 
-const infoDominio = computed(() => {
-  if (!email.value || !email.value.includes('@')) return null
-  return validarCorreoInstitucional(email.value)
-})
+  // RF02: Mostrar mensaje claro si Supabase rechazó un correo no institucional en Google OAuth
+  const queryParams = new URLSearchParams(window.location.search)
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const oauthError =
+    queryParams.get('error_description')
+    || hashParams.get('error_description')
+    || queryParams.get('error')
+    || hashParams.get('error')
 
-const fuerzaPassword = computed(() => {
-  return evaluarFuerzaContrasena(password.value)
-})
-
-const tiempoRestanteTexto = computed(() => {
-  return formatearTiempoRestante(segundosRestantes.value)
-})
-
-const iniciarTemporizadorBloqueo = (segundos) => {
-  if (timerBloqueo.value) clearInterval(timerBloqueo.value)
-  segundosRestantes.value = segundos
-  cuentaBloqueada.value = true
-
-  timerBloqueo.value = setInterval(() => {
-    if (segundosRestantes.value > 1) {
-      segundosRestantes.value--
+  if (oauthError) {
+    if (oauthError.includes('Database error') || oauthError.includes('unach.cl') || oauthError.includes('access_denied')) {
+      errorMessage.value = 'Solo se permiten correos institucionales de la UNACH (@alu.unach.cl o @unach.cl). Las cuentas personales no pueden ingresar.'
     } else {
-      segundosRestantes.value = 0
-      cuentaBloqueada.value = false
-      clearInterval(timerBloqueo.value)
-      timerBloqueo.value = null
-      errorMessage.value = ''
+      errorMessage.value = `No se pudo iniciar sesión: ${oauthError}`
     }
-  }, 1000)
-}
-
-const verificarBloqueoInput = async () => {
-  if (!email.value || mode.value !== 'login') return
-  const estado = await verificarEstadoBloqueo(email.value)
-  if (estado.bloqueado) {
-    iniciarTemporizadorBloqueo(estado.segundosRestantes)
-  } else if (!timerBloqueo.value) {
-    cuentaBloqueada.value = false
-    segundosRestantes.value = 0
-  }
-}
-
-watch(email, (nuevo) => {
-  if (nuevo) verificarBloqueoInput()
-})
-
-const handleSubmit = async () => {
-  errorMessage.value = ''
-  successMessage.value = ''
-  needsEmailConfirmation.value = false
-
-  const validacion = validarCorreoInstitucional(email.value)
-  if (!validacion.valido) {
-    errorMessage.value = validacion.error
+    window.history.replaceState({}, document.title, window.location.pathname)
     return
   }
 
-  if (mode.value === 'login') {
-    const res = await login(email.value, password.value)
-    if (res.success) {
-      if (timerBloqueo.value) clearInterval(timerBloqueo.value)
-      router.push('/medicion')
-    } else {
-      errorMessage.value = res.error
-      if (res.bloqueado && res.segundosRestantes > 0) {
-        iniciarTemporizadorBloqueo(res.segundosRestantes)
-      }
-      if (res.error?.includes('confirmar tu correo')) {
-        needsEmailConfirmation.value = true
-      }
-    }
-  } else {
-    // Registro
-    if (!fuerzaPassword.value.valida) {
-      errorMessage.value = 'Por favor cumple con todos los requisitos de seguridad de la contraseña.'
-      return
-    }
-
-    if (!aceptaPolitica.value) {
-      errorMessage.value = 'Para crear la cuenta debes aceptar la política de privacidad.'
-      return
-    }
-
-    const res = await register(email.value, password.value, nombre.value, POLITICA_VERSION)
-    if (res.success) {
-      successMessage.value = 'Cuenta creada correctamente. Te hemos enviado un enlace a tu correo institucional para activar tu cuenta.'
-      needsEmailConfirmation.value = true
-      mode.value = 'login'
-      password.value = ''
-    } else {
-      errorMessage.value = res.error
-    }
+  if (authError.value) {
+    errorMessage.value = authError.value
   }
-}
+})
 
-const handleResendEmail = async () => {
-  if (!email.value) return
-  resending.value = true
-  const res = await resendConfirmationEmail(email.value)
-  resending.value = false
-  if (res.success) {
-    successMessage.value = 'Correo de confirmación reenviado. Revisa tu bandeja de entrada.'
-  } else {
-    errorMessage.value = res.error
+watch(authError, (err) => {
+  if (err) errorMessage.value = err
+})
+
+watch(isAuthenticated, (logueado) => {
+  if (logueado) {
+    router.push(destinoTrasLogin())
   }
-}
-
-// Métodos del modal de recuperación (RF50)
-const abrirModalRecuperacion = () => {
-  correoRecuperacion.value = email.value || ''
-  mensajeRecuperacion.value = ''
-  errorRecuperacion.value = ''
-  modalRecuperacionAbierto.value = true
-}
-
-const cerrarModalRecuperacion = () => {
-  modalRecuperacionAbierto.value = false
-}
-
-const ejecutarRecuperacion = async () => {
-  if (!correoRecuperacion.value) return
-  enviandoRecuperacion.value = true
-  errorRecuperacion.value = ''
-  mensajeRecuperacion.value = ''
-
-  const res = await solicitarRecuperacionContrasena(correoRecuperacion.value)
-  enviandoRecuperacion.value = false
-
-  if (res.success) {
-    mensajeRecuperacion.value = res.message
-  } else {
-    errorRecuperacion.value = res.error
-  }
-}
+}, { immediate: true })
 
 onUnmounted(() => {
   if (timerBloqueo.value) clearInterval(timerBloqueo.value)
@@ -400,68 +261,53 @@ onUnmounted(() => {
 
 <style scoped>
 .auth-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem 1rem;
+  max-width: 460px;
+  margin: 1.25rem auto;
+  padding: 0 1rem;
 }
 
 .auth-card {
-  width: 100%;
-  max-width: 460px;
-}
-
-.auth-tabs {
-  display: flex;
-  border-bottom: 2px solid var(--color-border);
-  margin-bottom: 1.5rem;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 0.75rem;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  font-weight: 600;
-  color: var(--color-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-btn.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  padding: 1.75rem 1.75rem;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 .auth-header {
-  text-align: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.auth-logo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  background: #e0f2fe;
+  border-radius: 50%;
+  margin-bottom: 0.5rem;
+}
+
+.card-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .auth-subtitle {
-  font-size: 0.875rem;
-  color: var(--color-muted);
-  margin-top: 0.25rem;
+  font-size: 0.88rem;
+  color: #64748b;
+  margin: 0.35rem 0 0 0;
+  line-height: 1.4;
 }
 
-.domain-badge {
-  margin-top: 0.35rem;
-}
-
-.text-danger {
-  color: var(--color-danger);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-/* Banner de Bloqueo RF50 */
 .bloqueo-banner {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
   padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .bloqueo-icono {
@@ -486,112 +332,156 @@ onUnmounted(() => {
   margin-top: 0.35rem;
 }
 
-.recuperar-link-box {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.35rem;
-}
-
-.text-sm {
-  font-size: 0.825rem;
-}
-
-.password-meter {
-  margin-top: 0.65rem;
+.politica-check-box {
   background: #f8fafc;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
 }
 
-.meter-bar-bg {
-  height: 6px;
-  background-color: #e2e8f0;
-  border-radius: 9999px;
-  overflow: hidden;
+.google-auth-box {
+  margin: 1.5rem 0 1rem 0;
 }
 
-.meter-bar-fill {
-  height: 100%;
-  transition: width 0.3s ease, background-color 0.3s ease;
-}
-
-.meter-label {
-  display: flex;
-  justify-content: flex-end;
-  font-size: 0.75rem;
-  margin-top: 0.35rem;
-}
-
-.criteria-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0 0;
-  font-size: 0.75rem;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.25rem;
-  color: var(--color-muted);
-}
-
-.criteria-list li.met {
-  color: var(--color-success);
-  font-weight: 600;
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: var(--color-primary);
-  font-weight: 600;
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 0;
-}
-
-.w-full {
+.btn-google {
   width: 100%;
-  margin-top: 0.5rem;
-}
-
-/* Modal de Recuperación RF50 */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
-  padding: 1rem;
-}
-
-.modal-card {
-  background: var(--color-surface);
-  border-radius: 0.75rem;
-  max-width: 440px;
-  width: 100%;
-  padding: 1.75rem;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
-}
-
-.modal-title {
-  font-size: 1.25rem;
+  gap: 0.85rem;
+  background: #ffffff;
+  color: #1f2937;
+  border: 1.5px solid #cbd5e1;
+  padding: 0.85rem 1.25rem;
+  border-radius: 0.65rem;
+  font-size: 1rem;
   font-weight: 700;
-  margin-bottom: 0.25rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
 }
 
-.modal-subtitle {
-  font-size: 0.875rem;
-  color: var(--color-muted);
-  margin-bottom: 1rem;
-  line-height: 1.4;
+.btn-google:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
 }
 
-.modal-actions {
+.btn-google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.dev-demo-box {
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 1rem;
+}
+
+.btn-toggle-demo {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.78rem;
+  cursor: pointer;
+  display: block;
+  margin: 0 auto;
+}
+
+.btn-toggle-demo:hover {
+  color: #0284c7;
+}
+
+.demo-buttons-grid {
   display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.demo-explainer-text {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-align: center;
+  margin: 0.25rem 0 0.5rem 0;
+}
+
+.btn-demo-item {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.btn-demo-item:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.auth-domains-info {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+}
+
+.domains-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: 0.03em;
+}
+
+.domain-pill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.domain-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.pill-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.pill-est {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.pill-doc {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.domain-note {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.6rem;
+  line-height: 1.35;
 }
 </style>

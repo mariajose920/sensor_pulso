@@ -257,6 +257,9 @@ let permisosProfesoresLocales = cargarDeStorage(STORAGE_PERMISOS, {
  * RF98: Obtener los permisos de un profesor
  */
 export async function obtenerPermisosProfesor(profesorId) {
+  // `consultado` = la base respondió (con o sin fila). Si falla la consulta (red, sesión) se devuelven los permisos
+  // locales de respaldo con `consultado: false`, para que quien los use no tome «no se pudo consultar» por «no tiene permiso».
+  let consultado = false
   try {
     const { data, error } = await supabase
       .from('permisos_profesor')
@@ -265,12 +268,13 @@ export async function obtenerPermisosProfesor(profesorId) {
       .maybeSingle()
 
     if (!error && data) {
-      return { success: true, data }
+      return { success: true, data, consultado: true }
     }
+    consultado = !error // sin error y sin fila: la base respondió que no hay permisos concedidos
   } catch (_) {}
 
   const local = permisosProfesoresLocales[profesorId] || { ...PERMISOS_DEFAULT, profesor_id: profesorId }
-  return { success: true, data: local }
+  return { success: true, data: local, consultado }
 }
 
 /**

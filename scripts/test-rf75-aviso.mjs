@@ -51,7 +51,7 @@ prueba('Resultados de la medición (paso 5)', /<AvisoEducativo \/>\s*<!-- Conten
 
 // 4. Informe PDF
 const pdf = leer('src/services/informePdfService.js')
-prueba('El informe PDF imprime el aviso completo', pdf.includes('AVISO_EDUCATIVO_TEXTO') && pdf.includes('splitTextToSize(AVISO_EDUCATIVO_TEXTO'))
+prueba('El informe PDF imprime el aviso completo', pdf.includes('AVISO_EDUCATIVO_TEXTO') && /texto: AVISO_EDUCATIVO_TEXTO/.test(pdf) && pdf.includes('AVISO_EDUCATIVO_TITULO'))
 prueba('El pie del informe PDF repite la frase corta', pdf.includes('AVISO_EDUCATIVO_CORTO'))
 prueba('El informe pasa a otra página si el aviso no cabe', pdf.includes('doc.addPage()'))
 

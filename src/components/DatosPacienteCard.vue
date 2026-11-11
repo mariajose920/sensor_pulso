@@ -1,7 +1,29 @@
 <template>
   <div class="card datos-paciente-card" style="margin-bottom: 1.5rem;">
+    <!-- Leyendo la ficha guardada: no se muestra un formulario vacío mientras tanto -->
+    <div v-if="cargando" class="ficha-cargando" role="status" data-testid="ficha-cargando">
+      Cargando tu ficha guardada…
+    </div>
+
+    <!-- La ficha guardada NO se pudo leer: se explica por qué; no se pide la fecha como si faltara -->
+    <div v-else-if="lecturaFallida" class="alert alert-warning ficha-lectura-fallida" data-testid="ficha-lectura-fallida">
+      <strong>No se pudo leer tu ficha guardada.</strong>
+      <p style="margin: 0.4rem 0 0;" data-testid="ficha-motivo-lectura">{{ motivoLectura }}</p>
+      <p v-if="nombreConservado" class="form-text" style="margin: 0.4rem 0 0;">
+        Tus datos no se perdieron: siguen guardados. Ficha de {{ nombreConservado }}.
+      </p>
+      <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-primary btn-sm" :disabled="reintentando" data-testid="ficha-reintentar" @click="reintentarLectura">
+          {{ reintentando ? 'Leyendo…' : 'Reintentar lectura' }}
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" data-testid="ficha-ingresar-de-nuevo" @click="ingresarDeNuevo">
+          Ingresar los datos de nuevo
+        </button>
+      </div>
+    </div>
+
     <!-- Vista Resumen (cuando ya hay datos guardados y no estamos editando) -->
-    <div v-if="paciente && !modoEdicion">
+    <div v-else-if="paciente && !modoEdicion">
       <div class="card-header-flex">
         <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
           <h2 class="card-title" style="margin: 0; font-size: 1.15rem;">
@@ -15,6 +37,9 @@
           </span>
           <span v-else class="badge badge-local">
             ○ Almacenamiento local
+          </span>
+          <span v-if="paciente.pendienteSync" class="badge badge-local" title="Se guardó en este dispositivo y se reintentará enviar a la nube">
+            Pendiente de sincronizar
           </span>
         </div>
 
@@ -37,6 +62,16 @@
         </div>
       </div>
 
+      <!-- Avisos discretos: lectura parcial y estado del guardado en segundo plano -->
+      <div v-if="advertenciaLectura" class="alert alert-warning" style="margin-top: 0.75rem; font-size: 0.82rem;" data-testid="ficha-advertencia">{{ advertenciaLectura }}</div>
+      <div v-if="avisoSync" class="alert alert-warning" style="margin-top: 0.75rem; font-size: 0.82rem;">
+        {{ avisoSync }}
+        <button type="button" class="btn btn-secondary btn-sm" style="margin-left: 0.5rem;" @click="reintentarGuardado">Reintentar</button>
+      </div>
+      <small v-else-if="estadoGuardado.estado === 'guardando' || estadoGuardado.estado === 'guardado'" class="form-text" style="display: block; margin-top: 0.5rem;" data-testid="ficha-estado-guardado">
+        {{ estadoGuardado.mensaje }}
+      </small>
+
       <!-- Grid de Datos Básicos y Factores Fisiológicos -->
       <div class="paciente-grid">
         <!-- Bloque 1: Obligatorios -->
@@ -46,7 +81,13 @@
         </div>
         <div class="paciente-item">
           <span class="label">Edad:</span>
-          <span class="value">{{ paciente.edad }} años</span>
+          <span class="value">{{ textoEdad(paciente.edad) }}</span>
+          <small v-if="paciente.fechaNacimiento" class="form-text" style="margin: 0;">
+            Nació el {{ formatearFechaNacimiento(paciente.fechaNacimiento) }}
+          </small>
+          <small v-else-if="estadoFecha === 'solo_edad'" class="form-text" style="margin: 0;" data-testid="ficha-sugerencia-fecha">
+            Edad de una ficha anterior. Si quieres, agrega tu fecha de nacimiento en «Modificar» para que se actualice sola.
+          </small>
         </div>
         <div class="paciente-item">
           <span class="label">Nivel de Estrés:</span>
@@ -54,7 +95,7 @@
             class="badge" 
             :style="{ backgroundColor: colorEstres(paciente.nivelEstres), color: '#ffffff', fontWeight: 'bold' }"
           >
-            {{ etiquetaEstres(paciente.nivelEstres) }}
+            {{ paciente.nivelEstres ? etiquetaEstres(paciente.nivelEstres) : 'Sin declarar' }}
           </span>
         </div>
 
@@ -186,22 +227,27 @@
             <small class="form-text">Identifica al titular de la medición.</small>
           </div>
 
-          <!-- Edad obligatoria (solo mayores de edad: 18 a 100 años) -->
+          <!-- Fecha de nacimiento obligatoria: la edad se calcula sola (solo mayores de edad: 18 a 100 años) -->
           <div class="form-group">
-            <label class="form-label" for="edadPaciente">
-              Edad (años) <span class="required">*</span>
+            <label class="form-label" for="fechaNacimientoPaciente">
+              Fecha de nacimiento <span v-if="!formulario.edad" class="required">*</span>
             </label>
             <input 
-              id="edadPaciente"
-              v-model.number="formulario.edad"
-              type="number" 
-              min="18" 
-              max="100"
+              id="fechaNacimientoPaciente"
+              v-model="formulario.fechaNacimiento"
+              type="date" 
+              :max="hoyIso"
               class="form-control"
-              placeholder="Ej: 22"
-              required
+              data-testid="ficha-fecha-nacimiento"
+              :required="!formulario.edad"
             />
-            <small class="form-text">Solo se miden personas mayores de edad: entre 18 y 100 años.</small>
+            <small class="form-text" data-testid="ficha-edad-calculada">
+              <template v-if="edadCalculada !== null">Edad: <strong>{{ textoEdad(edadCalculada) }}</strong></template>
+              <template v-else-if="!formulario.fechaNacimiento && formulario.edad">
+                Edad guardada antes: {{ textoEdad(formulario.edad) }}. Puedes continuar con ella; agregar la fecha de nacimiento es opcional y hace que se actualice sola.
+              </template>
+              <template v-else>Edad: se calcula automáticamente. Solo se miden personas mayores de edad (18 a 100 años).</template>
+            </small>
           </div>
 
           <!-- Nivel de estrés obligatorio -->
@@ -394,7 +440,9 @@
           </div>
         </div>
 
-        <!-- Botón ocultad c:
+        <!-- Aviso si la ficha no llegó al servidor (queda en el dispositivo y se reintenta) -->
+        <div v-if="avisoSync" class="alert alert-warning" style="margin-top: 1rem;">{{ avisoSync }}</div>
+
         <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
           <button 
             type="submit" 
@@ -404,7 +452,6 @@
             {{ guardando ? 'Guardando...' : 'Guardar ficha del paciente' }}
           </button>
         </div>
-        -->
       </form>
     </div>
   </div>
@@ -413,8 +460,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { calcularEdad, fechaHoyIso, textoEdad, parsearFechaIso } from '../utils/edad.js'
 import { consentimientoService, consentimientoEstado, formatearFechaHora } from '../services/consentimientoService'
-import { 
+import {
+  estadoGuardadoFicha,
   pacienteService, 
   NIVELES_ESTRES, 
   OPCIONES_SUENO, 
@@ -428,13 +477,24 @@ const emit = defineEmits(['paciente-actualizado', 'abrir-consentimiento'])
 const { currentUserName } = useAuth()
 
 const paciente = ref(null)
+const cargando = ref(true)
+const lecturaFallida = ref(false)
+const motivoLectura = ref('')
+const nombreConservado = ref('')
+const advertenciaLectura = ref('')
+const reintentando = ref(false)
+const estadoGuardado = estadoGuardadoFicha
+const estadoFecha = computed(() => estadoFechaNacimiento(paciente.value))
 const modoEdicion = ref(false)
 const guardando = ref(false)
 const errores = ref([])
+const avisoSync = ref('')
+const hoyIso = fechaHoyIso()
 
 const formulario = ref({
   nombre: '',
   edad: null,
+  fechaNacimiento: '',
   nivelEstres: '',
   suenoHoras: '7_8',
   cafeina: 'ninguna',
@@ -446,24 +506,77 @@ const formulario = ref({
   observaciones: ''
 })
 
-onMounted(async () => {
-  const activo = await pacienteService.obtenerDeclaracionActiva()
-  if (activo) {
-    paciente.value = activo
-    emit('paciente-actualizado', activo)
-  } else {
-    modoEdicion.value = true
-    if (currentUserName.value && currentUserName.value !== 'Invitado / No identificado') {
-      formulario.value.nombre = currentUserName.value
-    }
+function prepararFormularioNuevo() {
+  modoEdicion.value = true
+  if (!formulario.value.nombre && currentUserName.value && currentUserName.value !== 'Invitado / No identificado') {
+    formulario.value.nombre = currentUserName.value
   }
-})
+}
+
+/**
+ * Carga la ficha guardada. Si existe y se pudo leer, se muestra tal cual en solo lectura (el formulario se abre solo con
+ * «Modificar»). Si existe pero NO se pudo leer, se explica el motivo y se ofrece reintentar; el formulario vacío es solo
+ * la alternativa. El formulario vacío aparece de entrada solo cuando de verdad no hay ninguna ficha.
+ */
+async function cargarFicha(forzar = false) {
+  cargando.value = true
+  try {
+    const activo = await pacienteService.obtenerDeclaracionActiva({ forzar })
+    lecturaFallida.value = false
+    advertenciaLectura.value = ''
+    if (activo?.incompleta || activo?.estadoLectura === 'incompleta') {
+      lecturaFallida.value = true
+      motivoLectura.value = activo.motivoLectura || 'No se pudieron leer tus datos guardados.'
+      nombreConservado.value = activo.nombre || ''
+      paciente.value = null
+      modoEdicion.value = false
+    } else if (activo) {
+      paciente.value = activo
+      advertenciaLectura.value = activo.advertenciaLectura || ''
+      emit('paciente-actualizado', activo)
+      // Solo se abre el formulario si a la ficha le falta de verdad un dato obligatorio (p. ej. el estrés)
+      modoEdicion.value = false
+      if (!activo.nivelEstres) abrirEdicion()
+    } else {
+      prepararFormularioNuevo()
+    }
+  } finally {
+    cargando.value = false
+  }
+}
+
+async function reintentarLectura() {
+  reintentando.value = true
+  try { await cargarFicha(true) } finally { reintentando.value = false }
+}
+
+// Alternativa explícita a reintentar: la persona decide empezar con una ficha nueva
+function ingresarDeNuevo() {
+  lecturaFallida.value = false
+  paciente.value = null
+  prepararFormularioNuevo()
+}
+
+function reintentarGuardado() {
+  pacienteService.reintentarSincronizacion().then(aplicarSincronizacion)
+}
+
+onMounted(() => { cargarFicha() })
+
+// Edad calculada en vivo desde la fecha de nacimiento (null si falta, es inválida o futura)
+const edadCalculada = computed(() => calcularEdad(formulario.value.fechaNacimiento))
+
+function formatearFechaNacimiento(iso) {
+  const f = parsearFechaIso(iso)
+  return f ? `${String(f.dia).padStart(2, '0')}/${String(f.mes).padStart(2, '0')}/${f.anio}` : iso
+}
 
 function abrirEdicion() {
   if (paciente.value) {
     formulario.value = {
       nombre: paciente.value.nombre || '',
       edad: paciente.value.edad || null,
+      fechaNacimiento: paciente.value.fechaNacimiento || '',
       nivelEstres: paciente.value.nivelEstres || '',
       suenoHoras: paciente.value.suenoHoras || '7_8',
       cafeina: paciente.value.cafeina || 'ninguna',
@@ -540,24 +653,41 @@ async function revocarConsentimientoPrueba() {
   await consentimientoService.revocarConsentimiento()
 }
 
+// Resultado del envío al servidor (en segundo plano): actualiza el aviso y la ficha con su id
+function aplicarSincronizacion(s) {
+  if (!s) return
+  avisoSync.value = s.errorServidor
+    ? `La ficha se guardó en este dispositivo pero no llegó al servidor (${s.errorServidor}). Se reintentará.`
+    : ''
+  if (s.ficha && s.ficha.id) {
+    paciente.value = { ...s.ficha }
+    emit('paciente-actualizado', paciente.value)
+  }
+}
+
+/**
+ * Guarda la ficha. Valida y guarda la copia de la pestaña al instante y devuelve de inmediato: el envío al servidor
+ * continúa en segundo plano (la pantalla no se queda esperando). Si no cambió nada, no se vuelve a guardar.
+ */
 async function guardar() {
   errores.value = []
-  guardando.value = true
   try {
-    const res = await pacienteService.guardarDeclaracion(formulario.value)
+    const res = pacienteService.guardarDeclaracionRapido(formulario.value)
     if (!res.ok) {
       errores.value = res.errores
-      return false   // Agrega este return false
+      return false
     }
     paciente.value = res.data
+    lecturaFallida.value = false
+    advertenciaLectura.value = ''
     modoEdicion.value = false
+    avisoSync.value = ''
     emit('paciente-actualizado', res.data)
-    return true      // Agrega este return true
+    if (!res.sinCambios) res.sincronizacion.then(aplicarSincronizacion)
+    return true
   } catch (err) {
     errores.value = ['Error inesperado al guardar la declaración: ' + err.message]
-    return false     //Agrega este return false
-  } finally {
-    guardando.value = false
+    return false
   }
 }
 
@@ -568,6 +698,7 @@ function confirmarBorrado() {
     formulario.value = {
       nombre: '',
       edad: null,
+      fechaNacimiento: '',
       nivelEstres: '',
       suenoHoras: '7_8',
       cafeina: 'ninguna',
@@ -578,6 +709,8 @@ function confirmarBorrado() {
       condicionSalud: 'Ninguna conocida',
       observaciones: ''
     }
+    lecturaFallida.value = false
+    advertenciaLectura.value = ''
     modoEdicion.value = true
     emit('paciente-actualizado', null)
   }
@@ -621,6 +754,12 @@ defineExpose({
   background: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border, #cbd5e1);
   border-radius: 0.75rem;
+}
+
+.ficha-cargando {
+  padding: 1rem 0.25rem;
+  color: var(--color-muted, #64748b);
+  font-size: 0.9rem;
 }
 
 .card-header-flex {
