@@ -145,14 +145,23 @@
             class="source-badge"
             :class="med.origen === 'propia' ? 'badge-propia' : 'badge-publica'"
           >
-            {{ med.origen === 'propia' ? 'Propia' : 'Pública' }}
+            {{ med.origen === 'propia' ? 'Propia' : 'Pública · Anónima' }}
           </span>
         </div>
 
         <div class="med-meta-text">
-          <span>{{ med.fechaTexto }}</span>
-          <span class="meta-dot">·</span>
-          <span>{{ med.actividad }}</span>
+          <template v-if="med.origen === 'publica'">
+            <span>{{ med.autorAnonimo || 'Participante UNACH (Anónimo)' }}</span>
+            <span v-if="med.rangoEdad" class="meta-dot">·</span>
+            <span v-if="med.rangoEdad">Rango: {{ med.rangoEdad }} años</span>
+            <span class="meta-dot">·</span>
+            <span>{{ med.actividad }}</span>
+          </template>
+          <template v-else>
+            <span>{{ med.fechaTexto }}</span>
+            <span class="meta-dot">·</span>
+            <span>{{ med.actividad }}</span>
+          </template>
         </div>
 
         <div class="med-metrics-row">

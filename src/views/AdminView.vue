@@ -3,13 +3,13 @@
     <div class="card">
       <div class="admin-header">
         <div>
-          <h1 class="card-title">⚙️ Panel de Administración</h1>
+          <h1 class="card-title">Panel de Administración</h1>
           <p class="header-desc">
             Gestión global del sistema, cuentas de usuario y asignación de roles.
           </p>
         </div>
         <button @click="recargarTodo" class="btn btn-secondary btn-sm" :disabled="cargandoLista || cargandoAuditoria">
-          {{ cargandoLista ? 'Actualizando...' : '🔄 Recargar Todo' }}
+          {{ cargandoLista ? 'Actualizando...' : 'Recargar Todo' }}
         </button>
       </div>
 
@@ -70,7 +70,7 @@
                     class="btn btn-secondary btn-sm"
                     style="margin-right: 0.5rem;"
                   >
-                    🔑 Permisos
+                    Permisos
                   </button>
                   <button 
                     @click="abrirModalCambio(cuenta)" 
@@ -89,13 +89,13 @@
       <div class="admin-section mt-4">
         <div class="section-top">
           <div>
-            <h2 class="section-title">📋 Registro de Auditoría de Cambios de Rol</h2>
+            <h2 class="section-title">Registro de Auditoría de Cambios de Rol</h2>
             <p class="section-desc">
-              Trazabilidad inmutable de asignaciones y modificaciones de roles y administradores (RF53).
+              Trazabilidad inmutable de asignaciones y modificaciones de roles y administradores.
             </p>
           </div>
           <button @click="cargarAuditoria" class="btn btn-secondary btn-sm" :disabled="cargandoAuditoria">
-            {{ cargandoAuditoria ? 'Cargando...' : '🔄 Actualizar Registro' }}
+            {{ cargandoAuditoria ? 'Cargando...' : 'Actualizar Registro' }}
           </button>
         </div>
 
@@ -261,8 +261,8 @@
             <label class="permiso-item">
               <input type="checkbox" v-model="permisosForm.publicar_galeria" />
               <div>
-                <strong>Publicar señales en galería docente</strong>
-                <p>Permite compartir registros PPG para uso didáctico general.</p>
+                <strong>Operar sensor y publicar en galería</strong>
+                <p>Permite medir con el sensor de pulso y compartir registros fotopletismográficos anonimizados para uso didáctico.</p>
               </div>
             </label>
 

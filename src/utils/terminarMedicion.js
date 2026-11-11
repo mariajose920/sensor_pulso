@@ -103,6 +103,16 @@ export function puedePublicarPorCuenta({
 }
 
 /**
+ * Regla por cuenta: ¿esta persona puede conectar el sensor y realizar mediciones? (RF31 + RF98)
+ * Reutiliza el control de sesión y el permiso docente `publicar_galeria`.
+ */
+export function puedeMedirConSensorPorCuenta({
+  haySesion, sesionReal = null, esAdmin = false, rol = 'usuario', permisos = null, permisoConsultado = true
+} = {}) {
+  return puedePublicarPorCuenta({ haySesion, sesionReal, esAdmin, rol, permisos, permisoConsultado })
+}
+
+/**
  * ¿Se pregunta por publicar esta medición en concreto?
  * `consentimientoVigente`: true / false / null (null = no se pudo comprobar; entonces decide la base al publicar).
  * @param {{haySesion:boolean, sesionReal?:boolean|null, esAdmin?:boolean, rol?:string, permisos?:object|null,

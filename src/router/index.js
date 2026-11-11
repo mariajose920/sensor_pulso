@@ -179,8 +179,8 @@ router.beforeEach(async (to, _from, next) => {
     })
   }
 
-  // Si la ruta requiere autenticación
-  if (to.meta.requiresAuth && !isAuthenticated.value) {
+  // Si la ruta requiere autenticación (Medición muestra su propio bloqueo institucional dentro de la vista)
+  if (to.meta.requiresAuth && !isAuthenticated.value && to.name !== 'Medicion') {
     // Se avisa en el login por qué hace falta la sesión y se vuelve a la pantalla pedida al entrar
     const query = { redirect: to.fullPath }
     const motivo = motivoDeRuta(to.name)
