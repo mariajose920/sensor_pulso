@@ -27,6 +27,7 @@ function guardarEnStorage(key, data) {
 let cuentasLocales = cargarDeStorage(STORAGE_CUENTAS, [
   { id: '00000000-0000-0000-0000-000000000001', nombre: 'Administrador Inicial', correo: 'admin.general@unach.cl', rol: 'profesor', es_admin: true, creado_en: '2026-10-27T10:00:00Z' },
   { id: '00000000-0000-0000-0000-000000000002', nombre: 'Docente de Ciencias', correo: 'docente.ciencias@unach.cl', rol: 'profesor', es_admin: false, creado_en: '2026-10-28T11:00:00Z' },
+  { id: '06d76e05-00b4-4098-b5a1-bf518561f0c4', nombre: 'Profesor Docente', correo: 'profesor.prueba@unach.cl', rol: 'profesor', es_admin: false, creado_en: '2026-10-28T12:00:00Z' },
   { id: '00000000-0000-0000-0000-000000000003', nombre: 'Constanza Morales', correo: 'cmorales@alu.unach.cl', rol: 'usuario', es_admin: false, creado_en: '2026-10-29T12:00:00Z' },
   { id: '00000000-0000-0000-0000-000000000004', nombre: 'Matías Silva', correo: 'msilva@alu.unach.cl', rol: 'usuario', es_admin: false, creado_en: '2026-10-29T14:30:00Z' }
 ])

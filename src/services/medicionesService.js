@@ -169,6 +169,42 @@ export async function retirarPublicacion(medicionId) {
   }
 }
 
+/**
+ * Obtiene las mediciones publicadas vigentes desde la tabla `publicaciones` (anonimizadas, RF31 y RF57).
+ * Accesible para cualquier usuario con o sin sesión iniciada (RLS `publicaciones_publicas`).
+ * Nunca solicita `autor_id` ni datos personales identificables.
+ */
+export async function listarPublicacionesPublicas() {
+  try {
+    const { data, error } = await supabase
+      .from('publicaciones')
+      .select('id, medicion_id, titulo, rango_edad, ritmo, calidad, bpm_promedio, spo2_promedio, dentro_de_rango, confirmada_en, creada_en, actividad:actividades(nombre)')
+      .is('retirada_en', null)
+      .order('creada_en', { ascending: false })
+      .limit(50)
+
+    if (!error && Array.isArray(data)) {
+      return data
+        .filter(p => Number(p.bpm_promedio) > 0)
+        .map(p => ({
+          id: `pub-bd-${p.id}`,
+          medicionId: p.medicion_id,
+          titulo: p.titulo || `Medición Comunitaria (${p.rango_edad || '18-24'} años)`,
+          rangoEdad: p.rango_edad || '18-24',
+          actividadNombre: p.actividad?.nombre || 'Reposo Basal',
+          bpm: Number(p.bpm_promedio),
+          spo2: Number(p.spo2_promedio) > 0 ? Number(p.spo2_promedio) : 98.0,
+          calidad: p.calidad || 'buena',
+          ritmo: p.ritmo || 'normal',
+          dentroDeRango: typeof p.dentro_de_rango === 'boolean' ? p.dentro_de_rango : true,
+          creadaEn: p.creada_en || p.confirmada_en || null,
+          autorAnonimo: 'Participante UNACH (Anónimo)'
+        }))
+    }
+  } catch (_) {}
+  return []
+}
+
 /** Reenvía las mediciones pendientes de la cuenta con sesión. Devuelve cuántas se enviaron y cuántas quedan. */
 export async function sincronizarPendientes() {
   const usuarioId = await usuarioActualId()

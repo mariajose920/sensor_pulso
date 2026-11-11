@@ -34,7 +34,25 @@
         {{ errorMessage }}
       </div>
       <div v-if="avisoSesionRequerida" class="alert alert-info mb-3" role="status" data-testid="aviso-sesion-requerida">
-        {{ avisoSesionRequerida }}
+        <template v-if="route.query?.motivo === 'medicion'">
+          <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="flex-shrink: 0; margin-top: 2px;">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+              <strong style="display: block; margin-bottom: 0.25rem;">Se requiere inicio de sesión para operar el sensor de pulso</strong>
+              <p style="margin: 0 0 0.65rem 0; font-size: 0.88rem; line-height: 1.45;">
+                Para conectarte al sensor y registrar bioseñales en tiempo real, debes identificarte con tu cuenta institucional de la UNACH (@alu.unach.cl o @unach.cl).
+              </p>
+              <router-link to="/aprendizaje/simulador" class="btn btn-secondary btn-sm">
+                Continuar en Modo Simulador Educativo
+              </router-link>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          {{ avisoSesionRequerida }}
+        </template>
       </div>
       <div v-if="successMessage" class="alert alert-success mb-3">
         {{ successMessage }}
