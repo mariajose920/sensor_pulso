@@ -1,6 +1,7 @@
 import { supabase } from './supabase.js'
 import { validarCorreoInstitucional } from '../utils/validators.js'
 import { enviarCorreoInvitacion } from './emailService.js'
+import { escaparHtml, sanitizarContenidoUsuario } from './proteccionWebService.js'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -344,9 +345,9 @@ export async function crearAula({ nombre, descripcion, profesorId, profesorNombr
   const nuevaAula = {
     id: `aula-${Date.now()}`,
     profesor_id: profesorId,
-    profesor_nombre: profesorNombre || 'Profesor',
-    nombre: nombre.trim(),
-    descripcion: (descripcion || '').trim(),
+    profesor_nombre: escaparHtml(sanitizarContenidoUsuario(profesorNombre || 'Profesor', 100)),
+    nombre: escaparHtml(sanitizarContenidoUsuario(nombre.trim(), 100)),
+    descripcion: escaparHtml(sanitizarContenidoUsuario(descripcion || '', 500)),
     codigo: codigo,
     codigo_activo: true,
     max_estudiantes: 100,
@@ -685,7 +686,7 @@ export async function crearCurso({ aulaId, nombre, profesorId, esAdmin }) {
     return { success: false, error: 'No tienes autorización para gestionar cursos en esta aula.' }
   }
 
-  const nombreLimpio = nombre.trim()
+  const nombreLimpio = escaparHtml(sanitizarContenidoUsuario(nombre.trim(), 100))
   if (cursosLocales.some(c => c.aula_id === aulaId && c.nombre.toLowerCase() === nombreLimpio.toLowerCase())) {
     return { success: false, error: 'Ya existe un curso con este nombre dentro del aula.' }
   }
@@ -716,7 +717,7 @@ export async function renombrarCurso({ cursoId, nuevoNombre, aulaId, profesorId,
     return { success: false, error: 'No tienes permiso para modificar este curso.' }
   }
 
-  const nombreLimpio = nuevoNombre.trim()
+  const nombreLimpio = escaparHtml(sanitizarContenidoUsuario(nuevoNombre.trim(), 100))
   try {
     await supabase.from('cursos').update({ nombre: nombreLimpio }).eq('id', cursoId)
   } catch (_) {}

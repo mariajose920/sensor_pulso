@@ -8,7 +8,7 @@
  *  - Queda registrada en la auditoría y como solicitud de portabilidad (lo hace exportar_mis_datos).
  */
 import { descifrarSobre, ErrorClave } from '../_lib/cifradoSalud.js'
-import { responder, verificarSesion } from '../_lib/sesion.js'
+import { responder, verificarSesion, verificarCsrf } from '../_lib/sesion.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 
 /** Campos del perfil que se entregan. Nada interno. */
@@ -62,6 +62,7 @@ export async function armarExportacion(crudo, { env = process.env } = {}) {
 export function crearHandler({ verificar = verificarSesion, env = process.env } = {}) {
   return async function handler(req, res) {
     if (req.method !== 'POST') return responder(res, 405, { ok: false, error: 'Solo se acepta POST.' })
+    if (!verificarCsrf(req, res, { env })) return
     const sesion = await verificar(req, env)
     if (!sesion) return responder(res, 401, { ok: false, error: 'Se requiere una sesión válida.' })
 
