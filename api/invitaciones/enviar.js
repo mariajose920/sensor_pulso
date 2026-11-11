@@ -86,8 +86,8 @@ export default async function handler(req, res) {
   const codigoEscapado = escaparHtml(codigoLimpio)
   const correoEscapado = escaparHtml(correoLimpio)
 
-  // 3. Obtener API Key de Resend
-  const resendApiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
+  // 3. Obtener API Key de Resend (secreto exclusivo del servidor, RF69)
+  const resendApiKey = process.env.RESEND_API_KEY
 
   if (!resendApiKey) {
     res.statusCode = 503
