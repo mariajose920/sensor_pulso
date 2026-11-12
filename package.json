@@ -25,7 +25,8 @@
     "test:rf67": "node scripts/test-rf67-limite-peticiones.js",
     "test:rf68": "node scripts/test-rf68-proteccion-web.js",
     "test:rf69": "node scripts/test-rf69-manejo-secretos.js",
-    "test:rf110": "node scripts/test-rf110-respuesta-simultanea.js"
+    "test:rf110": "node scripts/test-rf110-respuesta-simultanea.js",
+    "test:rf113": "node scripts/test-rf113-panel-en-vivo.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",

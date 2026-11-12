@@ -375,6 +375,18 @@
               </div>
 
               <div class="eval-card-footer" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <!-- Botón Docente 0: Monitoreo en Vivo (RF113) -->
+                <button 
+                  v-if="isAdmin || isProfesor"
+                  @click="abrirPanelEnVivo(ev)" 
+                  class="btn-eval-accion"
+                  style="flex: 2; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-weight: 700;"
+                  title="Ver respuestas y estudiantes conectados en tiempo real (RF113)"
+                  data-testid="btn-abrir-panel-en-vivo"
+                >
+                  <span>⚡ Monitoreo en Vivo</span>
+                </button>
+
                 <!-- Botón Docente 1: Ver Desempeño (RF117) -->
                 <button 
                   v-if="isAdmin || isProfesor"
@@ -458,6 +470,17 @@
               </div>
             </div>
           </div>
+
+          <!-- PANEL DE AVANCE EN VIVO (RF113: Contador de respuestas y estudiantes conectados) -->
+          <PanelAvanceEnVivo
+            v-if="mostrarPanelEnVivo || evaluacionSeleccionada?.modo === 'en_vivo'"
+            :evaluacion-id="evaluacionSeleccionada.id"
+            :aula-id="aula.id"
+            :es-profesor-o-admin="isAdmin || isProfesor"
+            :permite-cerrar="evaluacionSeleccionada?.modo !== 'en_vivo'"
+            @cerrar="mostrarPanelEnVivo = false"
+            @actualizado="alActualizarEnVivo"
+          />
 
           <!-- Métricas Agregadas del Aula (KPI Cards) -->
           <div v-if="estadisticasEval" class="kpi-metricas-grid mb-4">
@@ -1276,6 +1299,7 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import PanelAvanceEnVivo from '../components/PanelAvanceEnVivo.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
@@ -1339,11 +1363,25 @@ const guardandoAsignacion = ref(false)
 
 // RF117: Visibilidad del profesor sobre evaluaciones asignadas
 const evaluacionSeleccionada = ref(null)
+const mostrarPanelEnVivo = ref(true)
 const intentosEvaluacion = ref([])
 const estadisticasEval = ref(null)
 const cargandoDesempeno = ref(false)
 const intentoVerRespuestas = ref(null)
 const intentoVerMedicion = ref(null)
+
+const abrirPanelEnVivo = (ev) => {
+  mostrarPanelEnVivo.value = true
+  seleccionarEvaluacionParaVer(ev)
+}
+
+const alActualizarEnVivo = (datos) => {
+  if (datos && datos.evaluacion_id === evaluacionSeleccionada.value?.id) {
+    if (datos.estado && evaluacionSeleccionada.value) {
+      evaluacionSeleccionada.value.estado = datos.estado
+    }
+  }
+}
 
 const seleccionarEvaluacionParaVer = async (ev) => {
   evaluacionSeleccionada.value = ev

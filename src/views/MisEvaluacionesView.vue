@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { supabase } from '../services/supabase.js'
 import { enviarRespuestasConResiliencia } from '../services/respuestasSimultaneasService.js'
+import { iniciarHeartbeatEstudiante, desconectarEstudiante } from '../services/panelEnVivoService.js'
 
 const evaluaciones = ref([])
 const seleccion = ref(null)
@@ -13,6 +14,7 @@ const medicionId = ref('')
 const ocupado = ref(false)
 const error = ref('')
 const mensaje = ref('')
+let heartbeatControl = null
 
 const estados = {
   pendiente: 'Pendiente de apertura',
@@ -79,9 +81,17 @@ const abrir = (ev) => ejecutar(async () => {
 
   intentoId.value = id
   seleccion.value = ev
+
+  // RF113: Notificar presencia del estudiante en vivo
+  if (heartbeatControl) heartbeatControl.detener()
+  heartbeatControl = iniciarHeartbeatEstudiante(ev.id, id)
 })
 
 const entregar = () => ejecutar(async () => {
+  if (heartbeatControl) {
+    heartbeatControl.detener()
+    heartbeatControl = null
+  }
   const ev = seleccion.value
   if (ev.tipo === 'preguntas') {
     // RF110: Envío optimizado resiliente a alta concurrencia simultánea
@@ -107,6 +117,10 @@ const entregar = () => ejecutar(async () => {
 })
 
 const volver = () => ejecutar(async () => {
+  if (heartbeatControl) {
+    heartbeatControl.detener()
+    heartbeatControl = null
+  }
   seleccion.value = null
   await cargar()
 })
@@ -114,6 +128,12 @@ const volver = () => ejecutar(async () => {
 const fechaLocal = valor => new Date(valor).toLocaleString('es-CL')
 
 onMounted(() => ejecutar(cargar))
+onUnmounted(() => {
+  if (heartbeatControl) {
+    heartbeatControl.detener()
+    heartbeatControl = null
+  }
+})
 </script>
 
 <template>

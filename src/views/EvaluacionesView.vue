@@ -268,6 +268,15 @@
                 <p v-if="e.descripcion" class="lista-item-desc">{{ e.descripcion }}</p>
                 <div class="lista-footer">
                   <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" />
+                  <router-link 
+                    v-if="e.aula_id || aulaId"
+                    :to="`/aulas/${e.aula_id || aulaId}?tab=evaluaciones`"
+                    class="btn btn-secondary btn-sm"
+                    style="color: #15803d; background: #f0fdf4; border-color: #bbf7d0; text-decoration: none; display: inline-flex; align-items: center;"
+                    title="Monitorear avance en vivo en el aula (RF113)"
+                  >
+                    ⚡ Monitoreo en Vivo
+                  </router-link>
                   <button 
                     type="button" 
                     class="btn btn-secondary btn-sm"
