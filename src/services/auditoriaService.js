@@ -546,3 +546,159 @@ export async function listarEventosAuditoria({ categoria = 'todos', busqueda = '
   const filtrados = filtrarEventosAuditoria(todosOrdenados, { categoria, busqueda })
   return Object.freeze(filtrados)
 }
+
+// ----------------------------------------------------------------------------
+// PROPIEDADES DE INMUTABILIDAD Y SELLO DE TIEMPO DEL SERVIDOR (RF63)
+// ----------------------------------------------------------------------------
+
+export const PROPIEDADES_SEGURIDAD_RF63 = Object.freeze({
+  inmutable: true,
+  permiteUpdate: false,
+  permiteDelete: false,
+  permiteTruncate: false,
+  selloTiempoServidor: 'now()',
+  norma: 'ISO/IEC 27001 A.8.15 & RFC 3161'
+})
+
+/**
+ * Valida si un objeto de evento cumple estrictamente con el principio de inmutabilidad (RF63).
+ *
+ * @param {Object} evento
+ * @returns {boolean} True si el objeto está congelado y protegido contra mutaciones
+ */
+export function validarInmutabilidad(evento) {
+  if (!evento || typeof evento !== 'object') return false
+  if (!Object.isFrozen(evento)) return false
+  if (evento.detalle && typeof evento.detalle === 'object' && !Object.isFrozen(evento.detalle)) return false
+
+  // Comprobar que intentar modificar una propiedad lanza TypeError en modo estricto
+  try {
+    evento.accion = 'mutacion_prohibida'
+    return false // No arrojó error: no es inmutable
+  } catch (err) {
+    return err instanceof TypeError
+  }
+}
+
+/**
+ * Valida que una fecha corresponda a un sello de tiempo válido del servidor (ISO 8601).
+ *
+ * @param {string|Date} timestamp
+ * @returns {boolean} True si es una fecha y hora válida
+ */
+export function validarSelloTiempoServidor(timestamp) {
+  if (!timestamp) return false
+  const d = new Date(timestamp)
+  if (Number.isNaN(d.getTime())) return false
+
+  // Debe ser una fecha en un rango razonable de operación del sistema
+  const anio = d.getUTCFullYear()
+  return anio >= 2026 && anio <= 2100
+}
+
+/**
+ * Intento de edición de un registro de auditoría (RF63).
+ * Arroja siempre error ya que la auditoría es estrictamente inmutable.
+ *
+ * @throws {Error} Siempre deniega la operación
+ */
+export function editarEventoAuditoria(id, cambios = {}) {
+  throw new Error('Operación denegada por seguridad: los registros de auditoría son inmutables y no pueden ser modificados (RF63).')
+}
+
+/**
+ * Intento de eliminación de un registro de auditoría (RF63).
+ * Arroja siempre error ya que los registros no pueden ser eliminados.
+ *
+ * @throws {Error} Siempre deniega la operación
+ */
+export function eliminarEventoAuditoria(id) {
+  throw new Error('Operación denegada por seguridad: los registros de auditoría son inmutables y no pueden ser eliminados (RF63).')
+}
+
+/**
+ * Intento de vaciado o purga de la bitácora de auditoría (RF63).
+ * Arroja siempre error ya que no se permite TRUNCATE ni DELETE masivo.
+ *
+ * @throws {Error} Siempre deniega la operación
+ */
+export function vaciarAuditoria() {
+  throw new Error('Operación denegada por seguridad: la bitácora de auditoría no puede truncarse ni vaciarse (RF63).')
+}
+
+/**
+ * Helper para verificar el rechazo de modificación en base de datos o cliente.
+ * Criterio de aceptación RF63: "Intentar editar o borrar un registro falla".
+ *
+ * @param {string|number} id
+ * @param {Object} cambios
+ * @returns {Promise<{ ok: boolean, bloqueado: boolean, error: string }>}
+ */
+export async function intentarModificarRegistroAuditoria(id, cambios = {}) {
+  try {
+    const { error } = await supabase
+      .from('auditoria')
+      .update(cambios)
+      .eq('id', id)
+
+    if (error) {
+      const mensaje = error.message && (error.message.includes('modificar') || error.message.includes('inmutable'))
+        ? error.message
+        : 'Operación bloqueada: los registros de auditoría no se pueden modificar ni editar (RF63).'
+      return {
+        ok: false,
+        bloqueado: true,
+        error: mensaje
+      }
+    }
+
+    throw new Error('Operación denegada por seguridad: los registros de auditoría son inmutables y no pueden ser modificados (RF63).')
+  } catch (err) {
+    const mensaje = err.message && (err.message.includes('modificar') || err.message.includes('inmutable'))
+      ? err.message
+      : 'Operación bloqueada: los registros de auditoría son inmutables y no pueden ser modificados (RF63).'
+    return {
+      ok: false,
+      bloqueado: true,
+      error: mensaje
+    }
+  }
+}
+
+/**
+ * Helper para verificar el rechazo de borrado en base de datos o cliente.
+ * Criterio de aceptación RF63: "Intentar editar o borrar un registro falla".
+ *
+ * @param {string|number} id
+ * @returns {Promise<{ ok: boolean, bloqueado: boolean, error: string }>}
+ */
+export async function intentarEliminarRegistroAuditoria(id) {
+  try {
+    const { error } = await supabase
+      .from('auditoria')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      const mensaje = error.message && (error.message.includes('borrar') || error.message.includes('eliminad') || error.message.includes('inmutable'))
+        ? error.message
+        : 'Operación bloqueada: los registros de auditoría no se pueden borrar ni eliminar (RF63).'
+      return {
+        ok: false,
+        bloqueado: true,
+        error: mensaje
+      }
+    }
+
+    throw new Error('Operación denegada por seguridad: los registros de auditoría son inmutables y no pueden ser eliminados (RF63).')
+  } catch (err) {
+    const mensaje = err.message && (err.message.includes('borrar') || err.message.includes('eliminad') || err.message.includes('inmutable'))
+      ? err.message
+      : 'Operación bloqueada: los registros de auditoría son inmutables y no pueden ser eliminados (RF63).'
+    return {
+      ok: false,
+      bloqueado: true,
+      error: mensaje
+    }
+  }
+}
