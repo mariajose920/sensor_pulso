@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { supabase } from '../services/supabase.js'
+import { enviarRespuestasConResiliencia } from '../services/respuestasSimultaneasService.js'
 
 const evaluaciones = ref([])
 const seleccion = ref(null)
@@ -83,12 +84,15 @@ const abrir = (ev) => ejecutar(async () => {
 const entregar = () => ejecutar(async () => {
   const ev = seleccion.value
   if (ev.tipo === 'preguntas') {
-    const { error: fallo } = await supabase.rpc('entregar_evaluacion_rf109', {
-      p_evaluacion_id: ev.id,
-      p_intento_id: intentoId.value,
-      p_respuestas: respuestas.value
+    // RF110: Envío optimizado resiliente a alta concurrencia simultánea
+    const resultado = await enviarRespuestasConResiliencia({
+      evaluacionId: ev.id,
+      intentoId: intentoId.value,
+      respuestas: respuestas.value
     })
-    if (fallo) throw fallo
+    if (!resultado.success && !resultado.enCola) {
+      throw new Error(resultado.error || 'Error al guardar respuestas')
+    }
   } else {
     const { error: fallo } = await supabase.rpc('calificar_ejercicio', {
       p_intento: intentoId.value,
