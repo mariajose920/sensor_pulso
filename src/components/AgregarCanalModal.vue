@@ -4,7 +4,7 @@
       <div class="modal-header">
         <div>
           <h2 id="canal-extra-titulo" class="modal-title">
-            {{ esEstudiante ? 'Asignarme un canal' : (canalExistente ? `Completar requisitos del Canal ${canalExistente}` : (misCanales.length ? 'Agregar otro canal' : 'Agregar canal')) }}
+            {{ esEstudiante ? 'Agregar mi canal' : (canalExistente ? `Completar requisitos del Canal ${canalExistente}` : (misCanales.length ? 'Agregar otro canal' : 'Agregar canal')) }}
           </h2>
           <span class="version-tag">
             {{ canalExistente && !esEstudiante ? 'Este canal ya es tuyo, pero aún no puede medir.' : 'El sistema te asigna automáticamente el siguiente canal libre.' }}
@@ -27,7 +27,8 @@
           </div>
           <div class="grid">
             <label><span class="campo-label">Nombre completo *</span>
-              <input v-model="ficha.nombre" type="text" class="form-input" data-testid="canal-nombre" />
+              <input v-model="ficha.nombre" type="text" class="form-input" data-testid="canal-nombre" :readonly="Boolean(nombreFijo)" :class="{ 'campo-fijo': nombreFijo }" />
+              <small v-if="nombreFijo" class="edad-calculada" data-testid="canal-paciente-eres-tu">El paciente eres tú: solo puedes medirte a ti mismo.</small>
             </label>
             <label><span class="campo-label">Fecha de nacimiento (18 a 100 años) *</span>
               <input v-model="ficha.fechaNacimiento" type="date" :max="hoyIso" class="form-input" data-testid="canal-fecha-nacimiento" />
@@ -145,6 +146,8 @@ const props = defineProps({
   modo: { type: String, default: 'docente' }
 })
 const esEstudiante = computed(() => props.modo === 'estudiante')
+// Estudiante: el único paciente es él mismo, así que el nombre de la ficha es el de su cuenta y no se edita
+const nombreFijo = computed(() => (esEstudiante.value ? String(usuarioActual.nombre || '').trim() : ''))
 const emit = defineEmits(['cerrar', 'agregado'])
 
 function fichaVacia() {
@@ -192,6 +195,7 @@ async function precargarFichaPropia() {
     for (const campo of Object.keys(base)) {
       if (guardada[campo] !== undefined && guardada[campo] !== null && guardada[campo] !== '') ficha.value[campo] = guardada[campo]
     }
+    if (nombreFijo.value) ficha.value.nombre = nombreFijo.value
   } catch (_) { /* sin ficha previa: se escribe de cero */ }
 }
 
@@ -289,4 +293,5 @@ function cerrar() {
 .check input { margin-top: 0.2rem; accent-color: var(--color-primary, #1e40af); }
 .acciones { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e2e8f0; flex-wrap: wrap; }
 .alert ul { margin: 0.25rem 0 0 1.1rem; padding: 0; }
+.campo-fijo { background: #f1f5f9; color: #334155; cursor: not-allowed; }
 </style>

@@ -39,19 +39,24 @@ const datos = { ficha, politicaVersion: POLITICA_VERSION, consentimientoVersion:
 const intentar = async (args) => { try { return { r: await asignarmeCanalConFicha(args) } } catch (err) { return { error: err } } }
 
 canalesState.canales = ocupar(ocupar(libres(), 1, 'otro-1'), 2, 'otro-2')
-let res = await intentar({ ...datos, ficha: { ...ficha, nombre: '' } })
-marcar(res.error && !miCanalAsignado.value, 'Sin los datos del paciente (nombre) no se asigna ningún canal')
-res = await intentar({ ...datos, ficha: { ...ficha, nivelEstres: '' } })
+let res = await intentar({ ...datos, ficha: { ...ficha, nivelEstres: '' } })
 marcar(res.error && !miCanalAsignado.value, 'Sin el nivel de estrés tampoco')
 res = await intentar({ ...datos, politicaVersion: '0.0' })
 marcar(res.error && /términos|política/.test(res.error.message) && !miCanalAsignado.value, 'Sin aceptar los términos y la política vigente no se asigna')
 res = await intentar({ ...datos, consentimientoVersion: '' })
 marcar(res.error && /consentimiento/.test(res.error.message) && !miCanalAsignado.value, 'Sin el consentimiento informado no se asigna')
 
+usuarioActual.nombre = 'Adán Ramos'
+res = await intentar({ ...datos, ficha: { ...ficha, nombre: 'Otra Persona' } })
+marcar(res.r?.ok && requisitosCanales[res.r.canal]?.ficha?.nombre === 'Adán Ramos', 'El estudiante no puede medir a otra persona: el nombre de la ficha se fuerza al de su cuenta')
+// se libera para seguir con el resto de las pruebas
+for (const c of canalesState.canales) if (c.usuario_id === usuarioActual.id) { c.usuario_id = null }
+delete requisitosCanales[res.r.canal]
 res = await intentar(datos)
 marcar(res.r?.ok && res.r.canal === 3 && miCanalAsignado.value === 3, 'Con ficha, términos y consentimiento, el sistema le asigna el siguiente canal libre (el 3)')
 marcar(canalesState.canales.find((c) => c.canal === 3).usuario_id === usuarioActual.id, 'El canal queda a nombre de su cuenta')
-marcar(requisitosCanales[3]?.ficha?.nombre === 'María Vilches' && requisitosCanales[3]?.politicaVersion === POLITICA_VERSION && requisitosCanales[3]?.consentimientoVersion === '1.0', 'Quedan guardados los datos del paciente, la política y el consentimiento de ese canal')
+marcar(requisitosCanales[3]?.ficha?.nombre === usuarioActual.nombre && requisitosCanales[3]?.politicaVersion === POLITICA_VERSION && requisitosCanales[3]?.consentimientoVersion === '1.0', 'Quedan guardados los datos del paciente, la política y el consentimiento de ese canal')
+marcar(requisitosCanales[3]?.ficha?.nombre === usuarioActual.nombre, 'Aunque escriba otro nombre, la ficha queda a nombre del propio estudiante')
 res = await intentar(datos)
 marcar(res.error && /Ya tienes el Canal 3|Ya tienes/.test(res.error.message), 'No se le asigna un segundo canal')
 marcar(estadoAsignacionEstudiante.value.visible && !estadoAsignacionEstudiante.value.puede, 'El estado del botón se actualiza al tener canal')
@@ -79,13 +84,25 @@ marcar(readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql
 
 // --- La pantalla
 const vista = readFileSync(new URL('../src/components/VinculacionCanales.vue', import.meta.url), 'utf8')
-marcar(/data-testid="asignarme-canal"/.test(vista) && /Asignarme un canal/.test(vista) && /@click="abrirAsignarmeCanal"/.test(vista), 'La pantalla del estudiante tiene el botón «Asignarme un canal»')
+marcar(/data-testid="asignarme-canal"/.test(vista) && /Agregar mi canal/.test(vista) && /@click="abrirAsignarmeCanal"/.test(vista), 'La pantalla del estudiante tiene el botón «Agregar mi canal»')
 const modal = readFileSync(new URL('../src/components/AgregarCanalModal.vue', import.meta.url), 'utf8')
 marcar(/:modo="esProfesorOAdmin \? 'docente' : 'estudiante'"/.test(vista) && /asignarmeCanalConFicha\(datos\)/.test(modal), 'El botón abre la ficha del paciente, los términos y el consentimiento, y al aceptar asigna el canal')
 marcar(/precargarFichaPropia/.test(modal) && /obtenerDeclaracionActiva/.test(modal), 'La ficha del estudiante parte de la que ya tiene guardada para no escribirla de nuevo')
 marcar(!/Tomar este Canal|Tomar este canal|(?<!des)vincular\(ch\.canal\)/.test(vista), 'Ya no hay un botón «Tomar este Canal» por cada canal')
 marcar(/const canalesVisibles = computed\(\(\) => canalesState\.canales\.filter\(c => c\.usuario_id\)\)/.test(vista), 'Como en el perfil del profesor, solo se listan los canales ya tomados')
 marcar(/v-if="esProfesorOAdmin" class="docente-controls"/.test(vista), 'El control de rondas («Abrir siguiente ronda») solo lo ve el profesor o el administrador')
+
+// --- Medición: el estudiante agrega un solo canal, con sus datos, y el paciente es él mismo
+const medicion = readFileSync(new URL('../src/views/MedicionView.vue', import.meta.url), 'utf8')
+const panel = readFileSync(new URL('../src/components/CanalesPacientesPanel.vue', import.meta.url), 'utf8')
+const modalVista = readFileSync(new URL('../src/components/AgregarCanalModal.vue', import.meta.url), 'utf8')
+marcar(/<CanalesPacientesPanel @agregado="alAgregarCanal" \/>/.test(medicion), 'En Medición el estudiante usa el mismo panel simple del profesor (un botón para agregar su canal)')
+marcar(/<VinculacionCanales solo-lectura/.test(medicion), 'El detalle de los canales de la ronda queda solo para consultar')
+marcar(/data-testid="agregar-mi-canal"/.test(panel) && /Agregar mi canal/.test(panel) && /v-if="!miCanalAsignado"/.test(panel), 'El panel del estudiante muestra «Agregar mi canal» y lo oculta cuando ya tiene su canal')
+marcar(/data-testid="liberar-mi-canal"/.test(panel) && /desvincularMiCuenta\(null\)/.test(panel), 'Con su canal asignado puede liberarlo para volver a empezar')
+marcar(/data-testid="un-solo-canal"/.test(panel) && /el paciente eres tú/.test(panel), 'El panel explica que tiene un solo canal y que el paciente es él mismo')
+marcar(/:readonly="Boolean\(nombreFijo\)"/.test(modalVista) && /data-testid="canal-paciente-eres-tu"/.test(modalVista), 'En el asistente del estudiante el nombre del paciente es fijo (el suyo) y no se puede cambiar')
+marcar(/modo="estudiante"|esEstudiante \? 'estudiante' : 'docente'/.test(panel), 'El panel abre el asistente en modo estudiante')
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : '\nTodas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)

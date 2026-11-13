@@ -72,7 +72,7 @@
             ⚠️ Aún no tienes canales. Pulsa «Agregar canal»: el sistema te asigna uno automáticamente.
           </span>
           <span v-else class="unassigned-hint">
-            ⚠️ Aún no tienes canal. Pulsa «Asignarme un canal»: el sistema te asigna uno automáticamente.
+            ⚠️ Aún no tienes canal. Pulsa «Agregar mi canal»: el sistema te asigna uno automáticamente.
           </span>
         </template>
       </div>
@@ -110,7 +110,7 @@
     </div>
 
     <!-- Estudiante (RF111): el canal se asigna solo con un botón; no se elige el número -->
-    <div v-if="estadoAsignacionEstudiante.visible" class="mis-canales" data-testid="asignacion-estudiante">
+    <div v-if="estadoAsignacionEstudiante.visible && !props.soloLectura" class="mis-canales" data-testid="asignacion-estudiante">
       <div class="mis-canales-header">
         <strong>{{ miCanalAsignado ? `Tu canal: Canal ${miCanalAsignado}` : 'Aún no tienes un canal' }}</strong>
         <button
@@ -122,7 +122,7 @@
           :title="estadoAsignacionEstudiante.puede ? 'Asigna automáticamente el siguiente canal libre' : estadoAsignacionEstudiante.motivo"
           @click="abrirAsignarmeCanal"
         >
-          ➕ Asignarme un canal
+          ➕ Agregar mi canal
         </button>
       </div>
       <p v-if="!miCanalAsignado && !estadoAsignacionEstudiante.puede" class="mis-canales-nota" data-testid="asignarme-canal-motivo">
@@ -140,7 +140,7 @@
 
     <!-- Grid de los 5 Canales Físicos (RF12 / RF111) -->
     <p v-if="!canalesVisibles.length" class="mis-canales-nota" data-testid="sin-canales-tomados">
-      Todavía no hay canales tomados. {{ esProfesorOAdmin ? 'Usa «Agregar canal» para empezar.' : 'Pulsa «Asignarme un canal» para empezar.' }}
+      Todavía no hay canales tomados. {{ esProfesorOAdmin ? 'Usa «Agregar canal» para empezar.' : 'Pulsa «Agregar mi canal» para empezar.' }}
     </p>
     <div v-else class="canales-slots-grid">
       <div 
@@ -171,7 +171,7 @@
           <div v-else class="free-info">
             <span class="free-text">Sensor listo para medir</span>
             <small v-if="esProfesorOAdmin">Se asigna solo con «Agregar canal»</small>
-            <small v-else>Se asigna solo con «Asignarme un canal»</small>
+            <small v-else>Se asigna solo con «Agregar mi canal»</small>
           </div>
         </div>
 
@@ -253,6 +253,10 @@ import {
   MAX_CANALES_DOCENTE
 } from '../services/canalesService'
 
+const props = defineProps({
+  // En Medición el estudiante agrega su canal desde el botón de arriba: aquí solo consulta quién ocupa cada canal
+  soloLectura: { type: Boolean, default: false }
+})
 const emit = defineEmits(['canal-seleccionado', 'solicitar-consentimiento'])
 const errorMensaje = ref('')
 const mensajeExito = ref('')
@@ -261,7 +265,7 @@ const esProfesorOAdmin = computed(() => {
   return usuarioActual.rol === 'profesor' || usuarioActual.rol === 'admin'
 })
 
-// Todos ven solo los canales ya tomados; los libres no se muestran (se asignan con «Agregar canal» o «Asignarme un canal»)
+// Todos ven solo los canales ya tomados; los libres no se muestran (se asignan con «Agregar canal» o «Agregar mi canal»)
 const canalesVisibles = computed(() => canalesState.canales.filter(c => c.usuario_id))
 
 function formatearHora(isoString) {

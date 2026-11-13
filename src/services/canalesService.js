@@ -315,7 +315,7 @@ export const estadoAgregarCanal = computed(() => evaluarAgregarCanal({
   usuarioId: usuarioActual.id
 }))
 
-// Estado del botón «Asignarme un canal» (estudiante)
+// Estado del botón «Agregar mi canal» (estudiante)
 export const estadoAsignacionEstudiante = computed(() => evaluarAsignacionEstudiante({
   rol: usuarioActual.rol,
   canales: canalesState.canales,
@@ -357,8 +357,11 @@ export function esUuid(valor) { return typeof valor === 'string' && UUID_RE.test
  */
 export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, canalExistente = null, comoEstudiante = false }) {
   if (comoEstudiante) {
-    // Estudiante (RF111): un solo canal, asignado solo, con su ficha, los términos y el consentimiento
+    // Estudiante (RF111): un solo canal, asignado solo, con su ficha, los términos y el consentimiento.
+    // El único paciente que puede medir es él mismo: el nombre de la ficha es siempre el de su cuenta.
     if (esDocente(usuarioActual.rol)) throw new Error('El profesor y el administrador usan «Agregar canal».')
+    const nombrePropio = String(usuarioActual.nombre || '').trim()
+    if (nombrePropio) ficha = { ...(ficha || {}), nombre: nombrePropio }
     const estado = estadoAsignacionEstudiante.value
     if (!estado.puede) throw new Error(estado.motivo)
   } else {
@@ -443,7 +446,7 @@ export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoV
 }
 
 /**
- * El estudiante pulsa «Asignarme un canal»: el sistema toma el siguiente canal libre (no se elige) y guarda los datos del
+ * El estudiante pulsa «Agregar mi canal»: el sistema toma el siguiente canal libre (no se elige) y guarda los datos del
  * paciente (ficha, RF03), la política (RF88) y el consentimiento (RF04), igual que «Agregar canal» del profesor.
  */
 export function asignarmeCanalConFicha({ ficha, politicaVersion, consentimientoVersion }) {

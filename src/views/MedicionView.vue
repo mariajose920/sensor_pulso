@@ -473,8 +473,12 @@
         <CanalesPacientesPanel v-if="fuenteConectada" @agregado="alAgregarCanal" />
       </template>
       <template v-else>
-        <!-- Estudiantes y usuarios: eligen su canal libre -->
-        <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+        <!-- Estudiantes y usuarios: un solo canal y un solo paciente, ellos mismos (se asigna solo con un botón) -->
+        <CanalesPacientesPanel @agregado="alAgregarCanal" />
+        <details class="herramientas-prueba" data-testid="canales-de-la-ronda">
+          <summary>Canales de la ronda (quién está midiendo)</summary>
+          <VinculacionCanales solo-lectura @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+        </details>
       </template>
       </template>
 

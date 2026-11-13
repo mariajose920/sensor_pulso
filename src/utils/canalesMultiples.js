@@ -35,7 +35,7 @@ export function evaluarAgregarCanal({ rol, canales, usuarioId, max = MAX_CANALES
 }
 
 /**
- * ¿Se muestra y funciona el botón «Asignarme un canal» del estudiante? Igual que el del profesor, el número no se elige:
+ * ¿Se muestra y funciona el botón «Agregar mi canal» del estudiante? Igual que el del profesor, el número no se elige:
  * el sistema toma el siguiente canal libre. Un estudiante tiene como máximo un canal.
  */
 export function evaluarAsignacionEstudiante({ rol, canales, usuarioId }) {
