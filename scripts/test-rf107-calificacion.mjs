@@ -6,6 +6,9 @@ import {
   resumenResultado, mensajeErrorCalificacion
 } from '../src/utils/calificacionEjercicio.js'
 import {
+  formatearRespuesta, formatearCorrecta, estadoPregunta, estadoEjercicio, resumenPreguntas, explicarNivel, formatearPorcentaje
+} from '../src/utils/correccionEvaluacion.js'
+import {
   cambiarEjercicio, cambiarTipo, modeloVacio, validarTipoEvaluacion, camposTipoParaGuardar, modeloDesdeFila, describirCriterio,
   ejerciciosParaGuardar, agregarEjercicioMixto, quitarEjercicioMixto, cambiarEjercicioMixto, etiquetaTipo,
   MAX_EJERCICIOS_MIXTA, PUNTAJE_EJERCICIO
@@ -162,6 +165,31 @@ marcar(/data-testid="progreso"/.test(vistaEstudiante) && /role="progressbar"/.te
 marcar(/type="radio"/.test(vistaEstudiante) && /role="radiogroup"/.test(vistaEstudiante), 'Las alternativas son opciones con botón de selección, no un desplegable')
 marcar(/class="me-acciones"/.test(vistaEstudiante) && /position: sticky/.test(vistaEstudiante), 'Entregar y cancelar quedan en una barra fija abajo')
 marcar(/<style scoped>/.test(vistaEstudiante) && /@media \(max-width: 560px\)/.test(vistaEstudiante), 'La pantalla tiene estilos propios y se adapta al teléfono')
+
+// --- Resultado y correcciones al entregar
+const opciones = [{ id: 'a', texto: '40 a 60 BPM' }, { id: 'b', texto: '60 a 100 BPM' }]
+const pOm = { tipo: 'opcion_multiple', opciones, respondida: true, respuesta: 'b', es_correcta: true, correcta: 'b' }
+marcar(formatearRespuesta(pOm) === '60 a 100 BPM' && formatearCorrecta(pOm) === '60 a 100 BPM', 'Muestra el texto de la alternativa, no su letra interna')
+marcar(formatearRespuesta({ tipo: 'verdadero_falso', respondida: true, respuesta: false }) === 'Falso' && formatearCorrecta({ tipo: 'verdadero_falso', correcta: true }) === 'Verdadero', 'Verdadero y Falso se muestran con palabras')
+marcar(formatearCorrecta({ tipo: 'numerica', correcta: { valor: 880, tolerancia: 5 } }) === '880 (± 5)' && formatearCorrecta({ tipo: 'numerica', correcta: { valor: 72 } }) === '72', 'La respuesta numérica muestra su tolerancia')
+marcar(formatearCorrecta({ tipo: 'abierta', correcta: null }) === null, 'Una pregunta abierta no tiene respuesta correcta que mostrar')
+marcar(formatearRespuesta({ respondida: false }) === 'Sin responder', 'Una pregunta sin responder se indica')
+marcar(estadoPregunta(pOm) === 'correcta' && estadoPregunta({ respondida: true, es_correcta: false }) === 'incorrecta' && estadoPregunta({ respondida: true, es_correcta: null }) === 'pendiente' && estadoPregunta({ respondida: false }) === 'sin_responder', 'Cada pregunta queda correcta, incorrecta, pendiente de revisión o sin responder')
+const conteo = resumenPreguntas([pOm, { respondida: true, es_correcta: false }, { respondida: true, es_correcta: null }, { respondida: false }])
+marcar(conteo.correcta === 1 && conteo.incorrecta === 1 && conteo.pendiente === 1 && conteo.sin_responder === 1 && conteo.total === 4, 'El resumen cuenta las preguntas por estado')
+marcar(estadoEjercicio({ calificado: true, cumple: true, porcentaje: 100 }) === 'cumple' && estadoEjercicio({ calificado: true, cumple: false, porcentaje: 40 }) === 'parcial' && estadoEjercicio({ calificado: true, cumple: false, porcentaje: 0 }) === 'no_cumple' && estadoEjercicio({ calificado: false }) === 'sin_calificar', 'Cada ejercicio queda cumple, parcial, no cumple o sin calificar')
+marcar(/70 % o más/.test(explicarNivel('logrado', 70, 40)) && /entre el 40 % y menos del 70 %/.test(explicarNivel('medianamente_logrado', 70, 40)) && /menos del 40 %/.test(explicarNivel('no_logrado', 70, 40)), 'Explica cada nivel con los umbrales de la evaluación')
+marcar(formatearPorcentaje(47.27) === '47.3' && formatearPorcentaje(100) === '100' && formatearPorcentaje('x') === '0', 'Los porcentajes se muestran sin decimales sobrantes')
+const sqlResultado = readFileSync(new URL('../supabase/migrations/20261113000300_rf107_resultado_evaluacion.sql', import.meta.url), 'utf8')
+marcar(/id = p_intento and usuario_id = auth\.uid\(\)/.test(sqlResultado), 'Solo el estudiante dueño del intento puede pedir el resultado')
+marcar(/v_int\.fin is null then\s+raise exception/.test(sqlResultado), 'Las correcciones y la clave solo se entregan cuando el intento ya fue entregado')
+marcar(/left join public\.preguntas_claves k/.test(sqlResultado) && /'explicacion', k\.explicacion/.test(sqlResultado), 'Devuelve la clave y la explicación de cada pregunta')
+marcar(/v_ev\.tipo = 'mixta'/.test(sqlResultado) && /v_ev\.tipo = 'ejercicio_aplicado'/.test(sqlResultado), 'Incluye los ejercicios de la mixta y del ejercicio aplicado simple')
+marcar(/revoke all on function public\.resultado_evaluacion\(uuid\) from public, anon/.test(sqlResultado) && /grant execute on function public\.resultado_evaluacion\(uuid\) to authenticated/.test(sqlResultado), 'La función solo se ofrece a usuarios con sesión')
+marcar(readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql', import.meta.url), 'utf8').includes('resultado y correcciones de una evaluación entregada'), 'La base completa incluye la función del resultado')
+const vistaResultado = readFileSync(new URL('../src/views/MisEvaluacionesView.vue', import.meta.url), 'utf8')
+marcar(/data-testid="resultado-final"/.test(vistaResultado) && /data-testid="nivel-logro"/.test(vistaResultado) && /data-testid="correccion-pregunta"/.test(vistaResultado) && /data-testid="correccion-ejercicio"/.test(vistaResultado), 'Al entregar se muestra el nivel, el porcentaje y la corrección de cada pregunta y ejercicio')
+marcar(/await mostrarResultado\(idIntento\)/.test(vistaResultado) && /data-testid="ver-correcciones"/.test(vistaResultado), 'El resultado aparece al entregar y se puede volver a ver desde el listado')
 
 console.log(fallos ? `\nRF107: ${fallos} prueba(s) fallaron` : '\nRF107: todas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)

@@ -75,3 +75,11 @@ export async function obtenerResultadosEjercicio(evaluacionId) {
   if (error) return { success: false, error: error.message, data: [] }
   return { success: true, data: data || [] }
 }
+
+/** El estudiante ve el resultado y las correcciones de su evaluación ya entregada (RPC resultado_evaluacion). */
+export async function obtenerResultadoEvaluacion(intentoId) {
+  if (!intentoId) return { success: false, error: 'No se encontró tu intento.' }
+  const { data, error } = await supabase.rpc('resultado_evaluacion', { p_intento: intentoId })
+  if (error) return { success: false, error: error.message }
+  return { success: true, resultado: data }
+}

@@ -731,6 +731,7 @@ export {
   obtenerOpcionesReferencia,
   calificarEjercicioAplicado,
   calificarEjercicioMixto,
+  obtenerResultadoEvaluacion,
   recalificarIntento,
   obtenerResultadosEjercicio
 } from './calificacionEjercicioService.js'

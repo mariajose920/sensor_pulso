@@ -3,9 +3,13 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { supabase } from '../services/supabase.js'
 import { enviarRespuestasConResiliencia } from '../services/respuestasSimultaneasService.js'
 import { iniciarHeartbeatEstudiante, desconectarEstudiante } from '../services/panelEnVivoService.js'
-import { calificarEjercicioAplicado, calificarEjercicioMixto } from '../services/calificacionEjercicioService.js'
+import { calificarEjercicioAplicado, calificarEjercicioMixto, obtenerResultadoEvaluacion } from '../services/calificacionEjercicioService.js'
 import { ETIQUETA_NIVEL, resumenResultado } from '../utils/calificacionEjercicio.js'
 import { describirCriterio, etiquetaTipo, instruccionParaEstudiante } from '../utils/tiposEvaluacion.js'
+import {
+  ETIQUETA_NIVEL_RESULTADO, CLASE_NIVEL, ETIQUETA_ESTADO_PREGUNTA, ETIQUETA_ESTADO_EJERCICIO,
+  explicarNivel, formatearRespuesta, formatearCorrecta, estadoPregunta, estadoEjercicio, resumenPreguntas, formatearPorcentaje
+} from '../utils/correccionEvaluacion.js'
 
 const evaluaciones = ref([])
 const seleccion = ref(null)
@@ -52,6 +56,37 @@ const pasosHechos = computed(() => {
   return respondidas.value + (tipo === 'mixta' ? ejerciciosCalificados.value : 0)
 })
 const porcentajeAvance = computed(() => (totalPasos.value ? Math.round((100 * pasosHechos.value) / totalPasos.value) : 0))
+
+// Resultado y correcciones de una evaluación entregada
+const resultadoFinal = ref(null)
+const conteoPreguntas = computed(() => resumenPreguntas(resultadoFinal.value?.preguntas || []))
+
+const mostrarResultado = async (idIntento) => {
+  const res = await obtenerResultadoEvaluacion(idIntento)
+  if (!res.success) throw new Error(res.error)
+  resultadoFinal.value = res.resultado
+  if (typeof window !== 'undefined') window.scrollTo?.({ top: 0 })
+}
+
+const verCorrecciones = (ev) => ejecutar(async () => {
+  mensaje.value = ''
+  const { data: usuario, error: falloUsuario } = await supabase.auth.getUser()
+  if (falloUsuario) throw falloUsuario
+  const { data, error: falloIntento } = await supabase
+    .from('intentos_evaluacion')
+    .select('id')
+    .eq('evaluacion_id', ev.id)
+    .eq('usuario_id', usuario.user.id)
+    .maybeSingle()
+  if (falloIntento) throw falloIntento
+  if (!data) throw new Error('No encontramos tu entrega de esta evaluación.')
+  await mostrarResultado(data.id)
+})
+
+const cerrarResultado = () => {
+  resultadoFinal.value = null
+  mensaje.value = ''
+}
 
 const ejecutar = async (operacion) => {
   if (ocupado.value) return
@@ -200,6 +235,8 @@ const entregar = () => ejecutar(async () => {
     heartbeatControl = null
   }
   const ev = seleccion.value
+  const idIntento = intentoId.value
+  let enCola = false
   let resultadoReciente = null
   if (ev.tipo === 'mixta' && ejerciciosMixta.value.some(e => !resultadoPorEjercicio.value[e.id])) {
     throw new Error('Califica todos los ejercicios antes de entregar la evaluación.')
@@ -214,6 +251,7 @@ const entregar = () => ejecutar(async () => {
     if (!resultado.success && !resultado.enCola) {
       throw new Error(resultado.error || 'Error al guardar respuestas')
     }
+    enCola = !resultado.success && !!resultado.enCola
   } else if (ev.tipo === 'ejercicio_aplicado') {
     // RF107: el servidor califica y devuelve el resultado con su retroalimentación
     const calificacion = await calificarEjercicioAplicado({
@@ -225,8 +263,13 @@ const entregar = () => ejecutar(async () => {
   }
 
   seleccion.value = null
-  mensaje.value = resultadoReciente ? resumenResultado(resultadoReciente) : 'Evaluación entregada.'
   await cargar()
+  if (enCola) {
+    mensaje.value = 'Sin conexión: tu entrega quedó guardada y se enviará sola cuando vuelvas a conectarte. Luego podrás ver tu resultado.'
+  } else {
+    mensaje.value = ''
+    await mostrarResultado(idIntento)
+  }
 })
 
 const volver = () => ejecutar(async () => {
@@ -256,10 +299,10 @@ onUnmounted(() => {
       <div>
         <h1>Mis evaluaciones</h1>
         <p class="me-sub">
-          {{ seleccion ? 'Responde con calma; puedes volver al listado cuando quieras.' : 'Evaluaciones de tus aulas: responde preguntas y realiza ejercicios con tus mediciones.' }}
+          {{ resultadoFinal ? 'Tu calificación automática y la corrección de cada pregunta y ejercicio.' : seleccion ? 'Responde con calma; puedes volver al listado cuando quieras.' : 'Evaluaciones de tus aulas: responde preguntas y realiza ejercicios con tus mediciones.' }}
         </p>
       </div>
-      <button v-if="!seleccion" type="button" class="btn" :disabled="ocupado" @click="ejecutar(cargar)">
+      <button v-if="!seleccion && !resultadoFinal" type="button" class="btn" :disabled="ocupado" @click="ejecutar(cargar)">
         ↻ Actualizar listado
       </button>
     </header>
@@ -267,8 +310,85 @@ onUnmounted(() => {
     <p v-if="error" class="me-aviso me-aviso-error" role="alert">⚠️ {{ error }}</p>
     <p v-if="mensaje" class="me-aviso me-aviso-ok" role="status">✓ {{ mensaje }}</p>
 
+    <!-- RESULTADO Y CORRECCIONES -->
+    <section v-if="resultadoFinal" class="me-final" data-testid="resultado-final">
+      <button type="button" class="me-volver" @click="cerrarResultado">← Volver al listado</button>
+
+      <div class="me-resumen" :class="'nivel-' + CLASE_NIVEL[resultadoFinal.nivel]" data-testid="resumen-resultado">
+        <div class="me-cifra">
+          <span class="me-pct">{{ formatearPorcentaje(resultadoFinal.porcentaje) }} %</span>
+          <span class="me-pct-texto">logrado</span>
+        </div>
+        <div class="me-resumen-texto">
+          <span class="chip-nivel" data-testid="nivel-logro">{{ ETIQUETA_NIVEL_RESULTADO[resultadoFinal.nivel] || 'Calificado' }}</span>
+          <h2>{{ resultadoFinal.titulo }}</h2>
+          <p>
+            Obtuviste <strong>{{ formatearPorcentaje(resultadoFinal.puntaje) }}</strong> de
+            <strong>{{ formatearPorcentaje(resultadoFinal.puntaje_maximo) }}</strong> puntos.
+            {{ explicarNivel(resultadoFinal.nivel, resultadoFinal.umbral_logrado, resultadoFinal.umbral_medio) }}
+          </p>
+          <div class="me-barra" aria-hidden="true"><span :style="{ width: Math.min(100, Number(resultadoFinal.porcentaje) || 0) + '%' }"></span></div>
+          <p v-if="conteoPreguntas.total" class="me-conteo" data-testid="conteo-preguntas">
+            <span>✓ {{ conteoPreguntas.correcta }} correcta(s)</span>
+            <span>✗ {{ conteoPreguntas.incorrecta }} incorrecta(s)</span>
+            <span v-if="conteoPreguntas.pendiente">⏳ {{ conteoPreguntas.pendiente }} por revisar</span>
+            <span v-if="conteoPreguntas.sin_responder">{{ conteoPreguntas.sin_responder }} sin responder</span>
+          </p>
+        </div>
+      </div>
+
+      <template v-if="resultadoFinal.preguntas.length">
+        <h3 class="me-seccion">📝 Correcciones de las preguntas</h3>
+        <article v-for="(p, i) in resultadoFinal.preguntas" :key="p.pregunta_id" class="me-correccion"
+                 :class="'estado-' + estadoPregunta(p)" data-testid="correccion-pregunta">
+          <div class="me-correccion-cabeza">
+            <span class="me-numero">{{ i + 1 }}</span>
+            <p class="me-enunciado">{{ p.enunciado }}</p>
+          </div>
+          <div class="me-correccion-estado">
+            <span class="chip-estado" :class="'estado-' + estadoPregunta(p)">{{ ETIQUETA_ESTADO_PREGUNTA[estadoPregunta(p)] }}</span>
+            <span class="me-puntos">{{ formatearPorcentaje(p.puntaje) }} / {{ formatearPorcentaje(p.puntaje_maximo) }} pts</span>
+          </div>
+          <dl class="me-respuestas">
+            <div><dt>Tu respuesta</dt><dd>{{ formatearRespuesta(p) }}</dd></div>
+            <div v-if="estadoPregunta(p) !== 'correcta' && formatearCorrecta(p) !== null">
+              <dt>Respuesta correcta</dt><dd class="me-correcta">{{ formatearCorrecta(p) }}</dd>
+            </div>
+          </dl>
+          <p v-if="estadoPregunta(p) === 'pendiente'" class="me-pista">Esta respuesta es abierta: la revisa tu profesor y todavía no suma puntos.</p>
+          <p v-if="p.explicacion" class="me-explicacion">💡 {{ p.explicacion }}</p>
+        </article>
+      </template>
+
+      <template v-if="resultadoFinal.ejercicios.length">
+        <h3 class="me-seccion">🫀 Ejercicios aplicados</h3>
+        <article v-for="(e, i) in resultadoFinal.ejercicios" :key="i" class="me-correccion me-correccion-ej"
+                 :class="'estado-' + estadoEjercicio(e)" data-testid="correccion-ejercicio">
+          <div class="me-correccion-cabeza">
+            <span class="me-numero me-numero-ej">{{ i + 1 }}</span>
+            <div>
+              <p class="me-enunciado">{{ nombreEjercicio[e.ejercicio] || 'Ejercicio aplicado' }}</p>
+              <p v-if="e.criterio" class="me-pista">Criterio: {{ describirCriterio(e.ejercicio, e.criterio) }}</p>
+            </div>
+          </div>
+          <div class="me-correccion-estado">
+            <span class="chip-estado" :class="'estado-' + estadoEjercicio(e)">{{ ETIQUETA_ESTADO_EJERCICIO[estadoEjercicio(e)] }}</span>
+            <span class="me-puntos">
+              {{ resultadoFinal.tipo === 'mixta' ? formatearPorcentaje(e.puntaje) + ' / ' + formatearPorcentaje(e.puntaje_maximo) + ' pts' : formatearPorcentaje(e.porcentaje) + ' %' }}
+            </span>
+          </div>
+          <p v-if="e.motivo" class="me-explicacion">{{ e.motivo }}</p>
+          <p v-else-if="!e.calificado" class="me-pista">No entregaste una medición para este ejercicio.</p>
+        </article>
+      </template>
+
+      <div class="me-acciones me-acciones-final">
+        <button type="button" class="btn btn-primary" @click="cerrarResultado">Volver al listado</button>
+      </div>
+    </section>
+
     <!-- LISTADO -->
-    <template v-if="!seleccion">
+    <template v-else-if="!seleccion">
       <p v-if="ocupado && !evaluaciones.length" class="me-vacio">Cargando evaluaciones…</p>
       <div v-else-if="!error && !evaluaciones.length" class="me-vacio" data-testid="sin-evaluaciones">
         <span class="me-vacio-icono" aria-hidden="true">📋</span>
@@ -303,6 +423,10 @@ onUnmounted(() => {
             <p v-if="resultadosEjercicio[ev.id].restantes > 0" class="me-pista">Te quedan {{ resultadosEjercicio[ev.id].restantes }} intento(s).</p>
           </div>
 
+          <button v-if="ev.disponibilidad === 'entregada'" type="button" class="btn me-cta" data-testid="ver-correcciones"
+                  :disabled="ocupado" @click="verCorrecciones(ev)">
+            Ver correcciones
+          </button>
           <button
             v-if="ev.disponibilidad === 'disponible'
               || (ev.disponibilidad === 'entregada' && ev.tipo === 'ejercicio_aplicado'
@@ -542,6 +666,52 @@ onUnmounted(() => {
 .me-campo:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; border-color: var(--color-primary); }
 .me-etiqueta { font-weight: 600; font-size: 0.9rem; }
 .me-fila-ejercicio { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; align-items: center; }
+
+/* Resultado y correcciones */
+.me-final { display: flex; flex-direction: column; gap: 1rem; }
+.me-final > .me-volver { align-self: flex-start; }
+.me-resumen { display: grid; grid-template-columns: auto 1fr; gap: 1.2rem; align-items: center; padding: 1.2rem 1.4rem;
+  border-radius: 16px; border: 1px solid var(--color-border); background: var(--color-surface); border-left: 6px solid var(--color-border); }
+.me-resumen.nivel-ok { border-left-color: var(--color-success); background: #f0fdf4; }
+.me-resumen.nivel-medio { border-left-color: #d97706; background: #fffbeb; }
+.me-resumen.nivel-bajo { border-left-color: var(--color-danger); background: #fef2f2; }
+.me-cifra { display: flex; flex-direction: column; align-items: center; min-width: 7rem; }
+.me-pct { font-size: 2.6rem; font-weight: 800; line-height: 1; }
+.me-pct-texto { color: var(--color-muted); font-size: 0.85rem; }
+.me-resumen-texto { display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-start; min-width: 0; }
+.me-resumen-texto h2 { margin: 0; font-size: 1.15rem; }
+.me-resumen-texto p { margin: 0; font-size: 0.92rem; }
+.me-resumen-texto .me-barra { width: 100%; }
+.chip-nivel { display: inline-block; padding: 0.2rem 0.8rem; border-radius: 999px; font-weight: 700; font-size: 0.85rem; background: #e2e8f0; color: #334155; }
+.nivel-ok .chip-nivel { background: #16a34a; color: #fff; }
+.nivel-medio .chip-nivel { background: #d97706; color: #fff; }
+.nivel-bajo .chip-nivel { background: #dc2626; color: #fff; }
+.me-conteo { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; color: var(--color-muted); }
+
+.me-correccion { background: var(--color-surface); border: 1px solid var(--color-border); border-left: 5px solid var(--color-border);
+  border-radius: 14px; padding: 1rem 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.me-correccion.estado-correcta, .me-correccion.estado-cumple { border-left-color: var(--color-success); }
+.me-correccion.estado-incorrecta, .me-correccion.estado-no_cumple { border-left-color: var(--color-danger); }
+.me-correccion.estado-parcial, .me-correccion.estado-pendiente { border-left-color: #d97706; }
+.me-correccion-cabeza { display: flex; gap: 0.75rem; align-items: flex-start; }
+.me-correccion-estado { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.chip-estado { padding: 0.15rem 0.7rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; background: #f1f5f9; color: #475569; }
+.chip-estado.estado-correcta, .chip-estado.estado-cumple { background: #dcfce7; color: #166534; }
+.chip-estado.estado-incorrecta, .chip-estado.estado-no_cumple { background: #fee2e2; color: #991b1b; }
+.chip-estado.estado-parcial, .chip-estado.estado-pendiente { background: #fef3c7; color: #92400e; }
+.me-puntos { font-weight: 700; font-size: 0.9rem; }
+.me-respuestas { margin: 0; display: grid; gap: 0.4rem; }
+.me-respuestas div { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.5rem 0.75rem; border-radius: 8px; background: #f8fafc; }
+.me-respuestas dt { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-muted); }
+.me-respuestas dd { margin: 0; font-weight: 600; }
+.me-respuestas .me-correcta { color: #166534; }
+.me-explicacion { margin: 0; padding: 0.55rem 0.8rem; border-radius: 8px; background: #eff6ff; color: #1e3a8a; font-size: 0.9rem; line-height: 1.5; }
+.me-acciones-final { justify-content: flex-end; }
+
+@media (max-width: 560px) {
+  .me-resumen { grid-template-columns: 1fr; text-align: left; }
+  .me-cifra { flex-direction: row; gap: 0.5rem; align-items: baseline; }
+}
 
 /* Barra de acciones */
 .me-acciones { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap;

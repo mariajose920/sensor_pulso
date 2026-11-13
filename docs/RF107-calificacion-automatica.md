@@ -82,3 +82,13 @@ Nuevo tipo `mixta` (migración `20261113000200_rf107_evaluacion_mixta.sql`, tamb
 - Al terminar, *Aulas* muestra «Aula creada» y el botón **«Volver a la creación de la evaluación»**. Ese botón también aparece mientras se crea el aula, por si se cambia de idea.
 - *Evaluaciones* vuelve con el aula nueva elegida y el borrador recuperado. Si no hay borrador, igual avisa y deja seguir.
 - Archivos: `EvaluacionesView.vue` (borrador y botón) y `AulasView.vue` (parámetros `crear` y `volver`, y botón de regreso).
+
+## Resultado y correcciones al entregar
+Al entregar (y después, con «Ver correcciones» en el listado), el estudiante ve su calificación automática. Migración `20261113000300_rf107_resultado_evaluacion.sql` (también en la base completa) y util `src/utils/correccionEvaluacion.js`.
+
+- **Resumen:** porcentaje logrado, puntos obtenidos de los posibles, barra y el **nivel** (logrado, medianamente logrado o no logrado) con una frase que lo explica con los umbrales de la evaluación (RF112, por defecto 70 % y 40 %). Cuenta además las preguntas correctas, incorrectas, por revisar y sin responder.
+- **Cada pregunta:** su estado (✓ correcta, ✗ incorrecta, ⏳ pendiente de revisión o sin responder), los puntos obtenidos, **su respuesta**, la **respuesta correcta** cuando falló (alternativa con su texto, verdadero/falso en palabras, o número con su tolerancia) y la **explicación** si la pregunta la tiene. Las preguntas abiertas las revisa el profesor: no suman puntos hasta entonces.
+- **Cada ejercicio aplicado:** si cumple, cumple parcialmente o no cumple el criterio, los puntos (o el porcentaje en el ejercicio simple) y el motivo («Tu pulso (120 BPM) está por encima del rango pedido…»).
+- **Seguridad de la clave:** las claves siguen sin ser legibles para el estudiante. Solo la función `resultado_evaluacion(intento)` las devuelve, y únicamente al **dueño del intento** y **después de entregarlo**. Hasta entonces no hay correcciones.
+- **Sin conexión:** si la entrega quedó en cola (RF110), se avisa y el resultado se puede ver cuando se envíe.
+- **Límite:** apenas se entrega, se ven las respuestas correctas. Si el profesor no quiere que se vean mientras otros estudiantes aún no rinden la evaluación, habría que ocultarlas hasta el cierre. Se puede agregar como opción de la evaluación.
