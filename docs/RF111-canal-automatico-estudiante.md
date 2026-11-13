@@ -24,7 +24,6 @@ Migración `supabase/migrations/20261113000500_rf111_canal_estudiante_con_ficha.
 
 ## Archivos
 - `src/components/AgregarCanalModal.vue`: ahora sirve a profesor (`modo="docente"`) y a estudiante (`modo="estudiante"`).
-- `src/components/VinculacionCanales.vue`: bloque del estudiante, lista de canales tomados y control de rondas solo docente.
 - `src/services/canalesService.js`: `asignarmeCanalConFicha` y `estadoAsignacionEstudiante` (reutilizan `agregarOtroCanal`).
 - `src/utils/canalesMultiples.js`: `evaluarAsignacionEstudiante`.
 - `scripts/test-rf111-canal-automatico-estudiante.mjs` (`npm run test:rf111-estudiante`).
@@ -39,7 +38,7 @@ Migración `supabase/migrations/20261113000500_rf111_canal_estudiante_con_ficha.
 - **Paciente = el mismo estudiante:** en el asistente, el nombre de la ficha es el de su cuenta y **no se puede editar** («El paciente eres tú: solo puedes medirte a ti mismo»). Aunque se manipule la pantalla, el servicio fuerza el nombre de la ficha al de la cuenta. El resto de los datos (fecha de nacimiento, nivel de estrés, sueño, cafeína, medicación, actividad y condición de salud) parten de la ficha que ya tenía guardada y se pueden corregir.
 - **Datos guardados con el canal:** igual que antes: ficha cifrada, política y consentimiento quedan ligados al canal y se usan al guardar las mediciones.
 - **Detalle de la ronda:** quien quiera ver quién ocupa cada canal lo encuentra en el desplegable «Canales de la ronda» (solo consulta; no repite el botón de agregar).
-- **Archivos:** `CanalesPacientesPanel.vue` (modo estudiante), `AgregarCanalModal.vue` (nombre fijo), `VinculacionCanales.vue` (`solo-lectura`), `MedicionView.vue` y `canalesService.js`.
+- **Archivos:** `CanalesPacientesPanel.vue` (modo estudiante), `AgregarCanalModal.vue` (nombre fijo), `MedicionView.vue` y `canalesService.js`.
 - **Límite:** el nombre «de la cuenta» sale del perfil; si el perfil no tiene nombre, el estudiante lo escribe una vez en la ficha.
 
 ## Canal automático del estudiante (sin botones ni 5 canales)
@@ -63,3 +62,6 @@ Arreglo:
 - Si usas la misma base de Supabase que producción, reemplaza esa clave en `.env.local` por la `CLAVE_CIFRADO_CAMPOS` que tiene Vercel; así lo que se guarda desde local también se lee en producción. Lo cifrado con otra clave no se puede leer (el panel de la ficha lo avisa y no pierde otras fichas).
 - Después de arreglarlo hay que **reiniciar el servidor y volver a llenar la ficha una vez** (la anterior nunca llegó a la base). Desde entonces se carga sola en cada sesión y solo cambia con «Modificar».
 - Pruebas: `node scripts/test-ficha-persistente-local.mjs`.
+
+## Panel antiguo eliminado
+Se borró `src/components/VinculacionCanales.vue`, el apartado «Asignación de Canales ESP32 por Cuenta» con los 5 canales («Tomar este Canal»), la barra de la ronda y «Abrir Siguiente Ronda». El estudiante ya no elige canal ni ve los de los demás: su canal se asigna solo y su único paciente es él mismo.

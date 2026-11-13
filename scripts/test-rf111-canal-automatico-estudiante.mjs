@@ -1,6 +1,6 @@
 // RF111 · El estudiante recibe su canal automáticamente con un botón (igual que el profesor), sin elegir el número.
 // Uso: node scripts/test-rf111-canal-automatico-estudiante.mjs
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { evaluarAsignacionEstudiante, siguienteCanalLibre } from '../src/utils/canalesMultiples.js'
 import { supabase } from '../src/services/supabase.js'
 import { canalesState, usuarioActual, miCanalAsignado, asignarmeCanalConFicha, estadoAsignacionEstudiante, requisitosCanales, asignarCanalAutomaticoEstudiante, FaltaRequisitoCanal } from '../src/services/canalesService.js'
@@ -85,14 +85,9 @@ marcar(sql.includes('revoke all on function public.asignar_canal_estudiante(uuid
 marcar(readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql', import.meta.url), 'utf8').includes('asignar_canal_estudiante'), 'La base completa incluye la función del estudiante')
 
 // --- La pantalla
-const vista = readFileSync(new URL('../src/components/VinculacionCanales.vue', import.meta.url), 'utf8')
-marcar(/data-testid="asignarme-canal"/.test(vista) && /Agregar mi canal/.test(vista) && /@click="abrirAsignarmeCanal"/.test(vista), 'La pantalla del estudiante tiene el botón «Agregar mi canal»')
+marcar(!existsSync(new URL('../src/components/VinculacionCanales.vue', import.meta.url)), 'El panel antiguo «Asignación de Canales ESP32 por Cuenta» (los 5 canales con «Tomar este Canal» y la ronda) ya no existe')
 const modal = readFileSync(new URL('../src/components/AgregarCanalModal.vue', import.meta.url), 'utf8')
-marcar(/:modo="esProfesorOAdmin \? 'docente' : 'estudiante'"/.test(vista) && /asignarmeCanalConFicha\(datos\)/.test(modal), 'El botón abre la ficha del paciente, los términos y el consentimiento, y al aceptar asigna el canal')
 marcar(/precargarFichaPropia/.test(modal) && /obtenerDeclaracionActiva/.test(modal), 'La ficha del estudiante parte de la que ya tiene guardada para no escribirla de nuevo')
-marcar(!/Tomar este Canal|Tomar este canal|(?<!des)vincular\(ch\.canal\)/.test(vista), 'Ya no hay un botón «Tomar este Canal» por cada canal')
-marcar(/const canalesVisibles = computed\(\(\) => canalesState\.canales\.filter\(c => c\.usuario_id\)\)/.test(vista), 'Como en el perfil del profesor, solo se listan los canales ya tomados')
-marcar(/v-if="esProfesorOAdmin" class="docente-controls"/.test(vista), 'El control de rondas («Abrir siguiente ronda») solo lo ve el profesor o el administrador')
 
 // --- Canal automático del estudiante: sin botones, con su ficha ya guardada
 const rpcOriginal2 = supabase.rpc
