@@ -6,43 +6,45 @@
         Plataforma web educativa, responsiva e instalable (PWA) para medir, visualizar, comparar e interpretar la frecuencia cardíaca y saturación de oxígeno (SpO₂) mediante ESP32 conectado por WiFi.
       </p>
       <AvisoEducativo />
-      <div class="system-status alert alert-info">
-        <strong>Estado de la plataforma:</strong> Base del sistema inicializada para el equipo (Vue 3 + Vite + Supabase).
+      <div class="hero-acciones">
+        <router-link to="/medicion" class="btn btn-primary" data-testid="inicio-medir">Empezar a medir</router-link>
+        <router-link to="/aprendizaje" class="btn btn-secondary" data-testid="inicio-aprender">Aprender</router-link>
+        <router-link to="/galeria" class="btn btn-secondary" data-testid="inicio-galeria">Ver la galería</router-link>
       </div>
     </div>
 
     <div class="features-grid">
-      <div class="feature-card card">
+      <router-link to="/medicion" class="feature-card card">
         <div class="feature-icon">📡</div>
         <h2 class="card-title">Medición y Tiempo Real</h2>
         <p class="feature-text">
           Recepción de datos vía WiFi desde ESP32 con hasta 5 canales simultáneos, cálculo de BPM y SpO₂ en vivo.
         </p>
-      </div>
+      </router-link>
 
-      <div class="feature-card card">
+      <router-link to="/comparacion" class="feature-card card">
         <div class="feature-icon">📊</div>
         <h2 class="card-title">Análisis y Comparación</h2>
         <p class="feature-text">
           Detección de patrones y comparación con plantillas normales (PPG/ECG), ritmos patológicos y datasets validados.
         </p>
-      </div>
+      </router-link>
 
-      <div class="feature-card card">
+      <router-link to="/aulas" class="feature-card card">
         <div class="feature-icon">🏫</div>
         <h2 class="card-title">Aulas y Evaluaciones</h2>
         <p class="feature-text">
           Gestión de cursos, bancos de preguntas, ejercicios prácticos de medición y retroalimentación académica en tiempo real.
         </p>
-      </div>
+      </router-link>
 
-      <div class="feature-card card">
+      <router-link to="/privacidad" class="feature-card card">
         <div class="feature-icon">🔒</div>
         <h2 class="card-title">Seguridad y Normativa</h2>
         <p class="feature-text">
           Control de acceso basado en roles con correos institucionales UNACH, cifrado de datos de salud y cumplimiento normativo.
         </p>
-      </div>
+      </router-link>
     </div>
   </div>
 </template>
@@ -73,6 +75,22 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
   line-height: 1.6;
 }
 
+.hero-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.hero-acciones .btn {
+  min-height: var(--alto-tactil, 44px);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .features-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
@@ -83,10 +101,13 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  text-decoration: none;
+  color: inherit;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.feature-card:hover {
+.feature-card:hover,
+.feature-card:focus-visible {
   transform: translateY(-2px);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
