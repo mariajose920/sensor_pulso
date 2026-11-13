@@ -156,5 +156,12 @@ const completo = readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_co
 marcar(completo.includes('RF107: calificación automática del ejercicio aplicado'), 'La base completa incluye la migración de RF107')
 marcar(completo.includes('evaluación mixta = preguntas + uno o más ejercicios aplicados'), 'La base completa incluye la migración de la evaluación mixta')
 
+// --- Pantalla del estudiante (Mis evaluaciones)
+const vistaEstudiante = readFileSync(new URL('../src/views/MisEvaluacionesView.vue', import.meta.url), 'utf8')
+marcar(/data-testid="progreso"/.test(vistaEstudiante) && /role="progressbar"/.test(vistaEstudiante), 'La pantalla de rendir muestra el avance (preguntas respondidas y ejercicios calificados)')
+marcar(/type="radio"/.test(vistaEstudiante) && /role="radiogroup"/.test(vistaEstudiante), 'Las alternativas son opciones con botón de selección, no un desplegable')
+marcar(/class="me-acciones"/.test(vistaEstudiante) && /position: sticky/.test(vistaEstudiante), 'Entregar y cancelar quedan en una barra fija abajo')
+marcar(/<style scoped>/.test(vistaEstudiante) && /@media \(max-width: 560px\)/.test(vistaEstudiante), 'La pantalla tiene estilos propios y se adapta al teléfono')
+
 console.log(fallos ? `\nRF107: ${fallos} prueba(s) fallaron` : '\nRF107: todas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)
