@@ -84,6 +84,12 @@ const routes = [
     component: () => import('../views/GaleriaView.vue')
   },
   {
+    // RF35: una medición pública compartida por enlace, abierta con o sin sesión
+    path: '/publica/:token',
+    name: 'Publica',
+    component: () => import('../views/PublicaView.vue')
+  },
+  {
     path: '/aulas',
     name: 'Aulas',
     component: AulasView,
