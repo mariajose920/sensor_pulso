@@ -100,3 +100,12 @@ Al entregar (y después, con «Ver correcciones» en el listado), el estudiante 
 
 ## Error «La base rechazó el tipo o el criterio de la evaluación»
 Casi siempre significa que **la base de Supabase no tiene aplicadas las migraciones de RF107** (la restricción del tipo no conoce «mixta»). Ahora el mensaje lo dice y nombra la migración que falta. Solución: en Supabase → SQL Editor, ejecutar `supabase/rf107_aplicar_en_supabase.sql` (junta las tres migraciones) o los tres archivos de `supabase/migrations/` en orden (\`20261113000100\`, \`20261113000200\`, \`20261113000300\`). Al crear una evaluación mixta, si falla guardar sus ejercicios, la evaluación creada se elimina para no dejarla a medias.
+
+## Asignar al crear (curso y fechas) y eliminar evaluaciones
+Complementa RF104 (asignación) y RF109 (modos de aplicación) desde la pantalla *Evaluaciones*.
+- **Al crear una evaluación o usar una plantilla:** el formulario trae la sección «📅 Asignación a los estudiantes». Con «Asignar a los estudiantes al guardar» marcado pide **a qué curso** (o toda el aula), **cómo se aplica** y, según eso, la **fecha y hora de inicio y de término** o la **duración** si es en vivo. Propone fechas (dentro de una hora, por una semana) y valida: ambas fechas, término posterior al inicio y término en el futuro. Si falta algo no se guarda; si se guarda y la asignación falla, lo dice y se puede reintentar con el botón «Asignar».
+- **En cada evaluación guardada:** botón **«🎯 Asignar»** con el mismo formulario.
+- **Eliminar:** botón **«🗑️ Eliminar»** en la lista de *Evaluaciones* y en las evaluaciones asignadas de la página del aula. Pide confirmación y, si ya hay estudiantes que la rindieron, avisa cuántos intentos se borrarán con sus notas (borrado en cascada). Solo el profesor del aula o un administrador (política `evaluaciones_borrar`).
+- **Corrección:** antes, si la base rechazaba una asignación (por ejemplo «solo puedes configurar antes de que abra»), la pantalla igual decía que se había asignado. Ahora, en evaluaciones guardadas, el error real se muestra; el respaldo local solo vale para evaluaciones de prueba.
+- **Archivos:** `src/utils/asignacionEvaluacion.js`, `src/components/AsignacionEvaluacionForm.vue`, `eliminarEvaluacion` y `asignarEvaluacion` en `evaluacionesService.js`, y `scripts/test-rf104-asignacion-eliminar.mjs` (`npm run test:rf104`).
+- **Límite:** la base solo deja configurar una evaluación antes de que abra (`borrador` o `programada`); una ya abierta no se puede reasignar, solo eliminar.

@@ -411,6 +411,20 @@
                   <span>🎯 Asignar</span>
                 </button>
 
+                <!-- Botón Docente: eliminar la evaluación (con sus asignaciones y resultados) -->
+                <button
+                  v-if="isAdmin || isProfesor"
+                  type="button"
+                  class="btn-eval-accion btn-secundario-eval"
+                  data-testid="eliminar-evaluacion-aula"
+                  style="flex: 1; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;"
+                  :disabled="eliminandoEvaluacionId === ev.id"
+                  title="Eliminar esta evaluación y sus asignaciones"
+                  @click="confirmarEliminarEvaluacionAsignada(ev)"
+                >
+                  <span>🗑️ Eliminar</span>
+                </button>
+
                 <button
                   v-if="(isProfesor || isAdmin) && ev.modo === 'en_vivo' && ev.estado === 'programada'"
                   type="button"
@@ -1304,6 +1318,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import {
+  eliminarEvaluacion,
+  contarIntentos,
   asignarEvaluacion,
   controlarEvaluacionEnVivo
 } from '../services/evaluacionesService'
@@ -1825,6 +1841,31 @@ const recargarEvaluacionesRF109 = async () => {
   const res = await obtenerEvaluacionesAula(aulaId)
   if (!res.success) throw new Error(res.error)
   evaluaciones.value = res.data
+}
+
+// Eliminar una evaluación asignada (pide confirmación y avisa si ya hay intentos de estudiantes)
+const eliminandoEvaluacionId = ref('')
+
+const confirmarEliminarEvaluacionAsignada = async (ev) => {
+  const intentos = await contarIntentos(ev.id)
+  const aviso = intentos > 0
+    ? `«${ev.titulo}» ya tiene ${intentos} intento(s) de estudiantes: se borrarán también sus respuestas y notas.`
+    : `Se eliminará «${ev.titulo}» y su asignación.`
+  if (!window.confirm(`${aviso}\n\nEsta acción no se puede deshacer. ¿Eliminar la evaluación?`)) return
+  eliminandoEvaluacionId.value = ev.id
+  try {
+    const res = await eliminarEvaluacion({ evaluacionId: ev.id, puedeGestionar: isProfesor.value || isAdmin.value })
+    if (!res.success) {
+      mostrarFeedback(false, res.error)
+      return
+    }
+    await recargarEvaluacionesRF109()
+    mostrarFeedback(true, `Evaluación «${ev.titulo}» eliminada.`)
+  } catch (error) {
+    mostrarFeedback(false, error.message)
+  } finally {
+    eliminandoEvaluacionId.value = ''
+  }
 }
 
 const abrirModalAsignar = (ev = null) => {

@@ -482,7 +482,7 @@ export async function crearEvaluacion({
   const local = { 
     ...fila, 
     evaluacion_ejercicios: ejerciciosParaGuardar(modelo, { exigirReferencia }),
-    id: `eval-${Date.now()}`, 
+    id: `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, 
     preguntas, 
     precargadaBaseId,
     creado_en: new Date().toISOString() 
@@ -647,6 +647,8 @@ export async function asignarEvaluacion({
     return { success: false, error: 'Debes seleccionar al menos un estudiante para este alcance.' }
   }
 
+  // Una evaluación de la base (id uuid) solo se da por asignada si la base lo confirma: el error real se muestra
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))
   try {
     const { data, error } = await supabase.rpc('asignar_evaluacion_rf109', {
       p_evaluacion_id: evaluacionId,
@@ -662,7 +664,12 @@ export async function asignarEvaluacion({
     if (!error && data) {
       return { success: true, data }
     }
-  } catch (_) {}
+    if (error && esDeLaBase) {
+      return { success: false, error: error.message || 'No se pudo asignar la evaluación.' }
+    }
+  } catch (errorRed) {
+    if (esDeLaBase) return { success: false, error: `No se pudo asignar la evaluación: ${errorRed.message}` }
+  }
 
   // Respaldo resiliente estructurado (RF104 / RF109)
   const filas = []
@@ -674,6 +681,36 @@ export async function asignarEvaluacion({
     filas.push(...estudiantesIds.map(uid => ({ evaluacion_id: evaluacionId, alcance: 'estudiante', curso_id: null, usuario_id: uid })))
   }
   return { success: true, data: filas }
+}
+
+/**
+ * Elimina una evaluación con sus asignaciones, ejercicios, intentos y resultados (borrado en cascada).
+ * Solo la puede borrar el profesor del aula o un administrador (política RLS evaluaciones_borrar).
+ */
+export async function eliminarEvaluacion({ evaluacionId, puedeGestionar = true }) {
+  if (!puedeGestionar) return { success: false, error: 'No tienes permiso para eliminar evaluaciones.' }
+  if (!evaluacionId) return { success: false, error: 'No se indicó qué evaluación eliminar.' }
+
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))
+  if (esDeLaBase) {
+    try {
+      const { data, error } = await supabase.from('evaluaciones').delete().eq('id', evaluacionId).select('id')
+      if (error) return { success: false, error: error.message }
+      if (!Array.isArray(data) || !data.length) {
+        return { success: false, error: 'No se pudo eliminar: la evaluación no existe o no tienes permiso.' }
+      }
+    } catch (errorRed) {
+      return { success: false, error: `No se pudo eliminar la evaluación: ${errorRed.message}` }
+    }
+  }
+
+  const locales = cargarLocales()
+  const quedan = locales.filter((e) => e.id !== evaluacionId)
+  if (!esDeLaBase && quedan.length === locales.length) {
+    return { success: false, error: 'No se encontró la evaluación.' }
+  }
+  guardarLocales(quedan)
+  return { success: true }
 }
 
 export async function controlarEvaluacionEnVivo(evaluacionId, accion) {

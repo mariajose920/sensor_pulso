@@ -256,6 +256,15 @@
               </div>
             </div>
 
+            <!-- Asignación: a qué curso y con qué fechas -->
+            <AsignacionEvaluacionForm
+              v-model="asignacion"
+              :cursos="cursosAula"
+              con-interruptor
+              texto-interruptor="Asignar a los estudiantes al guardar"
+              :mostrar-errores="intentado"
+            />
+
             <p v-if="mensaje" class="alert" :class="mensajeError ? 'alert-error' : 'alert-success'" role="status" data-testid="eval-mensaje">
               {{ mensaje }}
             </p>
@@ -309,6 +318,15 @@
                   >
                     ✏️ Cambiar tipo
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    data-testid="asignar-evaluacion"
+                    @click="abrirAsignacion(e)"
+                    title="Elegir el curso y las fechas de inicio y término"
+                  >
+                    🎯 Asignar
+                  </button>
                   <button 
                     type="button" 
                     class="btn btn-secondary btn-sm"
@@ -317,7 +335,32 @@
                   >
                     📑 Duplicar
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm btn-eliminar-eval"
+                    data-testid="eliminar-evaluacion"
+                    :disabled="eliminandoId === e.id"
+                    @click="confirmarEliminarEvaluacion(e)"
+                    title="Eliminar la evaluación con sus asignaciones y resultados"
+                  >
+                    🗑️ Eliminar
+                  </button>
                 </div>
+                <!-- Asignar una evaluación ya guardada: curso y fechas -->
+                <div v-if="asignando.id === e.id" class="edicion-tipo" data-testid="panel-asignar">
+                  <h4>Asignar «{{ e.titulo }}»</h4>
+                  <AsignacionEvaluacionForm v-model="asignando.datos" :cursos="cursosAula" :mostrar-errores="asignando.intentado" />
+                  <p v-if="asignando.mensaje" class="alert" :class="asignando.error ? 'alert-error' : 'alert-success'" role="status" data-testid="mensaje-asignar">
+                    {{ asignando.mensaje }}
+                  </p>
+                  <div class="edicion-acciones">
+                    <button type="button" class="btn btn-secondary btn-sm" :disabled="asignando.guardando" @click="cerrarAsignacion">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="guardar-asignacion" :disabled="asignando.guardando" @click="guardarAsignacion(e)">
+                      {{ asignando.guardando ? 'Asignando…' : 'Asignar evaluación' }}
+                    </button>
+                  </div>
+                </div>
+
                 <!-- Cambiar el tipo de una evaluación ya guardada: preguntas, ejercicio aplicado o ambas -->
                 <div v-if="edicion.id === e.id" class="edicion-tipo" data-testid="panel-cambiar-tipo">
                   <h4>Tipo de la evaluación</h4>
@@ -396,6 +439,9 @@ import { useAuth } from '../composables/useAuth'
 import { obtenerAulas } from '../services/aulasService'
 import BancoPreguntasPanel from '../components/BancoPreguntasPanel.vue'
 import { listarBancoPreguntas, seleccionarPreguntasAlAzar } from '../services/bancoPreguntasService.js'
+import AsignacionEvaluacionForm from '../components/AsignacionEvaluacionForm.vue'
+import { obtenerCursosAula } from '../services/aulasService'
+import { asignacionVacia, validarAsignacion, parametrosAsignacion, describirAsignacion, fechasSugeridas } from '../utils/asignacionEvaluacion.js'
 import { 
   crearEvaluacion, 
   obtenerEvaluacionesAula, 
@@ -405,7 +451,9 @@ import {
   obtenerResultadosEjercicio,
   recalificarIntento,
   actualizarTipoEvaluacion,
-  contarIntentos
+  contarIntentos,
+  asignarEvaluacion,
+  eliminarEvaluacion
 } from '../services/evaluacionesService'
 import { modeloVacio, modeloDesdeFila, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
 import { ETIQUETA_NIVEL } from '../utils/calificacionEjercicio.js'
@@ -471,6 +519,70 @@ const resultados = ref({})
 const resultadosAbiertos = ref({})
 const resultadosError = ref({})
 const recalificando = ref('')
+
+// Asignación: a qué curso y con qué fechas (al crear, al usar una plantilla o sobre una evaluación guardada)
+const asignacion = ref(asignacionVacia())
+const cursosAula = ref([])
+const eliminandoId = ref('')
+const asignando = ref({ id: null, datos: asignacionVacia(), intentado: false, guardando: false, mensaje: '', error: false })
+
+async function cargarCursos() {
+  cursosAula.value = []
+  if (!aulaId.value) return
+  const res = await obtenerCursosAula(aulaId.value)
+  cursosAula.value = res.success ? (res.data || []) : []
+  // un curso elegido de otra aula ya no vale
+  if (asignacion.value.cursoId && !cursosAula.value.some((c) => c.id === asignacion.value.cursoId)) asignacion.value.cursoId = ''
+}
+
+function abrirAsignacion(e) {
+  if (asignando.value.id === e.id) return cerrarAsignacion()
+  asignando.value = { id: e.id, datos: { ...asignacionVacia(), ...fechasSugeridas() }, intentado: false, guardando: false, mensaje: '', error: false }
+}
+
+function cerrarAsignacion() {
+  asignando.value = { id: null, datos: asignacionVacia(), intentado: false, guardando: false, mensaje: '', error: false }
+}
+
+async function guardarAsignacion(e) {
+  asignando.value.intentado = true
+  asignando.value.mensaje = ''
+  if (validarAsignacion(asignando.value.datos).length) return
+  asignando.value.guardando = true
+  const res = await asignarEvaluacion({
+    evaluacionId: e.id,
+    ...parametrosAsignacion(asignando.value.datos),
+    puedeGestionar: puedeGestionar.value
+  })
+  asignando.value.guardando = false
+  asignando.value.error = !res.success
+  asignando.value.mensaje = res.success ? 'Evaluación asignada.' : res.error
+  if (res.success) {
+    const texto = describirAsignacion(asignando.value.datos, cursosAula.value)
+    await cargarLista()
+    cerrarAsignacion()
+    mensajeError.value = false
+    mensaje.value = `«${e.titulo}» asignada a ${texto}.`
+  }
+}
+
+async function confirmarEliminarEvaluacion(e) {
+  const intentos = e.origen === 'supabase' ? await contarIntentos(e.id) : 0
+  const aviso = intentos > 0
+    ? `«${e.titulo}» ya tiene ${intentos} intento(s) de estudiantes: se borrarán también sus respuestas y notas.`
+    : `Se eliminará «${e.titulo}» con sus asignaciones.`
+  if (!window.confirm(`${aviso}\n\nEsta acción no se puede deshacer. ¿Eliminar la evaluación?`)) return
+  eliminandoId.value = e.id
+  const res = await eliminarEvaluacion({ evaluacionId: e.id, puedeGestionar: puedeGestionar.value })
+  eliminandoId.value = ''
+  mensajeError.value = !res.success
+  mensaje.value = res.success ? `Evaluación «${e.titulo}» eliminada.` : res.error
+  if (res.success) {
+    if (asignando.value.id === e.id) cerrarAsignacion()
+    if (edicion.value.id === e.id) cerrarEdicionTipo()
+    await cargarLista()
+  }
+}
 
 // Cambiar el tipo de una evaluación ya guardada
 const edicion = ref({ id: null, modelo: modeloVacio(), intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false })
@@ -647,6 +759,7 @@ async function cargarLista() {
   if (!aulaId.value) return
   const res = await obtenerEvaluacionesAula(aulaId.value)
   evaluaciones.value = res.data || []
+  await cargarCursos()
 }
 
 async function guardar() {
@@ -660,6 +773,13 @@ async function guardar() {
   if (validarTipoEvaluacion(modelo.value, { exigirReferencia: !plantillaSeleccionadaId.value }).length) return
   if (!titulo.value.trim()) {
     mensaje.value = 'El título de la evaluación es obligatorio.'
+    mensajeError.value = true
+    return
+  }
+
+  // Si se pidió asignarla, hace falta el curso (o toda el aula) y las fechas antes de guardar
+  if (asignacion.value.asignar && validarAsignacion(asignacion.value).length) {
+    mensaje.value = 'Completa la asignación: ' + validarAsignacion(asignacion.value)[0]
     mensajeError.value = true
     return
   }
@@ -687,6 +807,23 @@ async function guardar() {
   mensaje.value = res.origen === 'local'
     ? 'Evaluación guardada localmente (sesión demo).'
     : `¡Evaluación guardada en Supabase con ${totalPreg} pregunta(s) vinculada(s)!`
+
+  // Asignación pedida al guardar: curso/aula y fechas
+  if (asignacion.value.asignar) {
+    const datosAsignacion = { ...asignacion.value }
+    const resAsignar = await asignarEvaluacion({
+      evaluacionId: res.data.id,
+      ...parametrosAsignacion(datosAsignacion),
+      puedeGestionar: puedeGestionar.value
+    })
+    if (resAsignar.success) {
+      mensaje.value += ` Asignada a ${describirAsignacion(datosAsignacion, cursosAula.value)}.`
+    } else {
+      mensaje.value += ` Pero no se pudo asignar: ${resAsignar.error} Puedes asignarla con el botón «Asignar» de la lista.`
+      mensajeError.value = true
+    }
+  }
+  asignacion.value = asignacionVacia()
 
   limpiarPlantilla()
   intentado.value = false
@@ -754,6 +891,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.btn-eliminar-eval { color: #b91c1c; border-color: #fecaca; }
 .edicion-tipo { margin-top: 0.75rem; padding: 0.9rem 1rem; border: 1px solid var(--color-border); border-radius: 10px; background: #f8fafc; }
 .edicion-tipo h4 { margin: 0 0 0.25rem; }
 .edicion-acciones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
