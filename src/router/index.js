@@ -115,6 +115,12 @@ const routes = [
     component: SimuladorView
   },
   {
+    // RF33: biblioteca de casos precargados; va antes de la lección para que no se tome como slug
+    path: '/aprendizaje/casos',
+    name: 'Casos',
+    component: () => import('../views/CasosView.vue')
+  },
+  {
     // Práctica para las evaluaciones: abierta con o sin sesión (va antes de la lección para que no se tome como slug)
     path: '/aprendizaje/practica',
     name: 'Practica',
