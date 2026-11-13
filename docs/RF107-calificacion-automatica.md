@@ -109,3 +109,21 @@ Complementa RF104 (asignación) y RF109 (modos de aplicación) desde la pantalla
 - **Corrección:** antes, si la base rechazaba una asignación (por ejemplo «solo puedes configurar antes de que abra»), la pantalla igual decía que se había asignado. Ahora, en evaluaciones guardadas, el error real se muestra; el respaldo local solo vale para evaluaciones de prueba.
 - **Archivos:** `src/utils/asignacionEvaluacion.js`, `src/components/AsignacionEvaluacionForm.vue`, `eliminarEvaluacion` y `asignarEvaluacion` en `evaluacionesService.js`, y `scripts/test-rf104-asignacion-eliminar.mjs` (`npm run test:rf104`).
 - **Límite:** la base solo deja configurar una evaluación antes de que abra (`borrador` o `programada`); una ya abierta no se puede reasignar, solo eliminar.
+
+## Cuánto falta para que una evaluación esté disponible (estudiante)
+En *Mis evaluaciones*, cada tarjeta muestra una cuenta regresiva que se actualiza cada segundo (RF109):
+- **Aún no abre:** «Estará disponible en 2 d 3 h 0 min» (cuando falta poco cuenta los segundos). Si es en vivo y el profesor no la inició: «Se abrirá cuando tu profesor la inicie».
+- **Abierta:** «Disponible ahora · se cierra en 1 h 59 min». Con 10 minutos o menos se resalta como urgente.
+- **Al rendir:** el encabezado muestra «Tiempo restante: …» (urgente con 5 minutos o menos; «Se acabó el tiempo: entrega ahora» al terminar). Esta cuenta es informativa: quien decide si la entrega se acepta es la base de datos.
+- **Cambio automático:** cuando llega la hora de apertura o de cierre, el listado se vuelve a pedir una vez para reflejar el nuevo estado.
+- **Límite:** usa el reloj del equipo del estudiante; si está desfasado, el contador puede diferir unos segundos del servidor.
+- **Archivos:** `src/utils/tiempoEvaluacion.js` y `scripts/test-tiempo-evaluacion.mjs` (`npm run test:rf109-tiempo`).
+
+## Inicio automático de la evaluación en vivo
+Migración `20261113000400_rf109_inicio_automatico.sql` (también en la base completa). El profesor **no tiene que entrar al aula a pulsar «Iniciar en vivo»**: la evaluación se abre sola a la hora indicada, dura su tiempo límite y se cierra sola.
+
+- **Qué pide el formulario de asignación:** «¿Cuándo empieza?» con tres opciones: **en una fecha y hora**, **dentro de N minutos** (se convierte en fecha al guardar y muestra «Empezará el …») o, solo en vivo, **cuando yo la inicie** (manual, como antes). En el modo con fechas también se puede empezar «dentro de N minutos»; el término sigue siendo una fecha. Se valida que el inicio no esté vencido y que el término sea posterior.
+- **Cómo se cumple la hora:** la base considera abierta una evaluación en vivo desde `coalesce(iniciada_en, abre_en)` hasta ese momento más el tiempo límite (`evaluacion_abierta`). Usa el reloj de la base, así que funciona aunque nadie abra ninguna pantalla. `activar_evaluaciones_programadas()` solo ordena el estado (en curso e inicio real) para los paneles del profesor; se llama al cargar *Mis evaluaciones* y las evaluaciones del aula.
+- **Estudiante:** ve «Estará disponible en …» y, a la hora, el listado se actualiza solo y aparece «Rendir evaluación» (ver «Cuánto falta»). Pasado el tiempo, queda como cerrada.
+- **Profesor:** la tarjeta de la evaluación dice «Inicia sola el …». «Iniciar ahora (adelantar)» sigue sirviendo para empezar antes; si ya está abierta no la reinicia. «Cerrar en vivo» funciona también sobre una abierta automáticamente. En el modal de asignar del aula, la evaluación en vivo tiene el campo «Inicio automático (opcional)».
+- **Límite:** una evaluación abierta no se puede reasignar. Hay que aplicar la migración en Supabase (SQL Editor) antes de usarlo; sin ella el campo de inicio se ignora y la evaluación sigue siendo manual.

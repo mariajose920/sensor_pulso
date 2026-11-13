@@ -349,6 +349,10 @@
 
                   <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
+                <p v-if="ev.modo === 'en_vivo' && ev.abre_en && ev.estado === 'programada'" class="eval-inicio-auto" data-testid="inicio-automatico-aviso">
+                  ⏱ Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
+                  (no hace falta iniciarla en vivo)
+                </p>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
                 <p class="eval-card-desc">{{ ev.descripcion || 'Sin instrucciones adicionales especificadas.' }}</p>
               </div>
@@ -432,7 +436,7 @@
                   :disabled="Boolean(controlandoEvaluacionId)"
                   @click="controlarEnVivo(ev, 'iniciar')"
                 >
-                  Iniciar en vivo
+                  {{ ev.abre_en ? 'Iniciar ahora (adelantar)' : 'Iniciar en vivo' }}
                 </button>
 
                 <button
@@ -1204,7 +1208,20 @@
             />
           </div>
           <div v-else class="form-group mb-3">
-            <label class="form-label" for="rf109-duracion">Tiempo límite en minutos</label>
+            <label class="form-label" for="rf109-inicio-auto">Inicio automático (opcional)</label>
+            <input
+              id="rf109-inicio-auto"
+              v-model="abreEnAplicacion"
+              type="datetime-local"
+              class="form-input"
+              data-testid="inicio-automatico"
+            />
+            <small class="help-text">
+              Si indicas fecha y hora, la evaluación en vivo se inicia sola y no tendrás que entrar a pulsar «Iniciar en vivo».
+              Déjalo vacío para iniciarla tú a mano.
+            </small>
+
+            <label class="form-label" for="rf109-duracion" style="margin-top: 0.75rem;">Tiempo límite en minutos</label>
             <input
               id="rf109-duracion"
               v-model.number="duracionAplicacionMin"
@@ -1888,7 +1905,8 @@ const guardarAsignacionEvaluacion = async () => {
 
   try {
     const esVentana = modoAplicacion.value === 'ventana'
-    const abre = esVentana ? new Date(abreEnAplicacion.value) : null
+    // En vivo, la fecha es el inicio automático (opcional); con fechas es la apertura
+    const abre = (esVentana || abreEnAplicacion.value) ? new Date(abreEnAplicacion.value) : null
     const cierra = esVentana ? new Date(cierraEnAplicacion.value) : null
 
     if (esVentana && !(abre < cierra)) {
@@ -3499,4 +3517,5 @@ const evaluacionesVisibles = computed(() => {
   color: #b91c1c;
   border: 1px solid #fecaca;
 }
+.eval-inicio-auto { margin: 0.4rem 0 0; padding: 0.3rem 0.6rem; border-radius: 8px; background: #dbeafe; color: #1e40af; font-size: 0.82rem; font-weight: 600; display: inline-block; }
 </style>

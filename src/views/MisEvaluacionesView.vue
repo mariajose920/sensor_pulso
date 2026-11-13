@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { tiempoEvaluacion, tiempoParaEntregar, cambioPorTiempo } from '../utils/tiempoEvaluacion.js'
 import { supabase } from '../services/supabase.js'
 import { enviarRespuestasConResiliencia } from '../services/respuestasSimultaneasService.js'
 import { iniciarHeartbeatEstudiante, desconectarEstudiante } from '../services/panelEnVivoService.js'
@@ -34,6 +35,24 @@ const estados = {
   disponible: 'Disponible',
   cerrada: 'Cerrada',
   entregada: 'Entregada'
+}
+
+// Reloj de la pantalla: actualiza cada segundo el tiempo que falta para abrir o cerrar
+const ahora = ref(Date.now())
+const tiempoDe = (ev) => tiempoEvaluacion(ev, ahora.value)
+const tiempoEntrega = computed(() => (seleccion.value ? tiempoParaEntregar(seleccion.value, ahora.value) : null))
+let relojTiempo = null
+const yaRecargadas = new Set()
+
+// Cuando el tiempo hace que una evaluación se abra o se cierre, se pide el listado una vez para reflejarlo
+const revisarCambiosPorTiempo = async () => {
+  if (seleccion.value || resultadoFinal.value || ocupado.value) return
+  const cambio = evaluaciones.value
+    .map((ev) => ({ clave: ev.id + ':' + ev.disponibilidad, cambio: cambioPorTiempo(ev, ahora.value) }))
+    .find((c) => c.cambio && !yaRecargadas.has(c.clave))
+  if (!cambio) return
+  yaRecargadas.add(cambio.clave)
+  try { await cargar() } catch (_) { /* se vuelve a intentar con «Actualizar listado» */ }
 }
 
 // Ayudas visuales de la pantalla
@@ -103,6 +122,8 @@ const ejecutar = async (operacion) => {
 }
 
 const cargar = async () => {
+  // Las evaluaciones en vivo con inicio programado se activan solas a su hora; esto solo ordena su estado
+  try { await supabase.rpc('activar_evaluaciones_programadas') } catch (_) { /* migración aún no aplicada: no es grave */ }
   const { data, error: fallo } = await supabase.rpc('mis_evaluaciones_rf109')
   if (fallo) throw fallo
   evaluaciones.value = data || []
@@ -283,8 +304,15 @@ const volver = () => ejecutar(async () => {
 
 const fechaLocal = valor => new Date(valor).toLocaleString('es-CL')
 
-onMounted(() => ejecutar(cargar))
+onMounted(() => {
+  relojTiempo = setInterval(() => {
+    ahora.value = Date.now()
+    revisarCambiosPorTiempo()
+  }, 1000)
+  return ejecutar(cargar)
+})
 onUnmounted(() => {
+  if (relojTiempo) clearInterval(relojTiempo)
   if (heartbeatControl) {
     heartbeatControl.detener()
     heartbeatControl = null
@@ -405,6 +433,9 @@ onUnmounted(() => {
           </div>
 
           <h2>{{ ev.titulo }}</h2>
+          <p v-if="tiempoDe(ev)" class="me-tiempo" :class="'tiempo-' + tiempoDe(ev).tipo" data-testid="tiempo-evaluacion">
+            <span aria-hidden="true">⏱</span> {{ tiempoDe(ev).texto }}
+          </p>
           <p v-if="ev.descripcion" class="me-desc">{{ ev.descripcion }}</p>
 
           <dl v-if="ev.abre_en || ev.cierra_en" class="me-fechas">
@@ -448,6 +479,9 @@ onUnmounted(() => {
         <button type="button" class="me-volver" :disabled="ocupado" @click="volver">← Volver al listado</button>
         <span class="chip chip-tipo">{{ etiquetaTipo(seleccion.tipo, seleccion.ejercicio, ejerciciosMixta.length) }}</span>
         <h2>{{ seleccion.titulo }}</h2>
+        <p v-if="tiempoEntrega" class="me-tiempo" :class="'tiempo-' + tiempoEntrega.tipo" role="timer" data-testid="tiempo-restante">
+          <span aria-hidden="true">⏱</span> {{ tiempoEntrega.texto }}
+        </p>
         <p v-if="seleccion.descripcion" class="me-desc">{{ seleccion.descripcion }}</p>
 
         <div class="me-progreso" data-testid="progreso">
@@ -615,6 +649,16 @@ onUnmounted(() => {
 .me-fechas dt { color: var(--color-muted); }
 .me-fechas dd { margin: 0; font-weight: 600; }
 .me-cta { margin-top: auto; align-self: flex-start; }
+
+/* Tiempo para abrir o cerrar */
+.me-tiempo { margin: 0; padding: 0.35rem 0.7rem; border-radius: 8px; font-size: 0.88rem; font-weight: 600; display: inline-flex; gap: 0.4rem; align-self: flex-start;
+  background: #f1f5f9; color: #334155; }
+.me-tiempo.tiempo-espera { background: #ffedd5; color: #9a3412; }
+.me-tiempo.tiempo-abierta { background: #dbeafe; color: #1e40af; }
+.me-tiempo.tiempo-urgente { background: #fef3c7; color: #92400e; animation: me-latido 1.6s ease-in-out infinite; }
+.me-tiempo.tiempo-agotada { background: #fee2e2; color: #991b1b; }
+@keyframes me-latido { 50% { opacity: 0.65; } }
+@media (prefers-reduced-motion: reduce) { .me-tiempo.tiempo-urgente { animation: none; } }
 
 /* Resultado */
 .me-resultado { border-radius: 10px; padding: 0.7rem 0.85rem; background: #f8fafc; border: 1px solid var(--color-border); font-size: 0.9rem; }

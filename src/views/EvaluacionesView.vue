@@ -549,16 +549,17 @@ async function guardarAsignacion(e) {
   asignando.value.mensaje = ''
   if (validarAsignacion(asignando.value.datos).length) return
   asignando.value.guardando = true
+  const parametros = parametrosAsignacion(asignando.value.datos)
   const res = await asignarEvaluacion({
     evaluacionId: e.id,
-    ...parametrosAsignacion(asignando.value.datos),
+    ...parametros,
     puedeGestionar: puedeGestionar.value
   })
   asignando.value.guardando = false
   asignando.value.error = !res.success
   asignando.value.mensaje = res.success ? 'Evaluación asignada.' : res.error
   if (res.success) {
-    const texto = describirAsignacion(asignando.value.datos, cursosAula.value)
+    const texto = describirAsignacion(asignando.value.datos, cursosAula.value, parametros)
     await cargarLista()
     cerrarAsignacion()
     mensajeError.value = false
@@ -811,13 +812,14 @@ async function guardar() {
   // Asignación pedida al guardar: curso/aula y fechas
   if (asignacion.value.asignar) {
     const datosAsignacion = { ...asignacion.value }
+    const parametros = parametrosAsignacion(datosAsignacion) // fija la hora si se pidió «dentro de N minutos»
     const resAsignar = await asignarEvaluacion({
       evaluacionId: res.data.id,
-      ...parametrosAsignacion(datosAsignacion),
+      ...parametros,
       puedeGestionar: puedeGestionar.value
     })
     if (resAsignar.success) {
-      mensaje.value += ` Asignada a ${describirAsignacion(datosAsignacion, cursosAula.value)}.`
+      mensaje.value += ` Asignada a ${describirAsignacion(datosAsignacion, cursosAula.value, parametros)}.`
     } else {
       mensaje.value += ` Pero no se pudo asignar: ${resAsignar.error} Puedes asignarla con el botón «Asignar» de la lista.`
       mensajeError.value = true
