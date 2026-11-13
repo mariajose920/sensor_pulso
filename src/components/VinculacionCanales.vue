@@ -120,7 +120,7 @@
           data-testid="asignarme-canal"
           :disabled="!estadoAsignacionEstudiante.puede || canalesState.cargando"
           :title="estadoAsignacionEstudiante.puede ? 'Asigna automáticamente el siguiente canal libre' : estadoAsignacionEstudiante.motivo"
-          @click="asignarmeCanal"
+          @click="abrirAsignarmeCanal"
         >
           ➕ Asignarme un canal
         </button>
@@ -132,6 +132,7 @@
 
     <AgregarCanalModal
       :visible="modalAgregarVisible"
+      :modo="esProfesorOAdmin ? 'docente' : 'estudiante'"
       :canal-existente="canalPendiente"
       @cerrar="modalAgregarVisible = false"
       @agregado="alAgregarCanal"
@@ -248,7 +249,6 @@ import {
   abrirSiguienteRonda,
   estadoAgregarCanal,
   estadoAsignacionEstudiante,
-  asignarmeCanalAutomatico,
   misCanales,
   MAX_CANALES_DOCENTE
 } from '../services/canalesService'
@@ -269,32 +269,16 @@ function formatearHora(isoString) {
   return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-// El estudiante pulsa el botón y el sistema le asigna el siguiente canal libre (RF111)
-async function asignarmeCanal() {
-  errorMensaje.value = ''
-  mensajeExito.value = ''
-
-  // RF04: El consentimiento informado emerge cuando el usuario toma el canal
-  if (!consentimientoEstado.value.vigente) {
-    emit('solicitar-consentimiento', () => asignarmeCanal())
-    return
-  }
-
-  try {
-    const { canal } = await asignarmeCanalAutomatico()
-    mensajeExito.value = `Se te asignó automáticamente el Canal ${canal} para la Ronda ${metricasRonda.value.rondaActual}. Ya puedes medir en él.`
-    emit('canal-seleccionado', canal)
-    setTimeout(() => { mensajeExito.value = '' }, 4000)
-  } catch (err) {
-    errorMensaje.value = err.message
-  }
-}
-
 const modalAgregarVisible = ref(false)
 const canalPendiente = ref(null)
 
 const ETIQUETAS_REQUISITO = { ficha: 'la ficha del paciente', politica: 'aceptar los términos y la privacidad', consentimiento: 'el consentimiento informado' }
 function etiquetaRequisito(r) { return ETIQUETAS_REQUISITO[r] || r }
+
+// Estudiante: el botón abre la ficha del paciente, los términos y el consentimiento; al aceptar se asigna el canal solo (RF111)
+function abrirAsignarmeCanal() {
+  abrirAgregarCanal(null)
+}
 
 function abrirAgregarCanal(canalExistente) {
   errorMensaje.value = ''

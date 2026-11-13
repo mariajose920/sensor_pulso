@@ -200,42 +200,6 @@ export async function vincularMiCuentaACanal(canalNum) {
 }
 
 /**
- * El estudiante pulsa un botón y el sistema le asigna automáticamente el siguiente canal libre (RF111).
- * Si otro estudiante toma ese canal justo antes (la base devuelve false), se prueba con el siguiente libre.
- * Sin sesión real de la base, se asigna en memoria con la misma regla.
- */
-export async function asignarmeCanalAutomatico() {
-  if (miCanalAsignado.value) throw new Error(`Ya tienes asignado el Canal ${miCanalAsignado.value}.`)
-  for (let intento = 0; intento < 5; intento++) {
-    const canal = siguienteCanalLibre(canalesState.canales)
-    if (canal === null) throw new Error('No quedan canales libres en esta ronda. Espera a que el profesor abra la siguiente.')
-
-    canalesState.cargando = true
-    canalesState.error = null
-    try {
-      const { data: tomado, error } = await supabase.rpc('elegir_canal', {
-        p_sesion: canalesState.sesionActivaId,
-        p_canal: canal
-      })
-      if (!error && tomado) {
-        await cargarSesionYCanales()
-        canalesState.cargando = false
-        return { ok: true, canal }
-      }
-      if (!error && tomado === false) {
-        // Lo tomó otra cuenta un instante antes: se actualiza la lista y se intenta con el siguiente libre
-        await cargarSesionYCanales()
-        canalesState.cargando = false
-        continue
-      }
-    } catch (_) { /* sin base: se asigna en memoria */ }
-    canalesState.cargando = false
-    return vincularMiCuentaACanal(canal)
-  }
-  throw new Error('No se pudo asignar un canal libre. Inténtalo de nuevo.')
-}
-
-/**
  * Libera el canal ocupado por el usuario actual
  */
 export async function desvincularMiCuenta(canalEspecifico = null) {
@@ -391,13 +355,20 @@ export function esUuid(valor) { return typeof valor === 'string' && UUID_RE.test
  * Con `canalExistente` solo se completan los requisitos de un canal que ya es mío (p. ej. tras recargar).
  * Solo profesor/admin: la base de datos lo vuelve a exigir (RNF12).
  */
-export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, canalExistente = null }) {
-  if (!esDocente(usuarioActual.rol)) {
-    throw new Error('Solo el profesor y el administrador pueden agregar otro canal.')
-  }
-  if (!canalExistente) {
-    const estado = estadoAgregarCanal.value
+export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, canalExistente = null, comoEstudiante = false }) {
+  if (comoEstudiante) {
+    // Estudiante (RF111): un solo canal, asignado solo, con su ficha, los términos y el consentimiento
+    if (esDocente(usuarioActual.rol)) throw new Error('El profesor y el administrador usan «Agregar canal».')
+    const estado = estadoAsignacionEstudiante.value
     if (!estado.puede) throw new Error(estado.motivo)
+  } else {
+    if (!esDocente(usuarioActual.rol)) {
+      throw new Error('Solo el profesor y el administrador pueden agregar otro canal.')
+    }
+    if (!canalExistente) {
+      const estado = estadoAgregarCanal.value
+      if (!estado.puede) throw new Error(estado.motivo)
+    }
   }
   const validacion = pacienteService.validarDatos(ficha || {})
   if (!validacion.valido) throw new Error(validacion.errores[0])
@@ -427,13 +398,20 @@ export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoV
         throw new Error(`No se pudo guardar la ficha del paciente en el servidor${guardada.errorServidor ? `: ${guardada.errorServidor}` : ''}. Intenta de nuevo.`)
       }
 
-      const { data, error } = await supabase.rpc('agregar_canal_automatico', {
-        p_sesion: canalesState.sesionActivaId,
-        p_declaracion: guardada.declaracionId,
-        p_politica_version: politicaVersion,
-        p_consentimiento_version: consentimientoVersion,
-        p_canal: canalExistente
-      })
+      const { data, error } = comoEstudiante
+        ? await supabase.rpc('asignar_canal_estudiante', {
+          p_sesion: canalesState.sesionActivaId,
+          p_declaracion: guardada.declaracionId,
+          p_politica_version: politicaVersion,
+          p_consentimiento_version: consentimientoVersion
+        })
+        : await supabase.rpc('agregar_canal_automatico', {
+          p_sesion: canalesState.sesionActivaId,
+          p_declaracion: guardada.declaracionId,
+          p_politica_version: politicaVersion,
+          p_consentimiento_version: consentimientoVersion,
+          p_canal: canalExistente
+        })
       if (error) throw new Error(error.message)
       canal = Number(data)
       await cargarSesionYCanales()
@@ -462,4 +440,12 @@ export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoV
   } finally {
     canalesState.cargando = false
   }
+}
+
+/**
+ * El estudiante pulsa «Asignarme un canal»: el sistema toma el siguiente canal libre (no se elige) y guarda los datos del
+ * paciente (ficha, RF03), la política (RF88) y el consentimiento (RF04), igual que «Agregar canal» del profesor.
+ */
+export function asignarmeCanalConFicha({ ficha, politicaVersion, consentimientoVersion }) {
+  return agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, comoEstudiante: true })
 }

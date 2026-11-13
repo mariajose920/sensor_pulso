@@ -4,10 +4,10 @@
       <div class="modal-header">
         <div>
           <h2 id="canal-extra-titulo" class="modal-title">
-            {{ canalExistente ? `Completar requisitos del Canal ${canalExistente}` : (misCanales.length ? 'Agregar otro canal' : 'Agregar canal') }}
+            {{ esEstudiante ? 'Asignarme un canal' : (canalExistente ? `Completar requisitos del Canal ${canalExistente}` : (misCanales.length ? 'Agregar otro canal' : 'Agregar canal')) }}
           </h2>
           <span class="version-tag">
-            {{ canalExistente ? 'Este canal ya es tuyo, pero aún no puede medir.' : 'El sistema te asigna automáticamente el siguiente canal libre.' }}
+            {{ canalExistente && !esEstudiante ? 'Este canal ya es tuyo, pero aún no puede medir.' : 'El sistema te asigna automáticamente el siguiente canal libre.' }}
           </span>
         </div>
         <button type="button" class="btn-close" @click="cerrar" aria-label="Cerrar">✕</button>
@@ -21,7 +21,7 @@
       <div class="modal-body">
         <!-- Paso 1: ficha RF03 de la persona de este canal -->
         <form v-if="paso === 1" novalidate @submit.prevent="siguienteDeFicha">
-          <p class="hint">Datos de la persona que se medirá en este canal.</p>
+          <p class="hint">{{ esEstudiante ? 'Tus datos de paciente: se guardan junto a tu canal y se usan al guardar tus mediciones.' : 'Datos de la persona que se medirá en este canal.' }}</p>
           <div v-if="errores.length" class="alert alert-danger" role="alert" data-testid="errores-ficha">
             <ul><li v-for="e in errores" :key="e">{{ e }}</li></ul>
           </div>
@@ -136,12 +136,15 @@ import {
   CONDICIONES_SALUD_COMUNES
 } from '../services/pacienteService.js'
 import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
-import { agregarOtroCanal, misCanales } from '../services/canalesService.js'
+import { agregarOtroCanal, asignarmeCanalConFicha, misCanales, usuarioActual } from '../services/canalesService.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
-  canalExistente: { type: Number, default: null }
+  canalExistente: { type: Number, default: null },
+  // 'docente': agrega canales de pacientes (profesor/admin). 'estudiante': el estudiante se asigna su canal con su ficha.
+  modo: { type: String, default: 'docente' }
 })
+const esEstudiante = computed(() => props.modo === 'estudiante')
 const emit = defineEmits(['cerrar', 'agregado'])
 
 function fichaVacia() {
@@ -168,6 +171,7 @@ watch(() => props.visible, (v) => {
   if (!v) return
   paso.value = 1
   ficha.value = fichaVacia()
+  if (props.modo === 'estudiante') precargarFichaPropia()
   errores.value = []
   aceptaTodo.value = false
   guardando.value = false
@@ -177,6 +181,19 @@ watch(() => props.visible, (v) => {
 onMounted(async () => {
   doc.value = await consentimientoService.obtenerVersionActiva()
 })
+
+// Estudiante: se parte de su ficha ya guardada (si la tiene) para no volver a escribirla; puede corregirla.
+async function precargarFichaPropia() {
+  ficha.value.nombre = usuarioActual.nombre || ''
+  try {
+    const guardada = await pacienteService.obtenerDeclaracionActiva()
+    if (!guardada) return
+    const base = fichaVacia()
+    for (const campo of Object.keys(base)) {
+      if (guardada[campo] !== undefined && guardada[campo] !== null && guardada[campo] !== '') ficha.value[campo] = guardada[campo]
+    }
+  } catch (_) { /* sin ficha previa: se escribe de cero */ }
+}
 
 function siguienteDeFicha() {
   // La edad numérica de la ficha se deriva de la fecha de nacimiento (otras partes consumen `edad`)
@@ -193,12 +210,14 @@ async function aceptarYAsignar() {
   errorGuardar.value = ''
   try {
     const registro = await consentimientoService.aceptarConsentimiento(doc.value.version)
-    const res = await agregarOtroCanal({
+    const datos = {
       ficha: { ...ficha.value },
       politicaVersion: POLITICA_VERSION,
-      consentimientoVersion: registro?.data?.version || doc.value.version,
-      canalExistente: props.canalExistente
-    })
+      consentimientoVersion: registro?.data?.version || doc.value.version
+    }
+    const res = esEstudiante.value
+      ? await asignarmeCanalConFicha(datos)
+      : await agregarOtroCanal({ ...datos, canalExistente: props.canalExistente })
     emit('agregado', res.canal)
     emit('cerrar')
   } catch (err) {
