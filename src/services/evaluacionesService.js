@@ -692,3 +692,15 @@ import { enviarRespuestasConResiliencia as enviarRespuestasResilientes } from '.
 export async function entregarRespuestasEvaluacion({ evaluacionId, intentoId, respuestas, opciones = {} }) {
   return await enviarRespuestasResilientes({ evaluacionId, intentoId, respuestas, opciones })
 }
+
+// ----------------------------------------------------------------------------
+// RF113: PANEL EN VIVO Y MONITOREO EN TIEMPO REAL
+// ----------------------------------------------------------------------------
+export {
+  obtenerAvanceEnVivo,
+  suscribirAvanceEnVivo,
+  registrarPresenciaEstudiante,
+  desconectarEstudiante,
+  iniciarHeartbeatEstudiante
+} from './panelEnVivoService.js'
+
