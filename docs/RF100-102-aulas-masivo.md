@@ -7,8 +7,15 @@ Rama: `rf100-102-aulas-masivo` (sale de `rf107-calificacion-automatica`, porque 
 - **Retirar varios estudiantes (RF102):** en el mismo modal hay una lista con casillas, «Seleccionar todos» y «Retirar seleccionados (n)», con confirmación. Usa `retirarEstudiantesAula` (función `retirar_estudiantes`, con auditoría). El estudiante retirado deja de ver el aula; su cuenta y sus mediciones personales no se borran.
 - **Eliminar el aula:** botón «Eliminar aula» en cada tarjeta. El modal muestra cuántos estudiantes y evaluaciones se perderán y exige escribir el nombre del aula. Solo el profesor dueño o un administrador (en Supabase lo exige también la política `aulas_borrar`).
 
+## El correo que recibe el estudiante
+- Dice quién lo invita (el profesor) y a qué aula, y muestra el código.
+- Botón **«Unirme al aula»**: lleva a `/aulas?unirse=CODIGO`. Si el estudiante no tiene sesión, entra al inicio de sesión y vuelve a esa dirección; en *Aulas* ve el aviso «Tu profesor te invitó a un aula» con el código ya escrito y pulsa «Unirme al Aula» (no se une solo con solo abrir el enlace).
+- Enlace **«Ver la sala en el sitio web»**: lleva a `/aulas`.
+- Las direcciones salen de `APP_URL` (producción); en local, de `http://localhost:5173`; en cualquier otro caso, de la web publicada. Nunca se toma un origen externo de la petición.
+
 ## Configuración del correo (Resend)
 - `RESEND_API_KEY` (obligatoria): en local va en `.env.local` y en producción en las variables de entorno de Vercel. Sin ella el envío falla con «Falta la variable RESEND_API_KEY». Tras agregarla hay que **reiniciar** `npm run dev`.
+- `APP_URL` (recomendada en producción): web a la que apuntan los botones del correo.
 - `RESEND_FROM` (opcional): remitente. Por defecto se usa `onboarding@resend.dev`, el remitente de pruebas de Resend, que **solo entrega al correo de la cuenta de Resend**. Para invitar a estudiantes reales hay que verificar un dominio en Resend y definir aquí un remitente de ese dominio.
 
 ## Eliminar el aula es definitivo

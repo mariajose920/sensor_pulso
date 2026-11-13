@@ -164,6 +164,11 @@
 
       <!-- VISTA ESTUDIANTE (RF100) -->
       <div v-else class="section-block">
+        <!-- Llegó desde el botón «Unirme al aula» del correo de invitación -->
+        <div v-if="codigoDeInvitacion" class="alert alert-info" data-testid="invitacion-recibida">
+          Tu profesor te invitó a un aula. Con el código <strong>{{ codigoDeInvitacion }}</strong> ya escrito abajo,
+          pulsa <strong>Unirme al Aula</strong> para entrar.
+        </div>
         <div class="unirse-card card mb-4">
           <h2 class="section-title">Unirse a un Aula Virtual</h2>
           <p class="section-desc">
@@ -504,6 +509,8 @@ const cargando = ref(false)
 const guardando = ref(false)
 const uniendoAula = ref(false)
 const codigoIngreso = ref('')
+// Código que trae el enlace del correo de invitación (/aulas?unirse=CODIGO)
+const codigoDeInvitacion = ref('')
 const feedbackMensaje = ref('')
 const feedbackExito = ref(true)
 
@@ -918,6 +925,11 @@ const copiarCodigo = (codigo) => {
 }
 
 onMounted(async () => {
+  const codigoEnlace = String(route.query.unirse || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+  if (codigoEnlace && !isProfesor.value) {
+    codigoDeInvitacion.value = codigoEnlace
+    codigoIngreso.value = codigoEnlace
+  }
   await cargarDatos()
   // Llegó desde "Crear aula" de la evaluación: abre directo el formulario del aula
   if (route.query.crear === '1' && isProfesor.value && tienePermisoProfesor('crear_aulas')) {

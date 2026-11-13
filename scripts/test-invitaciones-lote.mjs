@@ -68,6 +68,30 @@ await handler(crearPeticion({ ...base, correos: [correos[0]] }, '10.0.1.2'), res
 marcar(JSON.parse(llamadas[0].opciones.body)[0].from === 'Sensor Pulso <invitaciones@midominio.cl>', 'RESEND_FROM define el remitente (dominio verificado)')
 delete process.env.RESEND_FROM
 
+// 2b. Contenido del correo: curso, profesor, botón para unirse y enlace al sitio
+comportamientoResend = () => json(200, { data: [{ id: 'x' }] })
+res = crearRespuesta(); llamadas.length = 0
+await handler(crearPeticion({ ...base, correos: [correos[0]] }, '10.0.2.1'), res)
+const correoEnviado = JSON.parse(llamadas[0].opciones.body)[0]
+marcar(/Unirme al aula<\/a>/.test(correoEnviado.html) && correoEnviado.html.includes('href="http://localhost:5173/aulas?unirse=K8M3X9P2"'), 'El correo trae el botón «Unirme al aula» con el enlace que lleva el código')
+marcar(correoEnviado.html.includes('Ver la sala en el sitio web') && correoEnviado.html.includes('href="http://localhost:5173/aulas"'), 'El correo trae un enlace al sitio web para ver la sala')
+marcar(correoEnviado.html.includes('Profe') && correoEnviado.html.includes('Fisiología'), 'El correo nombra al profesor y al curso')
+marcar(correoEnviado.text.includes('unirse=K8M3X9P2') && correoEnviado.text.includes('Profe'), 'La versión en texto también lleva el enlace y el profesor')
+// El enlace no se puede apuntar a un sitio ajeno desde la petición
+res = crearRespuesta(); llamadas.length = 0
+const peticionAjena = crearPeticion({ ...base, correos: [correos[0]] }, '10.0.2.2')
+peticionAjena.headers.origin = 'https://sitio-malicioso.example'
+peticionAjena.headers.host = 'sitio-malicioso.example'
+await handler(peticionAjena, res)
+const htmlAjeno = llamadas.length ? JSON.parse(llamadas[0].opciones.body)[0].html : ''
+marcar(!htmlAjeno.includes('sitio-malicioso') , 'Un origen externo nunca se usa en los enlaces del correo')
+if (htmlAjeno) marcar(htmlAjeno.includes('https://sensorpulso.vercel.app/aulas?unirse=K8M3X9P2'), 'Fuera de localhost los enlaces apuntan a la web publicada')
+process.env.APP_URL = 'https://aula.midominio.cl/'
+res = crearRespuesta(); llamadas.length = 0
+await handler(crearPeticion({ ...base, correos: [correos[0]] }, '10.0.2.3'), res)
+marcar(JSON.parse(llamadas[0].opciones.body)[0].html.includes('href="https://aula.midominio.cl/aulas?unirse=K8M3X9P2"'), 'APP_URL define la web de los enlaces')
+delete process.env.APP_URL
+
 // 3. Rechazo parcial
 comportamientoResend = () => json(200, { data: [{ id: 'id-1' }, { id: 'id-3' }], errors: [{ index: 1, message: 'Dirección rechazada' }] })
 res = crearRespuesta()

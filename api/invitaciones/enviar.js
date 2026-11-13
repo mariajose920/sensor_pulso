@@ -7,6 +7,25 @@ import { escaparHtml, aplicarCabecerasSeguridad, validarOrigenCsrf } from '../_l
 // para invitar a estudiantes de verdad hay que verificar un dominio en Resend y definir RESEND_FROM.
 const REMITENTE_POR_DEFECTO = 'Sensor Pulso UNACH <onboarding@resend.dev>'
 
+/**
+ * Dirección de la web que llevan los botones del correo. Orden: APP_URL (producción) → el origen de la petición si es
+ * localhost (pruebas en local) → la web publicada. Nunca se toma un origen externo de la petición, para que nadie
+ * pueda usar este endpoint y poner enlaces a otro sitio dentro de un correo institucional.
+ */
+function urlBase(req) {
+  const configurada = (process.env.APP_URL || process.env.PUBLIC_APP_URL || '').trim().replace(/\/+$/, '')
+  if (/^https?:\/\/[^\s]+$/i.test(configurada)) return configurada
+  const origen = String((req.headers && req.headers.origin) || '')
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origen)) return origen
+  return 'https://sensorpulso.vercel.app'
+}
+
+// Para direcciones dentro de href: solo se escapa lo que podría cerrar el atributo o abrir una etiqueta
+// (las barras se dejan tal cual para que el enlace sea legible y los clientes de correo no lo alteren).
+function escaparAtributo(valor) {
+  return String(valor).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function responder(res, estado, cuerpo) {
   res.statusCode = estado
   res.setHeader('Content-Type', 'application/json')
@@ -14,7 +33,9 @@ function responder(res, estado, cuerpo) {
 }
 
 /** Arma el asunto, el HTML y el texto del correo de un estudiante (todo el contenido del usuario va escapado, RF68). */
-function construirCorreo({ correo, codigo, nombreAula, nombreDocente }) {
+function construirCorreo({ correo, codigo, nombreAula, nombreDocente, urlUnirse, urlSitio }) {
+  const urlUnirseEscapada = escaparAtributo(urlUnirse)
+  const urlSitioEscapada = escaparAtributo(urlSitio)
   const nombreAulaEscapado = escaparHtml(nombreAula)
   const nombreDocenteEscapado = escaparHtml(nombreDocente)
   const codigoEscapado = escaparHtml(codigo)
@@ -57,13 +78,19 @@ function construirCorreo({ correo, codigo, nombreAula, nombreDocente }) {
             <div class="code-value">${codigoEscapado}</div>
           </div>
 
+          <p style="text-align: center; margin: 28px 0 12px;">
+            <a href="${urlUnirseEscapada}" style="display: inline-block; background: #1e40af; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 32px; border-radius: 8px;">Unirme al aula</a>
+          </p>
+          <p style="text-align: center; font-size: 14px; margin: 0 0 8px;">
+            <a href="${urlSitioEscapada}" style="color: #1e40af;">Ver la sala en el sitio web</a>
+          </p>
+
           <div class="steps">
-            <strong>Instrucciones para unirte:</strong>
+            <strong>Si el botón no funciona:</strong>
             <ol>
-              <li>Inicia sesión en la plataforma con tu correo institucional <code>${correoEscapado}</code>.</li>
-              <li>Ingresa a la sección <strong>Aulas y Cursos</strong>.</li>
-              <li>En el campo <em>"Unirse a un Aula Virtual"</em>, ingresa el código <strong>${codigoEscapado}</strong>.</li>
-              <li>Haz clic en <strong>Unirme al Aula</strong>.</li>
+              <li>Entra a <a href="${urlSitioEscapada}" style="color: #1e40af;">${urlSitioEscapada}</a> e inicia sesión con tu correo institucional <code>${correoEscapado}</code>.</li>
+              <li>Ve a la sección <strong>Aulas y Cursos</strong>.</li>
+              <li>En <em>"Unirse a un Aula Virtual"</em>, escribe el código <strong>${codigoEscapado}</strong> y pulsa <strong>Unirme al Aula</strong>.</li>
             </ol>
           </div>
         </div>
@@ -78,7 +105,7 @@ function construirCorreo({ correo, codigo, nombreAula, nombreDocente }) {
   return {
     subject: `Invitación al Aula: ${nombreAula} (Código de Acceso: ${codigo})`,
     html,
-    text: `Invitación al Aula: ${nombreAula}\n\nDocente: ${nombreDocente}\nTu código de acceso es: ${codigo}\n\nIngresa a la plataforma con tu correo ${correo} y escribe el código en la sección de Aulas.`
+    text: `Invitación al Aula: ${nombreAula}\n\nDocente: ${nombreDocente}\nTu código de acceso es: ${codigo}\n\nUnirme al aula: ${urlUnirse}\nVer la sala en el sitio web: ${urlSitio}\n\nInicia sesión con tu correo institucional ${correo}; si el enlace no funciona, escribe el código en la sección Aulas y Cursos.`
   }
 }
 
@@ -183,10 +210,13 @@ export default async function handler(req, res) {
     'Authorization': `Bearer ${resendApiKey.trim()}`,
     'Content-Type': 'application/json'
   }
+  const sitio = urlBase(req)
+  const urlUnirse = `${sitio}/aulas?unirse=${encodeURIComponent(codigoLimpio)}`
+  const urlSitio = `${sitio}/aulas`
   const mensajes = lista.map((destino) => ({
     from: remitente,
     to: [destino],
-    ...construirCorreo({ correo: destino, codigo: codigoLimpio, nombreAula, nombreDocente })
+    ...construirCorreo({ correo: destino, codigo: codigoLimpio, nombreAula, nombreDocente, urlUnirse, urlSitio })
   }))
 
   // 4. Enviar todo en UNA llamada al proveedor: el endpoint de lote de Resend manda todos los correos juntos.

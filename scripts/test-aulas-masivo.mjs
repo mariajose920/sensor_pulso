@@ -68,6 +68,7 @@ marcar(!(await retirarEstudiantesAula({ aulaId: 'aula-001', estudiantesIds: [], 
 // --- La pantalla usa todo esto
 const vista = readFileSync(new URL('../src/views/AulasView.vue', import.meta.url), 'utf8')
 marcar(/data-testid="correos-invitacion"/.test(vista) && /enviarInvitacionesVarias/.test(vista), 'La pantalla de aulas invita con varios correos')
+marcar(/route.query.unirse/.test(vista) && /data-testid="invitacion-recibida"/.test(vista), 'La pantalla de aulas recibe el enlace «Unirme al aula» del correo y deja el código escrito')
 marcar(/data-testid="retirar-seleccionados"/.test(vista) && /retirarEstudiantesAula/.test(vista), 'La pantalla de aulas retira varios estudiantes')
 marcar(/data-testid="eliminar-aula"/.test(vista) && /confirmacionNombre\.trim\(\) !== aulaAEliminar\.nombre/.test(vista), 'La pantalla de aulas elimina el aula pidiendo escribir su nombre')
 const evaluaciones = readFileSync(new URL('../src/views/EvaluacionesView.vue', import.meta.url), 'utf8')
