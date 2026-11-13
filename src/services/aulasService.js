@@ -236,6 +236,9 @@ export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
 export async function obtenerEvaluacionesAula(aulaId) {
   if (!aulaId) return { success: true, data: [] }
 
+  // Ordena el estado de las evaluaciones en vivo con inicio programado cuya hora ya llegó
+  try { await supabase.rpc('activar_evaluaciones_programadas') } catch (_) { /* migración aún no aplicada */ }
+
   const { data, error } = await supabase
     .from('evaluaciones')
     .select('*, asignaciones:evaluacion_asignaciones(*)')

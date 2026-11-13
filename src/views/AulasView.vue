@@ -22,6 +22,16 @@
         </button>
       </div>
 
+      <!-- Viene desde "Crear evaluación": al terminar el aula se puede volver a la evaluación -->
+      <div v-if="vieneDeEvaluacion" class="alert" :class="aulaCreadaId ? 'alert-success' : 'alert-info'" data-testid="volver-evaluacion">
+        <span v-if="aulaCreadaId">✓ Aula creada. Ya puedes volver a crear tu evaluación.</span>
+        <span v-else>Estás creando un aula para tu evaluación. Cuando termines, vuelve a la evaluación; tu borrador se conserva.</span>
+        <RouterLink :to="rutaVolverEvaluacion" class="btn btn-primary btn-sm" data-testid="btn-volver-evaluacion"
+                    style="margin-left: 0.75rem; text-decoration: none;">
+          ← Volver a la creación de la evaluación
+        </RouterLink>
+      </div>
+
       <!-- Alertas de estado -->
       <div v-if="feedbackMensaje" class="alert" :class="feedbackExito ? 'alert-success' : 'alert-error'">
         {{ feedbackMensaje }}
@@ -361,7 +371,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { 
   obtenerAulas, 
@@ -381,6 +392,15 @@ import {
 } from '../services/aulasService'
 
 const { currentUserId, currentUserName, currentUserEmail, isProfesor, isAdmin, tienePermisoProfesor } = useAuth()
+
+// Flujo "crear aula desde la creación de una evaluación": vuelve a /evaluaciones con el aula nueva elegida
+const route = useRoute()
+const vieneDeEvaluacion = computed(() => route.query.volver === 'evaluaciones')
+const aulaCreadaId = ref('')
+const rutaVolverEvaluacion = computed(() => ({
+  name: 'Evaluaciones',
+  query: { borrador: '1', ...(aulaCreadaId.value ? { aula: aulaCreadaId.value } : {}) }
+}))
 
 const listaAulas = ref([])
 const cursosPorAula = ref({})
@@ -596,6 +616,7 @@ const guardarNuevaAula = async () => {
     modalCrearAulaAbierto.value = false
     feedbackExito.value = true
     feedbackMensaje.value = `Aula creada exitosamente con código: ${res.data.codigo}`
+    aulaCreadaId.value = res.data.id || ''
     await cargarDatos()
   } else {
     feedbackExito.value = false
@@ -710,8 +731,12 @@ const copiarCodigo = (codigo) => {
   setTimeout(() => { feedbackMensaje.value = '' }, 3000)
 }
 
-onMounted(() => {
-  cargarDatos()
+onMounted(async () => {
+  await cargarDatos()
+  // Llegó desde "Crear aula" de la evaluación: abre directo el formulario del aula
+  if (route.query.crear === '1' && isProfesor.value && tienePermisoProfesor('crear_aulas')) {
+    abrirModalCrearAula()
+  }
 })
 </script>
 

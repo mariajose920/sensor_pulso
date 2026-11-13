@@ -26,6 +26,9 @@
     "test:rf68": "node scripts/test-rf68-proteccion-web.js",
     "test:rf69": "node scripts/test-rf69-manejo-secretos.js",
     "test:rf110": "node scripts/test-rf110-respuesta-simultanea.js",
+    "test:rf107": "node scripts/test-rf107-calificacion.mjs",
+    "test:rf104": "node scripts/test-rf104-asignacion-eliminar.mjs",
+    "test:rf109-tiempo": "node scripts/test-tiempo-evaluacion.mjs",
     "test:rf113": "node scripts/test-rf113-panel-en-vivo.js",
     "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs"
   },
