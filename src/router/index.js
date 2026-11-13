@@ -22,6 +22,7 @@ import EvaluacionesView from '../views/EvaluacionesView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 import { motivoDeRuta } from '../utils/accesoSinSesion'
+import { consultarEstadoMfa } from '../services/mfaService.js'
 
 const routes = [
   {
@@ -136,6 +137,12 @@ const routes = [
     component: LoginView
   },
   {
+    path: '/mfa',
+    name: 'Mfa',
+    component: () => import('../views/MfaView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin',
     name: 'Admin',
     component: AdminView,
@@ -192,6 +199,25 @@ router.beforeEach(async (to, _from, next) => {
     const motivo = motivoDeRuta(to.name)
     if (motivo) query.motivo = motivo
     return next({ name: 'Login', query })
+  }
+
+  if (isAuthenticated.value && to.meta.requiresAuth && to.name !== 'Mfa') {
+    try {
+      const { nivelActual, nivelSiguiente } = await consultarEstadoMfa()
+      const requiereMfa = isAdmin.value || isProfesor.value || nivelSiguiente === 'aal2'
+
+      if (requiereMfa && nivelActual !== 'aal2') {
+        return next({
+          name: 'Mfa',
+          query: { redirect: to.fullPath }
+        })
+      }
+    } catch {
+      return next({
+        name: 'Mfa',
+        query: { redirect: to.fullPath }
+      })
+    }
   }
 
   // Si la ruta está restringida a ciertos roles
