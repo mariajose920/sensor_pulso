@@ -4,6 +4,7 @@ import { validarCorreoInstitucional } from '../utils/validators'
 import { ROLES, tienePermiso, obtenerEtiquetaPerfil } from '../utils/roles'
 import { PRIMER_ADMIN } from '../../scripts/seedAdmin.js'
 import { limpiarDatosLocales } from '../pwa/limpiarAlSalir.js'
+import { pacienteService } from '../services/pacienteService.js'
 import {
   verificarEstadoBloqueo,
   registrarIntentoLogin,
@@ -486,6 +487,15 @@ export function useAuth() {
   }
 
   const logout = async (opciones = {}) => {
+    // La ficha del paciente debe quedar en la base antes de cerrar la sesión: al salir se borra la copia del dispositivo
+    // y, sin sesión, ya no se puede enviar. Se espera a que termine el guardado en curso y se reintenta el pendiente.
+    try {
+      await Promise.race([
+        Promise.allSettled([pacienteService.esperarGuardado(), pacienteService.reintentarSincronizacion()]),
+        new Promise((resolver) => setTimeout(resolver, 8000))
+      ])
+    } catch (_) {}
+
     try {
       await supabase.auth.signOut()
     } catch (_) {}
