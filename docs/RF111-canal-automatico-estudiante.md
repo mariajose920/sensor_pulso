@@ -53,3 +53,13 @@ La ficha propia es la misma función para estudiante, profesor y administrador: 
 - **Cerrar sesión:** antes de salir se espera a que termine el guardado en curso y se reintenta el pendiente (hasta 8 s). Antes, la copia del dispositivo se borraba al salir aunque el servidor no la hubiera recibido.
 - **Pasan los días:** migración `20261113000600_rf03_ficha_propia_persistente.sql`. La retención diaria (RF60) borraba las fichas 365 días después de crearlas, también la propia. Ahora solo borra las fichas ligadas a una sesión o canal; la ficha propia se elimina únicamente si la persona ejerce su derecho de supresión.
 - **Requisito del servidor:** para que la ficha llegue a la base, el servidor necesita la clave de cifrado `CLAVE_CIFRADO_CAMPOS` (mínimo 16 caracteres, RF116). Sin ella el servidor se niega a cifrar y la ficha queda solo en el dispositivo. **Debe ser la misma clave que usa Vercel**: lo cifrado con otra clave no se puede leer en producción.
+
+## Por qué la ficha no se guardaba en la base (y cómo se arregla en local)
+Causa: el servidor cifra la ficha con `CLAVE_CIFRADO_CAMPOS` (RF116). En el equipo de desarrollo esa variable no existía, así que el servidor respondía 503 («cifrado no disponible»), la ficha quedaba solo en el dispositivo y se borraba al cerrar sesión. Nunca llegaba a la base.
+
+Arreglo:
+- Al iniciar `npm run dev`, si falta la clave, se **crea una clave aleatoria y se guarda en `.env.local`** (archivo fuera de git) para que sea la misma en cada arranque (`scripts/claveCifradoLocal.mjs`, usado por `vite.config.js`). Solo ocurre en el servidor de desarrollo: en `build`, en Vercel o con `NODE_ENV=production` nunca se genera nada y, sin clave, el servidor sigue negándose a cifrar.
+- **No borres esa clave:** las fichas guardadas desde este equipo solo se pueden leer con ella.
+- Si usas la misma base de Supabase que producción, reemplaza esa clave en `.env.local` por la `CLAVE_CIFRADO_CAMPOS` que tiene Vercel; así lo que se guarda desde local también se lee en producción. Lo cifrado con otra clave no se puede leer (el panel de la ficha lo avisa y no pierde otras fichas).
+- Después de arreglarlo hay que **reiniciar el servidor y volver a llenar la ficha una vez** (la anterior nunca llegó a la base). Desde entonces se carga sola en cada sesión y solo cambia con «Modificar».
+- Pruebas: `node scripts/test-ficha-persistente-local.mjs`.
