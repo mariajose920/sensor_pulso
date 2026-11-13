@@ -34,6 +34,13 @@
       </p>
       <span class="leccion-meta">Preguntas con explicación</span>
     </router-link>
+    <router-link to="/aprendizaje/casos" class="leccion-card card practica" data-testid="boton-casos">
+      <h3 class="leccion-titulo">Biblioteca de casos</h3>
+      <p class="leccion-resumen">
+        Casos precargados de ritmos y arritmias con su señal de pulso, el ECG de referencia y una explicación de cada uno.
+      </p>
+      <span class="leccion-meta">Casos de referencia</span>
+    </router-link>
     <router-link to="/aprendizaje/simulador" class="leccion-card card practica">
       <h3 class="leccion-titulo">Simulador de señal</h3>
       <p class="leccion-resumen">
