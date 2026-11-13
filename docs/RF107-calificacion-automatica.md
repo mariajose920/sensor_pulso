@@ -64,3 +64,21 @@ Migración `supabase/migrations/20261113000100_rf107_calificacion_ejercicio.sql`
 - Las evaluaciones precargadas de comparación (RF105) no traen referencia: al duplicarlas el profesor debe elegirla antes de que los estudiantes rindan; si no, la entrega falla con «La evaluación no tiene señal de referencia definida». La descripción del criterio avisa «falta elegir la señal de referencia».
 - Con tipo ejercicio aplicado, la nota del ejercicio reemplaza el puntaje de las preguntas de apoyo (comportamiento ya existente en la función).
 - La migración no se puede probar contra una base en este entorno: las fórmulas SQL se validan por su espejo JS y por pruebas de contenido de la migración. Falta ejecutarla en Supabase y probar el flujo de punta a punta.
+
+## Evaluación mixta: preguntas + uno o más ejercicios aplicados
+Nuevo tipo `mixta` (migración `20261113000200_rf107_evaluacion_mixta.sql`, también en la base completa).
+
+- **Qué es:** una misma evaluación con preguntas y de 1 a 10 ejercicios aplicados, cada uno con su criterio, su referencia (si compara señales) y su puntaje (por defecto 20 puntos). Las preguntas siguen valiendo su propio puntaje.
+- **Datos:** `evaluacion_ejercicios` (los ejercicios de la evaluación, con RLS: el profesor los gestiona y el estudiante los lee solo si la evaluación le está asignada y abierta) e `intento_ejercicios` (resultado de cada ejercicio por intento: puntos, valor, motivo, intentos usados).
+- **Puntaje:** un trigger (`intento_a_total_mixta`) recalcula siempre el total del intento = puntos de las preguntas + puntos de los ejercicios, y el máximo posible. Corre antes de `intento_nivel`, así que el nivel (RF112) sale del total. Sirve también para la entrega simultánea del RF110 sin tocar sus funciones.
+- **Cada ejercicio:** puntos = porcentaje del ejercicio (misma fórmula parcial de arriba) × puntaje del ejercicio. `calificar_ejercicio_mixto(intento, ejercicio, medición)` valida lo mismo que el ejercicio simple y limita los intentos **por ejercicio** (`max_reintentos`).
+- **Profesor:** el formulario del tipo permite agregar y quitar ejercicios, con editor propio (`EjercicioCriterioEditor.vue`) y su puntaje. En *Resultados del ejercicio* ve el total y el detalle por ejercicio; «Recalificar» vuelve a calcular todos los ejercicios.
+- **Estudiante:** en *Mis evaluaciones* ve las preguntas y, debajo, cada ejercicio con su selector de medición y su botón «Calificar», con el resultado al instante. Debe calificar todos los ejercicios antes de entregar. Esa regla se aplica en la pantalla; la base solo suma lo que esté calificado.
+- **Límite:** la evaluación mixta no tiene plantilla precargada.
+
+## Crear aula desde la creación de una evaluación
+- En *Evaluaciones* hay un botón **«Crear aula»** (junto al selector de aula, y en el aviso cuando aún no hay aulas).
+- Al pulsarlo se guarda un borrador de lo escrito (título, descripción, tipo, ejercicios y preguntas) en la pestaña (`sessionStorage`) y se va a *Aulas* con el formulario de crear aula ya abierto.
+- Al terminar, *Aulas* muestra «Aula creada» y el botón **«Volver a la creación de la evaluación»**. Ese botón también aparece mientras se crea el aula, por si se cambia de idea.
+- *Evaluaciones* vuelve con el aula nueva elegida y el borrador recuperado. Si no hay borrador, igual avisa y deja seguir.
+- Archivos: `EvaluacionesView.vue` (borrador y botón) y `AulasView.vue` (parámetros `crear` y `volver`, y botón de regreso).

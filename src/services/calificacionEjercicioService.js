@@ -46,6 +46,18 @@ export async function calificarEjercicioAplicado({ intentoId, medicionId }) {
   return { success: true, resultado: data }
 }
 
+/** Evaluación mixta: el estudiante entrega una medición para uno de sus ejercicios. */
+export async function calificarEjercicioMixto({ intentoId, ejercicioId, medicionId }) {
+  if (!intentoId || !ejercicioId || !medicionId) return { success: false, error: 'Elige una medición para entregar.' }
+  const { data, error } = await supabase.rpc('calificar_ejercicio_mixto', {
+    p_intento: intentoId,
+    p_ejercicio: ejercicioId,
+    p_medicion: medicionId
+  })
+  if (error) return { success: false, error: mensajeErrorCalificacion(error) }
+  return { success: true, resultado: data }
+}
+
 /** El profesor vuelve a calcular la nota de un intento con el criterio y la referencia actuales. */
 export async function recalificarIntento(intentoId) {
   const { data, error } = await supabase.rpc('recalificar_intento', { p_intento: intentoId })
@@ -57,7 +69,7 @@ export async function recalificarIntento(intentoId) {
 export async function obtenerResultadosEjercicio(evaluacionId) {
   const { data, error } = await supabase
     .from('intentos_evaluacion')
-    .select('id, usuario_id, medicion_id, puntaje, porcentaje, nivel, valor_obtenido, similitud, criterio_cumplido, detalle, calificaciones, calificado_en, perfiles(nombre)')
+    .select('id, usuario_id, medicion_id, puntaje, puntaje_maximo, porcentaje, nivel, valor_obtenido, similitud, criterio_cumplido, detalle, calificaciones, calificado_en, perfiles(nombre), intento_ejercicios(ejercicio_id, puntaje, puntaje_maximo, porcentaje, detalle, evaluacion_ejercicios(orden, ejercicio))')
     .eq('evaluacion_id', evaluacionId)
     .order('calificado_en', { ascending: false, nullsFirst: false })
   if (error) return { success: false, error: error.message, data: [] }

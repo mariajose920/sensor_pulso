@@ -15,7 +15,13 @@
       <p v-if="!puedeGestionar" class="alert alert-error">Solo los profesores y administradores pueden crear evaluaciones.</p>
 
       <template v-else>
-        <p v-if="!aulas.length" class="alert alert-info">Primero crea un aula en la sección Aulas.</p>
+        <div v-if="!aulas.length" class="alert alert-info" data-testid="sin-aulas">
+          Primero crea un aula para tu evaluación.
+          <button type="button" class="btn btn-primary btn-sm" data-testid="crear-aula" style="margin-left: 0.75rem;" @click="irACrearAula">
+            ➕ Crear aula
+          </button>
+        </div>
+        <p v-if="avisoRegreso" class="alert alert-success" role="status" data-testid="aviso-regreso">{{ avisoRegreso }}</p>
 
         <div v-else>
           <!-- Selector de Modo: Crear desde Cero, Precargada o Banco de Preguntas -->
@@ -103,6 +109,9 @@
               <select id="eval-aula" v-model="aulaId" class="form-select" data-testid="eval-aula" @change="cargarLista">
                 <option v-for="a in aulas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
               </select>
+              <button type="button" class="btn btn-secondary btn-sm btn-crear-aula" data-testid="crear-aula" @click="irACrearAula">
+                ➕ Crear aula nueva
+              </button>
             </div>
 
             <div class="form-group">
@@ -272,7 +281,7 @@
                 </div>
                 <p v-if="e.descripcion" class="lista-item-desc">{{ e.descripcion }}</p>
                 <div class="lista-footer">
-                  <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" />
+                  <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" :ejercicios="e.evaluacion_ejercicios || []" />
                   <router-link 
                     v-if="e.aula_id || aulaId"
                     :to="`/aulas/${e.aula_id || aulaId}?tab=evaluaciones`"
@@ -283,7 +292,7 @@
                     ⚡ Monitoreo en Vivo
                   </router-link>
                   <button
-                    v-if="e.tipo === 'ejercicio_aplicado' && e.origen === 'supabase'"
+                    v-if="e.tipo !== 'preguntas' && e.origen === 'supabase'"
                     type="button"
                     class="btn btn-secondary btn-sm"
                     data-testid="ver-resultados"
@@ -314,9 +323,17 @@
                         <td>{{ r.valor_obtenido ?? '—' }}</td>
                         <td>{{ r.porcentaje }} %</td>
                         <td>{{ ETIQUETA_NIVEL[r.nivel] || '—' }}</td>
-                        <td>{{ r.detalle?.motivo || '—' }}</td>
                         <td>
-                          <button v-if="r.medicion_id" type="button" class="btn btn-secondary btn-sm"
+                          <template v-if="e.tipo === 'mixta'">
+                            Total {{ r.puntaje }} / {{ r.puntaje_maximo }} pts
+                            <div v-for="ie in ordenarEjercicios(r.intento_ejercicios)" :key="ie.ejercicio_id">
+                              Ej. {{ ie.evaluacion_ejercicios?.orden }}: {{ ie.puntaje }} / {{ ie.puntaje_maximo }} pts · {{ ie.detalle?.motivo }}
+                            </div>
+                          </template>
+                          <template v-else>{{ r.detalle?.motivo || '—' }}</template>
+                        </td>
+                        <td>
+                          <button v-if="r.medicion_id || e.tipo === 'mixta'" type="button" class="btn btn-secondary btn-sm"
                                   :disabled="recalificando === r.id" @click="recalificar(e, r)">
                             Recalificar
                           </button>
@@ -339,6 +356,7 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
 import { ref, computed, onMounted } from 'vue'
 import TipoEvaluacionForm from '../components/TipoEvaluacionForm.vue'
 import TipoEvaluacionBadge from '../components/TipoEvaluacionBadge.vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { obtenerAulas } from '../services/aulasService'
 import BancoPreguntasPanel from '../components/BancoPreguntasPanel.vue'
@@ -360,6 +378,46 @@ const puedeGestionar = computed(() => isAdmin.value || isProfesor.value || can('
 
 const aulas = ref([])
 const aulaId = ref('')
+
+// Crear un aula sin perder lo que ya se escribió de la evaluación (se guarda un borrador en esta pestaña)
+const route = useRoute()
+const router = useRouter()
+const CLAVE_BORRADOR = 'sensor_pulso_borrador_evaluacion'
+const avisoRegreso = ref('')
+
+function guardarBorrador() {
+  try {
+    sessionStorage.setItem(CLAVE_BORRADOR, JSON.stringify({
+      titulo: titulo.value,
+      descripcion: descripcion.value,
+      modelo: modelo.value,
+      preguntas: preguntas.value,
+      plantillaSeleccionadaId: plantillaSeleccionadaId.value
+    }))
+  } catch (_) { /* sin almacenamiento: se pierde el borrador, no el flujo */ }
+}
+
+function restaurarBorrador() {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_BORRADOR)
+    sessionStorage.removeItem(CLAVE_BORRADOR)
+    if (!crudo) return false
+    const b = JSON.parse(crudo)
+    titulo.value = b.titulo || ''
+    descripcion.value = b.descripcion || ''
+    if (b.modelo) modelo.value = b.modelo
+    preguntas.value = Array.isArray(b.preguntas) ? b.preguntas : []
+    plantillaSeleccionadaId.value = b.plantillaSeleccionadaId || null
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+function irACrearAula() {
+  guardarBorrador()
+  router.push({ name: 'Aulas', query: { crear: '1', volver: 'evaluaciones' } })
+}
 const titulo = ref('')
 const descripcion = ref('')
 const modelo = ref(modeloVacio())
@@ -387,6 +445,9 @@ async function alternarResultados(e) {
   resultadosAbiertos.value = { ...resultadosAbiertos.value, [e.id]: abierto }
   if (abierto) await cargarResultados(e)
 }
+
+const ordenarEjercicios = (lista) =>
+  [...(lista || [])].sort((a, b) => (a.evaluacion_ejercicios?.orden || 0) - (b.evaluacion_ejercicios?.orden || 0))
 
 async function recalificar(e, r) {
   recalificando.value = r.id
@@ -509,6 +570,11 @@ async function cargarLista() {
 async function guardar() {
   intentado.value = true
   mensaje.value = ''
+  if (modelo.value.tipo === 'mixta' && !preguntas.value.length) {
+    mensaje.value = 'Una evaluación mixta necesita al menos una pregunta, además de los ejercicios.'
+    mensajeError.value = true
+    return
+  }
   if (validarTipoEvaluacion(modelo.value, { exigirReferencia: !plantillaSeleccionadaId.value }).length) return
   if (!titulo.value.trim()) {
     mensaje.value = 'El título de la evaluación es obligatorio.'
@@ -577,8 +643,18 @@ onMounted(async () => {
   })
   aulas.value = resAulas.data || []
   if (aulas.value.length) {
-    aulaId.value = aulas.value[0].id
+    // Al volver de crear un aula, queda elegida esa aula
+    const aulaNueva = String(route.query.aula || '')
+    aulaId.value = aulas.value.some((a) => a.id === aulaNueva) ? aulaNueva : aulas.value[0].id
     await cargarLista()
+  }
+  if (route.query.borrador === '1') {
+    const hubo = restaurarBorrador()
+    avisoRegreso.value = hubo
+      ? 'Volviste de crear el aula. Recuperamos tu evaluación en curso.'
+      : 'Volviste de crear el aula. Puedes seguir con tu evaluación.'
+  } else {
+    try { sessionStorage.removeItem(CLAVE_BORRADOR) } catch (_) { /* nada */ }
   }
 
   // 2. Cargar Evaluaciones Precargadas
@@ -597,6 +673,7 @@ onMounted(async () => {
 .resultados { margin-top: 0.75rem; overflow-x: auto; }
 .resultados-tabla { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .resultados-tabla th, .resultados-tabla td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: left; }
+.btn-crear-aula { margin-top: 0.5rem; }
 .evaluaciones-container { max-width: 900px; margin: 0 auto; }
 .header-desc { color: var(--color-muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
 

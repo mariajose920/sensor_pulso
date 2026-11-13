@@ -1,5 +1,5 @@
 import { supabase } from './supabase.js'
-import { camposTipoParaGuardar, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { camposTipoParaGuardar, ejerciciosParaGuardar, modeloDesdeFila, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
 
 const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
 const CODIGO_VIOLA_CHECK = '23514'
@@ -405,6 +405,16 @@ export async function crearEvaluacion({
       }
     }
 
+    // RF107: ejercicios de una evaluación mixta
+    const filasEjercicios = ejerciciosParaGuardar(modelo, { exigirReferencia })
+    if (filasEjercicios.length) {
+      const { error: errEj } = await supabase.from('evaluacion_ejercicios')
+        .insert(filasEjercicios.map((f) => ({ ...f, evaluacion_id: data.id })))
+      if (errEj) {
+        return { success: false, origen: 'supabase', error: `Evaluación creada, pero falló guardar los ejercicios: ${errEj.message}` }
+      }
+    }
+
     // Guardar o vincular preguntas asociadas si se proporcionaron
     if (preguntas && preguntas.length > 0) {
       for (let i = 0; i < preguntas.length; i++) {
@@ -456,12 +466,13 @@ export async function crearEvaluacion({
         }
       }
     }
-    return { success: true, origen: 'supabase', data: { ...data, preguntas, precargadaBaseId, origen: 'supabase' } }
+    return { success: true, origen: 'supabase', data: { ...data, evaluacion_ejercicios: filasEjercicios, preguntas, precargadaBaseId, origen: 'supabase' } }
   }
 
   // 2. Respaldo local en pruebas Node o sesión demo sin JWT
   const local = { 
     ...fila, 
+    evaluacion_ejercicios: ejerciciosParaGuardar(modelo, { exigirReferencia }),
     id: `eval-${Date.now()}`, 
     preguntas, 
     precargadaBaseId,
@@ -490,7 +501,7 @@ export async function duplicarEvaluacion({ evaluacionOriginalId, aulaId, creador
     try {
       const { data } = await supabase
         .from('evaluaciones')
-        .select('*, evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
+        .select('*, evaluacion_ejercicios(id, orden, ejercicio, criterio, puntaje), evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
         .eq('id', evaluacionOriginalId)
         .maybeSingle()
       if (data) {
@@ -507,11 +518,7 @@ export async function duplicarEvaluacion({ evaluacionOriginalId, aulaId, creador
     ? origen.titulo 
     : (origen.titulo.startsWith('[Copia]') ? origen.titulo : `[Copia] ${origen.titulo}`)
 
-  const modelo = {
-    tipo: origen.tipo,
-    ejercicio: origen.ejercicio,
-    criterio: origen.criterio
-  }
+  const modelo = modeloDesdeFila(origen)
 
   return await crearEvaluacion({
     aulaId,
@@ -547,16 +554,26 @@ export async function actualizarTipoEvaluacion({ evaluacionId, modelo, puedeGest
   }
 
   const campos = camposTipoParaGuardar(modelo, { exigirReferencia: true })
+  const filasEjercicios = ejerciciosParaGuardar(modelo, { exigirReferencia: true })
   try {
     const { data, error } = await supabase.from('evaluaciones').update(campos).eq('id', evaluacionId).select().single()
-    if (!error && data) return { success: true, origen: 'supabase', data }
+    if (!error && data) {
+      // RF107: los ejercicios de la mixta se reemplazan completos (no hay intentos, se validó arriba)
+      await supabase.from('evaluacion_ejercicios').delete().eq('evaluacion_id', evaluacionId)
+      if (filasEjercicios.length) {
+        const { error: errEj } = await supabase.from('evaluacion_ejercicios')
+          .insert(filasEjercicios.map((f) => ({ ...f, evaluacion_id: evaluacionId })))
+        if (errEj) return { success: false, error: `No se pudieron guardar los ejercicios: ${errEj.message}` }
+      }
+      return { success: true, origen: 'supabase', data }
+    }
     if (error?.code === CODIGO_VIOLA_CHECK) return { success: false, error: 'La base rechazó el tipo o el criterio de la evaluación.' }
   } catch (_) {}
 
   const locales = cargarLocales()
   const i = locales.findIndex((e) => e.id === evaluacionId)
   if (i === -1) return { success: false, error: 'No se pudo guardar el cambio en la base.' }
-  locales[i] = { ...locales[i], ...campos }
+  locales[i] = { ...locales[i], ...campos, evaluacion_ejercicios: filasEjercicios }
   guardarLocales(locales)
   return { success: true, origen: 'local', data: locales[i] }
 }
@@ -567,7 +584,7 @@ export async function obtenerEvaluacionesAula(aulaId) {
   if (conSesion) {
     const { data, error } = await supabase
       .from('evaluaciones')
-      .select('*, evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
+      .select('*, evaluacion_ejercicios(id, orden, ejercicio, criterio, puntaje), evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
       .eq('aula_id', aulaId)
       .order('creado_en', { ascending: false })
     if (error) return { success: false, error: error.message, data: [] }
@@ -713,6 +730,7 @@ export {
 export {
   obtenerOpcionesReferencia,
   calificarEjercicioAplicado,
+  calificarEjercicioMixto,
   recalificarIntento,
   obtenerResultadosEjercicio
 } from './calificacionEjercicioService.js'

@@ -6,7 +6,9 @@ import {
   resumenResultado, mensajeErrorCalificacion
 } from '../src/utils/calificacionEjercicio.js'
 import {
-  cambiarEjercicio, modeloVacio, validarTipoEvaluacion, camposTipoParaGuardar, modeloDesdeFila, describirCriterio
+  cambiarEjercicio, cambiarTipo, modeloVacio, validarTipoEvaluacion, camposTipoParaGuardar, modeloDesdeFila, describirCriterio,
+  ejerciciosParaGuardar, agregarEjercicioMixto, quitarEjercicioMixto, cambiarEjercicioMixto, etiquetaTipo,
+  MAX_EJERCICIOS_MIXTA, PUNTAJE_EJERCICIO
 } from '../src/utils/tiposEvaluacion.js'
 
 let fallos = 0
@@ -90,6 +92,54 @@ marcar(/falta elegir/.test(describirCriterio('comparar_senales', { tipo: 'simili
 const preguntas = camposTipoParaGuardar(modeloVacio())
 marcar(!preguntas.criterio && !('max_reintentos' in preguntas), 'Preguntas no guarda criterio ni intentos')
 
+// --- Evaluación mixta: preguntas + uno o más ejercicios aplicados
+let mixta = cambiarTipo(modeloVacio(), 'mixta')
+marcar(mixta.tipo === 'mixta' && mixta.ejercicios.length === 1 && mixta.ejercicio === null, 'Al elegir mixta aparece un ejercicio vacío')
+marcar(validarTipoEvaluacion(mixta).length > 0, 'Una mixta con el ejercicio sin elegir se rechaza')
+mixta = cambiarEjercicioMixto(mixta, 0, 'medir_pulso')
+marcar(validarTipoEvaluacion(mixta).length === 0, 'Una mixta con un ejercicio completo es válida')
+mixta = agregarEjercicioMixto(mixta)
+marcar(mixta.ejercicios.length === 2 && validarTipoEvaluacion(mixta).length > 0, 'Se agrega un segundo ejercicio (incompleto hasta elegirlo)')
+mixta = cambiarEjercicioMixto(mixta, 1, 'medir_spo2')
+mixta = { ...mixta, ejercicios: [mixta.ejercicios[0], { ...mixta.ejercicios[1], puntaje: 30 }] }
+marcar(validarTipoEvaluacion(mixta).length === 0, 'Dos ejercicios distintos con su puntaje son válidos')
+marcar(quitarEjercicioMixto(mixta, 0).ejercicios.length === 1 && quitarEjercicioMixto(quitarEjercicioMixto(mixta, 0), 0).ejercicios.length === 1, 'Se puede quitar un ejercicio pero siempre queda uno')
+let llena = mixta
+for (let i = 0; i < 20; i++) llena = agregarEjercicioMixto(llena)
+marcar(llena.ejercicios.length === MAX_EJERCICIOS_MIXTA, 'La mixta admite hasta ' + MAX_EJERCICIOS_MIXTA + ' ejercicios')
+marcar(validarTipoEvaluacion({ ...mixta, ejercicios: [] }).length === 1, 'Una mixta sin ejercicios se rechaza')
+marcar(validarTipoEvaluacion({ ...mixta, ejercicios: [{ ...mixta.ejercicios[0], puntaje: 0 }] }).length === 1, 'Un ejercicio con puntaje 0 se rechaza')
+marcar(validarTipoEvaluacion({ ...mixta, ejercicios: [{ ...mixta.ejercicios[0], puntaje: PUNTAJE_EJERCICIO.max + 1 }] }).length === 1, 'Un ejercicio con puntaje excesivo se rechaza')
+marcar(validarTipoEvaluacion({ ...mixta, ejercicio: 'medir_pulso' }).length === 1, 'En la mixta no se admite un ejercicio suelto')
+const compMixta = cambiarEjercicioMixto(cambiarTipo(modeloVacio(), 'mixta'), 0, 'comparar_senales')
+marcar(validarTipoEvaluacion(compMixta).length === 0 && validarTipoEvaluacion(compMixta, { exigirReferencia: true }).length === 1, 'En la mixta también se exige la referencia al guardar')
+const camposMixta = camposTipoParaGuardar({ ...mixta, reintentos: 2 })
+marcar(camposMixta.tipo === 'mixta' && camposMixta.ejercicio === null && camposMixta.criterio === null && camposMixta.max_reintentos === 2, 'La mixta guarda tipo, sin ejercicio ni criterio sueltos, y los intentos')
+const filas = ejerciciosParaGuardar(mixta)
+marcar(filas.length === 2 && filas[0].orden === 1 && filas[1].orden === 2 && filas[1].puntaje === 30 && filas[1].criterio.tipo === 'spo2_en_rango', 'Los ejercicios se guardan con orden, criterio y puntaje')
+marcar(ejerciciosParaGuardar({ tipo: 'preguntas' }).length === 0 && ejerciciosParaGuardar({ tipo: 'ejercicio_aplicado' }).length === 0, 'Solo la mixta guarda filas de ejercicios')
+const desdeFila = modeloDesdeFila({ tipo: 'mixta', max_reintentos: 2, evaluacion_ejercicios: [
+  { orden: 2, ejercicio: 'medir_spo2', criterio: { tipo: 'spo2_en_rango', min: 95, max: 100 }, puntaje: '30' },
+  { orden: 1, ejercicio: 'medir_pulso', criterio: { tipo: 'bpm_en_rango', min: 60, max: 100 }, puntaje: '20' }] })
+marcar(desdeFila.ejercicios[0].ejercicio === 'medir_pulso' && desdeFila.ejercicios[1].puntaje === 30 && desdeFila.reintentos === 2, 'El modelo de una mixta se arma ordenado desde la base')
+const deSimple = cambiarTipo(cambiarEjercicio(modeloVacio(), 'medir_pulso'), 'mixta')
+marcar(deSimple.ejercicios.length === 1 && deSimple.ejercicios[0].ejercicio === 'medir_pulso', 'Pasar de ejercicio aplicado a mixta conserva el ejercicio')
+marcar(!('ejercicios' in cambiarTipo(mixta, 'ejercicio_aplicado')), 'Volver a ejercicio aplicado descarta la lista de ejercicios')
+marcar(etiquetaTipo('mixta', null, 2) === 'Preguntas + 2 ejercicios aplicados' && etiquetaTipo('mixta', null, 1) === 'Preguntas + 1 ejercicio aplicado', 'La etiqueta de la mixta indica cuántos ejercicios tiene')
+
+// --- La migración de la evaluación mixta
+const sqlMixta = readFileSync(new URL('../supabase/migrations/20261113000200_rf107_evaluacion_mixta.sql', import.meta.url), 'utf8')
+marcar(/tipo in \('preguntas','ejercicio_aplicado','mixta'\)/.test(sqlMixta), 'La base acepta el tipo mixta')
+marcar(/create table if not exists public\.evaluacion_ejercicios/.test(sqlMixta) && /create table if not exists public\.intento_ejercicios/.test(sqlMixta), 'Existen las tablas de ejercicios y de resultados por ejercicio')
+marcar(/alter table public\.evaluacion_ejercicios enable row level security/.test(sqlMixta) && /alter table public\.intento_ejercicios enable row level security/.test(sqlMixta), 'Las dos tablas nuevas tienen RLS')
+marcar(/before insert or update of puntaje, puntaje_maximo on public\.intentos_evaluacion/.test(sqlMixta) && /create trigger intento_a_total_mixta/.test(sqlMixta), 'El total del intento suma preguntas y ejercicios en la base')
+marcar('intento_a_total_mixta' < 'intento_nivel', 'El total de la mixta se calcula antes del nivel (orden alfabético de triggers)')
+marcar(/v_usados >= v_ev\.max_reintentos/.test(sqlMixta), 'Los intentos se limitan por ejercicio')
+marcar(/id = p_ejercicio and evaluacion_id = v_ev\.id/.test(sqlMixta), 'El ejercicio debe pertenecer a la evaluación del intento')
+marcar(/grant execute on function public\.calificar_ejercicio_mixto\(uuid,uuid,uuid\)/.test(sqlMixta), 'calificar_ejercicio_mixto queda disponible para usuarios autenticados')
+marcar(/revoke all on function public\.evaluar_criterio[^;]*authenticated/.test(sqlMixta), 'evaluar_criterio no se expone a los usuarios')
+marcar(/if v_tipo = 'mixta' then/.test(sqlMixta), 'El profesor puede recalificar una mixta')
+
 // --- La migración SQL tiene las mismas reglas
 const sql = readFileSync(new URL('../supabase/migrations/20261113000100_rf107_calificacion_ejercicio.sql', import.meta.url), 'utf8')
 marcar(/create or replace function public\.calificar_ejercicio\(p_intento uuid, p_medicion uuid\)/.test(sql), 'calificar_ejercicio ya no recibe la similitud del cliente')
@@ -104,6 +154,7 @@ marcar(/revoke all on function public\.evaluar_ejercicio[^;]*authenticated/.test
 marcar(/least\(1, 2 \* abs\(p_bpm_a - p_bpm_b\)/.test(sql) && /0\.60/.test(sql) && /0\.25/.test(sql) && /0\.15/.test(sql), 'Los pesos de la similitud coinciden con la versión JS')
 const completo = readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql', import.meta.url), 'utf8')
 marcar(completo.includes('RF107: calificación automática del ejercicio aplicado'), 'La base completa incluye la migración de RF107')
+marcar(completo.includes('evaluación mixta = preguntas + uno o más ejercicios aplicados'), 'La base completa incluye la migración de la evaluación mixta')
 
 console.log(fallos ? `\nRF107: ${fallos} prueba(s) fallaron` : '\nRF107: todas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)

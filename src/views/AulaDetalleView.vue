@@ -347,7 +347,7 @@
                     🎯 {{ obtenerTextoAsignacion(ev) }}
                   </span>
 
-                  <span class="eval-tag-tipo">{{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico' }}</span>
+                  <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
                 <p class="eval-card-desc">{{ ev.descripcion || 'Sin instrucciones adicionales especificadas.' }}</p>
@@ -1157,7 +1157,7 @@
             <select v-model="evaluacionParaAsignarId" class="form-select" required @change="cargarConfiguracionAsignacion">
               <option disabled value="">-- Selecciona una evaluación --</option>
               <option v-for="ev in evaluaciones" :key="ev.id" :value="ev.id">
-                {{ ev.titulo }} ({{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica' }})
+                {{ ev.titulo }} ({{ ev.tipo === 'mixta' ? 'Mixta' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica') }})
               </option>
             </select>
           </div>
