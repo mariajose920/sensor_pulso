@@ -16,14 +16,14 @@
 
       <template v-else>
         <div v-if="!aulas.length" class="alert alert-info" data-testid="sin-aulas">
-          Primero crea un aula para tu evaluación.
+          Para guardar la evaluación necesitas un aula. Puedes ir armándola aquí y crear el aula cuando quieras: tu evaluación en curso se conserva.
           <button type="button" class="btn btn-primary btn-sm" data-testid="crear-aula" style="margin-left: 0.75rem;" @click="irACrearAula">
             ➕ Crear aula
           </button>
         </div>
         <p v-if="avisoRegreso" class="alert alert-success" role="status" data-testid="aviso-regreso">{{ avisoRegreso }}</p>
 
-        <div v-else>
+        <div ref="zonaCreacion">
           <!-- Selector de Modo: Crear desde Cero, Precargada o Banco de Preguntas -->
           <div class="modo-tabs">
             <button 
@@ -353,7 +353,7 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import TipoEvaluacionForm from '../components/TipoEvaluacionForm.vue'
 import TipoEvaluacionBadge from '../components/TipoEvaluacionBadge.vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -384,6 +384,7 @@ const route = useRoute()
 const router = useRouter()
 const CLAVE_BORRADOR = 'sensor_pulso_borrador_evaluacion'
 const avisoRegreso = ref('')
+const zonaCreacion = ref(null)
 
 function guardarBorrador() {
   try {
@@ -651,8 +652,10 @@ onMounted(async () => {
   if (route.query.borrador === '1') {
     const hubo = restaurarBorrador()
     avisoRegreso.value = hubo
-      ? 'Volviste de crear el aula. Recuperamos tu evaluación en curso.'
-      : 'Volviste de crear el aula. Puedes seguir con tu evaluación.'
+      ? 'Aula creada. Aquí está tu evaluación en curso, con el aula nueva elegida.'
+      : 'Aula creada. Ya puedes crear tu evaluación en esa aula.'
+    await nextTick()
+    zonaCreacion.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   } else {
     try { sessionStorage.removeItem(CLAVE_BORRADOR) } catch (_) { /* nada */ }
   }
