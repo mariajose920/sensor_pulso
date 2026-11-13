@@ -32,6 +32,7 @@
     "test:rf109-tiempo": "node scripts/test-tiempo-evaluacion.mjs",
     "test:aulas-masivo": "node scripts/test-aulas-masivo.mjs",
     "test:invitaciones-lote": "node scripts/test-invitaciones-lote.mjs",
+    "test:rf34": "node scripts/test-rf34-galeria-publica.mjs",
     "test:rf113": "node scripts/test-rf113-panel-en-vivo.js",
     "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs"
   },
