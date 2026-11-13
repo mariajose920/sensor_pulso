@@ -347,8 +347,12 @@
                     🎯 {{ obtenerTextoAsignacion(ev) }}
                   </span>
 
-                  <span class="eval-tag-tipo">{{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico' }}</span>
+                  <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
+                <p v-if="ev.modo === 'en_vivo' && ev.abre_en && ev.estado === 'programada'" class="eval-inicio-auto" data-testid="inicio-automatico-aviso">
+                  ⏱ Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
+                  (no hace falta iniciarla en vivo)
+                </p>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
                 <p class="eval-card-desc">{{ ev.descripcion || 'Sin instrucciones adicionales especificadas.' }}</p>
               </div>
@@ -411,6 +415,20 @@
                   <span>🎯 Asignar</span>
                 </button>
 
+                <!-- Botón Docente: eliminar la evaluación (con sus asignaciones y resultados) -->
+                <button
+                  v-if="isAdmin || isProfesor"
+                  type="button"
+                  class="btn-eval-accion btn-secundario-eval"
+                  data-testid="eliminar-evaluacion-aula"
+                  style="flex: 1; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;"
+                  :disabled="eliminandoEvaluacionId === ev.id"
+                  title="Eliminar esta evaluación y sus asignaciones"
+                  @click="confirmarEliminarEvaluacionAsignada(ev)"
+                >
+                  <span>🗑️ Eliminar</span>
+                </button>
+
                 <button
                   v-if="(isProfesor || isAdmin) && ev.modo === 'en_vivo' && ev.estado === 'programada'"
                   type="button"
@@ -418,7 +436,7 @@
                   :disabled="Boolean(controlandoEvaluacionId)"
                   @click="controlarEnVivo(ev, 'iniciar')"
                 >
-                  Iniciar en vivo
+                  {{ ev.abre_en ? 'Iniciar ahora (adelantar)' : 'Iniciar en vivo' }}
                 </button>
 
                 <button
@@ -972,7 +990,7 @@
     <!-- MODAL INVITAR ESTUDIANTE POR CORREO (RF100) -->
     <div v-if="modalInvitarAbierto" class="modal-backdrop" @click.self="modalInvitarAbierto = false">
       <div class="modal-card">
-        <h3 class="modal-title">Invitar Estudiante al Aula</h3>
+        <h3 class="modal-title">Invitar Estudiantes al Aula</h3>
         <p class="modal-subtitle">
           Aula: <strong>{{ aula?.nombre }}</strong> (Código: <code>{{ aula?.codigo }}</code>)
         </p>
@@ -981,28 +999,15 @@
           <strong>Error de envío:</strong> {{ errorInvitacionModal }}
         </div>
 
-        <form @submit.prevent="enviarInvitacion">
-          <div class="form-group">
-            <label class="form-label">Correo Institucional del Estudiante (@alu.unach.cl) *</label>
-            <input 
-              v-model="correoInvitacion" 
-              type="email" 
-              class="form-input" 
-              placeholder="estudiante@alu.unach.cl" 
-              required 
-              :disabled="enviandoInvitacion"
-            />
-            <small class="help-text">El código de acceso será enviado a través de Resend a la casilla del estudiante.</small>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary" :disabled="enviandoInvitacion">Cancelar</button>
-            <button type="submit" class="btn btn-primary" :disabled="enviandoInvitacion">
-              <span v-if="enviandoInvitacion">Enviando con Resend...</span>
-              <span v-else>Enviar Invitación</span>
-            </button>
-          </div>
-        </form>
+        <InvitacionMasivaForm
+          ref="formInvitacion"
+          :aula-id="aula?.id || ''"
+          :profesor-id="currentUserId || ''"
+          :profesor-nombre="currentUserName || ''"
+          :es-admin="!!isAdmin"
+          @resultado="alEnviarInvitaciones"
+          @cerrar="modalInvitarAbierto = false"
+        />
 
         <!-- Historial de invitaciones -->
         <div class="invitaciones-historial mt-4" style="margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1rem;">
@@ -1157,7 +1162,7 @@
             <select v-model="evaluacionParaAsignarId" class="form-select" required @change="cargarConfiguracionAsignacion">
               <option disabled value="">-- Selecciona una evaluación --</option>
               <option v-for="ev in evaluaciones" :key="ev.id" :value="ev.id">
-                {{ ev.titulo }} ({{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica' }})
+                {{ ev.titulo }} ({{ ev.tipo === 'mixta' ? 'Mixta' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica') }})
               </option>
             </select>
           </div>
@@ -1190,7 +1195,20 @@
             />
           </div>
           <div v-else class="form-group mb-3">
-            <label class="form-label" for="rf109-duracion">Tiempo límite en minutos</label>
+            <label class="form-label" for="rf109-inicio-auto">Inicio automático (opcional)</label>
+            <input
+              id="rf109-inicio-auto"
+              v-model="abreEnAplicacion"
+              type="datetime-local"
+              class="form-input"
+              data-testid="inicio-automatico"
+            />
+            <small class="help-text">
+              Si indicas fecha y hora, la evaluación en vivo se inicia sola y no tendrás que entrar a pulsar «Iniciar en vivo».
+              Déjalo vacío para iniciarla tú a mano.
+            </small>
+
+            <label class="form-label" for="rf109-duracion" style="margin-top: 0.75rem;">Tiempo límite en minutos</label>
             <input
               id="rf109-duracion"
               v-model.number="duracionAplicacionMin"
@@ -1300,10 +1318,13 @@
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import PanelAvanceEnVivo from '../components/PanelAvanceEnVivo.vue'
+import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import {
+  eliminarEvaluacion,
+  contarIntentos,
   asignarEvaluacion,
   controlarEvaluacionEnVivo
 } from '../services/evaluacionesService'
@@ -1316,7 +1337,6 @@ import {
   obtenerEstadisticasEvaluacionAula,
   alternarEstadoCodigoAula,
   regenerarCodigoAulaDocente,
-  enviarInvitacionCorreo,
   obtenerInvitacionesAula,
   crearCurso,
   renombrarCurso,
@@ -1345,8 +1365,7 @@ const feedbackExito = ref(true)
 
 // Modales
 const modalInvitarAbierto = ref(false)
-const correoInvitacion = ref('')
-const enviandoInvitacion = ref(false)
+const formInvitacion = ref(null)
 const errorInvitacionModal = ref('')
 const listaInvitaciones = ref([])
 const cargandoInvitaciones = ref(false)
@@ -1565,39 +1584,25 @@ const cargarHistorialInvitaciones = async () => {
 }
 
 const abrirModalInvitar = async () => {
-  correoInvitacion.value = ''
   errorInvitacionModal.value = ''
   modalInvitarAbierto.value = true
+  formInvitacion.value?.limpiar?.()
   await cargarHistorialInvitaciones()
 }
 
-const enviarInvitacion = async () => {
-  if (!correoInvitacion.value) return
-  enviandoInvitacion.value = true
-  errorInvitacionModal.value = ''
-
-  const res = await enviarInvitacionCorreo({
-    aulaId: aula.value.id,
-    correoEstudiante: correoInvitacion.value,
-    profesorId: currentUserId.value,
-    profesorNombre: currentUserName.value,
-    esAdmin: isAdmin.value
-  })
-
-  enviandoInvitacion.value = false
-
+// El formulario de invitaciones avisa cuando termina un envío (uno o varios correos)
+const alEnviarInvitaciones = async (res) => {
   if (res.success) {
     mostrarFeedback(true, res.message)
     errorInvitacionModal.value = ''
-    correoInvitacion.value = ''
-    modalInvitarAbierto.value = false
+    if (res.todoEnviado) modalInvitarAbierto.value = false
     // Recargar estudiantes
     const resEst = await obtenerEstudiantesAula(aulaId)
     estudiantes.value = resEst.data || []
   } else {
     errorInvitacionModal.value = res.error
-    await cargarHistorialInvitaciones()
   }
+  await cargarHistorialInvitaciones()
 }
 
 // RF101: Gestión de Cursos
@@ -1827,6 +1832,31 @@ const recargarEvaluacionesRF109 = async () => {
   evaluaciones.value = res.data
 }
 
+// Eliminar una evaluación asignada (pide confirmación y avisa si ya hay intentos de estudiantes)
+const eliminandoEvaluacionId = ref('')
+
+const confirmarEliminarEvaluacionAsignada = async (ev) => {
+  const intentos = await contarIntentos(ev.id)
+  const aviso = intentos > 0
+    ? `«${ev.titulo}» ya tiene ${intentos} intento(s) de estudiantes: se borrarán también sus respuestas y notas.`
+    : `Se eliminará «${ev.titulo}» y su asignación.`
+  if (!window.confirm(`${aviso}\n\nEsta acción no se puede deshacer. ¿Eliminar la evaluación?`)) return
+  eliminandoEvaluacionId.value = ev.id
+  try {
+    const res = await eliminarEvaluacion({ evaluacionId: ev.id, puedeGestionar: isProfesor.value || isAdmin.value })
+    if (!res.success) {
+      mostrarFeedback(false, res.error)
+      return
+    }
+    await recargarEvaluacionesRF109()
+    mostrarFeedback(true, `Evaluación «${ev.titulo}» eliminada.`)
+  } catch (error) {
+    mostrarFeedback(false, error.message)
+  } finally {
+    eliminandoEvaluacionId.value = ''
+  }
+}
+
 const abrirModalAsignar = (ev = null) => {
   evaluacionParaAsignarId.value = ev?.id || evaluaciones.value[0]?.id || ''
   cargarConfiguracionAsignacion()
@@ -1847,7 +1877,8 @@ const guardarAsignacionEvaluacion = async () => {
 
   try {
     const esVentana = modoAplicacion.value === 'ventana'
-    const abre = esVentana ? new Date(abreEnAplicacion.value) : null
+    // En vivo, la fecha es el inicio automático (opcional); con fechas es la apertura
+    const abre = (esVentana || abreEnAplicacion.value) ? new Date(abreEnAplicacion.value) : null
     const cierra = esVentana ? new Date(cierraEnAplicacion.value) : null
 
     if (esVentana && !(abre < cierra)) {
@@ -3458,4 +3489,5 @@ const evaluacionesVisibles = computed(() => {
   color: #b91c1c;
   border: 1px solid #fecaca;
 }
+.eval-inicio-auto { margin: 0.4rem 0 0; padding: 0.3rem 0.6rem; border-radius: 8px; background: #dbeafe; color: #1e40af; font-size: 0.82rem; font-weight: 600; display: inline-block; }
 </style>

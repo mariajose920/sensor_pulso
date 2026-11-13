@@ -1,7 +1,8 @@
 import { supabase } from './supabase.js'
 import { validarCorreoInstitucional } from '../utils/validators.js'
-import { enviarCorreoInvitacion } from './emailService.js'
+import { enviarCorreoInvitacion, enviarCorreosInvitacion } from './emailService.js'
 import { escaparHtml, sanitizarContenidoUsuario } from './proteccionWebService.js'
+import { MAX_INVITACIONES_POR_ENVIO } from '../utils/correosInvitacion.js'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -235,6 +236,9 @@ export async function obtenerAulaPorId(aulaId, { usuarioId, esAdmin } = {}) {
  */
 export async function obtenerEvaluacionesAula(aulaId) {
   if (!aulaId) return { success: true, data: [] }
+
+  // Ordena el estado de las evaluaciones en vivo con inicio programado cuya hora ya llegó
+  try { await supabase.rpc('activar_evaluaciones_programadas') } catch (_) { /* migración aún no aplicada */ }
 
   const { data, error } = await supabase
     .from('evaluaciones')
@@ -495,7 +499,7 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   const correoLimpio = correoEstudiante.trim().toLowerCase()
 
-  // Conectar con el servicio de correo real (Resend)
+  // Conectar con el servicio de correo real (Gmail)
   const resultadoEnvio = await enviarCorreoInvitacion({
     correo: correoLimpio,
     codigo: aula.codigo,
@@ -511,7 +515,7 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
       aula_nombre: aula.nombre,
       codigo_aula: aula.codigo,
       correo: correoLimpio,
-      servicio: 'Resend',
+      servicio: 'Gmail',
       estado: 'fallido',
       error_detalle: resultadoEnvio.error,
       intentado_en: new Date().toISOString()
@@ -532,9 +536,9 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
     aula_nombre: aula.nombre,
     codigo_aula: aula.codigo,
     correo: correoLimpio,
-    servicio: 'Resend',
+    servicio: 'Gmail',
     estado: 'enviada',
-    resend_id: resultadoEnvio.messageId || null,
+    mensaje_id: resultadoEnvio.messageId || null,
     enviada_en: new Date().toISOString()
   }
 
@@ -550,7 +554,7 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   return {
     success: true,
-    message: `Invitación enviada con éxito a ${correoLimpio} mediante Resend (Código: ${aula.codigo}).`,
+    message: `Invitación enviada con éxito a ${correoLimpio} desde Gmail (Código: ${aula.codigo}).`,
     invitacion: nuevaInvitacion
   }
 }
@@ -964,4 +968,157 @@ export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
       promedioSpo2
     }
   }
+}
+
+// ==========================================
+// RF100 / RF102: INVITAR VARIOS A LA VEZ Y ELIMINAR EL AULA
+// ==========================================
+
+/**
+ * RF100: invita a varios estudiantes en UNA sola petición: el servidor los manda todos a la vez desde Gmail.
+ * Valida el aula, el permiso y el código una vez; después registra el resultado de cada correo.
+ * Un correo rechazado no impide que salgan los demás; el resultado dice cuáles fallaron y por qué.
+ */
+export async function enviarInvitacionesVarias({
+  aulaId, correos, profesorId, profesorNombre, esAdmin, alProgresar = null
+}) {
+  const lista = [...new Set((correos || []).map((c) => String(c || '').trim().toLowerCase()).filter(Boolean))]
+  const sinEnvio = (error) => ({ success: false, error, enviados: [], fallidos: lista.map((correo) => ({ correo, error })) })
+
+  if (!lista.length) return { success: false, error: 'Agrega al menos un correo.', enviados: [], fallidos: [] }
+  if (lista.length > MAX_INVITACIONES_POR_ENVIO) {
+    return { success: false, error: `Puedes invitar hasta ${MAX_INVITACIONES_POR_ENVIO} estudiantes por envío.`, enviados: [], fallidos: [] }
+  }
+
+  const aula = aulasLocales.find((a) => a.id === aulaId)
+  if (!aula) return sinEnvio('Aula no encontrada.')
+  if (!esAdmin && aula.profesor_id !== profesorId) {
+    return sinEnvio('No tienes permiso para gestionar invitaciones en esta aula.')
+  }
+  if (!aula.codigo_activo) {
+    return sinEnvio('El código de acceso de esta aula se encuentra desactivado. Actívalo antes de enviar invitaciones.')
+  }
+  const noValidos = lista.filter((c) => {
+    const v = validarCorreoInstitucional(c)
+    return !v.valido || v.rol !== 'usuario'
+  })
+  if (noValidos.length) {
+    return sinEnvio(`Estos correos no son de estudiante institucional (@alu.unach.cl): ${noValidos.join(', ')}.`)
+  }
+
+  if (typeof alProgresar === 'function') alProgresar({ hecho: 0, total: lista.length })
+  const envio = await enviarCorreosInvitacion({
+    correos: lista,
+    codigo: aula.codigo,
+    aulaNombre: aula.nombre,
+    profesorNombre: profesorNombre || 'Docente'
+  })
+  if (typeof alProgresar === 'function') alProgresar({ hecho: lista.length, total: lista.length })
+
+  const enviados = (envio.enviados || []).map((e) => (typeof e === 'string' ? { correo: e, id: null } : e))
+  const fallidos = envio.fallidos || []
+  const ahora = new Date().toISOString()
+
+  // Registro de cada correo (enviado o fallido) para el historial del aula
+  const registros = [
+    ...enviados.map((e, i) => ({
+      id: `inv-${Date.now()}-${i}`, aula_id: aulaId, aula_nombre: aula.nombre, codigo_aula: aula.codigo,
+      correo: e.correo, servicio: 'Gmail', estado: 'enviada', mensaje_id: e.id || null, enviada_en: ahora
+    })),
+    ...fallidos.map((f, i) => ({
+      id: `inv-err-${Date.now()}-${i}`, aula_id: aulaId, aula_nombre: aula.nombre, codigo_aula: aula.codigo,
+      correo: f.correo, servicio: 'Gmail', estado: 'fallido', error_detalle: f.error, intentado_en: ahora
+    }))
+  ]
+  invitacionesLocales.unshift(...registros)
+  guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+  if (enviados.length) {
+    try {
+      await supabase.from('invitaciones_aula').insert(enviados.map((e) => ({ aula_id: aulaId, correo: e.correo })))
+    } catch (_) {}
+  }
+
+  if (!envio.success) {
+    return { success: false, enviados: [], fallidos, error: envio.error || fallidos[0]?.error || 'No se pudo enviar ninguna invitación.' }
+  }
+  return {
+    success: true,
+    enviados: enviados.map((e) => e.correo),
+    fallidos,
+    message: `Se enviaron ${enviados.length} invitación(es) a la vez${fallidos.length ? ` y ${fallidos.length} fallaron` : ''}.`
+  }
+}
+
+/**
+ * RF102: elimina un aula completa con sus cursos, estudiantes, invitaciones y evaluaciones.
+ * No se puede deshacer: la pantalla pide escribir el nombre del aula antes de llamar a esta función.
+ * Solo el profesor dueño o un administrador (en Supabase lo exige además la política RLS aulas_borrar).
+ */
+export async function eliminarAula({ aulaId, profesorId, esAdmin }) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+
+  const local = aulasLocales.find((a) => a.id === aulaId)
+  if (local && !esAdmin && local.profesor_id !== profesorId) {
+    return { success: false, error: 'Solo el profesor dueño del aula o un administrador puede eliminarla.' }
+  }
+
+  // 1. Supabase: el borrado en cascada elimina cursos, estudiantes, invitaciones y evaluaciones del aula
+  let borradoRemoto = false
+  let falloRemoto = null
+  try {
+    const { data, error } = await supabase.from('aulas').delete().eq('id', aulaId).select('id')
+    if (error) falloRemoto = error
+    else borradoRemoto = Array.isArray(data) && data.length > 0
+  } catch (err) {
+    falloRemoto = err
+  }
+
+  // Un aula de la base (id uuid) que la base no borró sigue existiendo: no se puede decir que se eliminó.
+  // Un aula solo local (id de prueba) o inexistente en este navegador y en la base tampoco se da por eliminada.
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aulaId)
+  if ((esDeLaBase && !borradoRemoto) || (!local && !borradoRemoto)) {
+    return {
+      success: false,
+      error: falloRemoto?.message
+        ? `No se pudo eliminar el aula: ${falloRemoto.message}`
+        : 'No se pudo eliminar el aula (no existe o no tienes permiso).'
+    }
+  }
+
+  // 2. Copia local: aula y todo lo que colgaba de ella
+  const evaluacionesDelAula = evaluacionesLocales.filter((e) => e.aula_id === aulaId).map((e) => e.id)
+  aulasLocales = aulasLocales.filter((a) => a.id !== aulaId)
+  aulaEstudiantesLocales = aulaEstudiantesLocales.filter((e) => e.aula_id !== aulaId)
+  cursosLocales = cursosLocales.filter((c) => c.aula_id !== aulaId)
+  cursoEstudiantesLocales = cursoEstudiantesLocales.filter((c) => c.aula_id !== aulaId)
+  invitacionesLocales = invitacionesLocales.filter((i) => i.aula_id !== aulaId)
+  evaluacionesLocales = evaluacionesLocales.filter((e) => e.aula_id !== aulaId)
+  intentosEvaluacionesLocales = intentosEvaluacionesLocales.filter(
+    (i) => i.aula_id !== aulaId && !evaluacionesDelAula.includes(i.evaluacion_id)
+  )
+  guardarEnStorage(STORAGE_AULAS, aulasLocales)
+  guardarEnStorage(STORAGE_AULA_ESTUDIANTES, aulaEstudiantesLocales)
+  guardarEnStorage(STORAGE_CURSOS, cursosLocales)
+  guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
+  guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+  guardarEnStorage(STORAGE_EVALUACIONES, evaluacionesLocales)
+  guardarEnStorage(STORAGE_INTENTOS_EVALUACIONES, intentosEvaluacionesLocales)
+
+  // 3. Registro de auditoría local
+  try {
+    const STORAGE_AUDITORIA = 'sensor_pulso_auditoria_roles'
+    const logs = JSON.parse(localStorage.getItem(STORAGE_AUDITORIA) || '[]')
+    logs.unshift({
+      id: `audit-${Date.now()}`,
+      accion: 'eliminacion_aula',
+      tabla: 'aulas',
+      registro_id: aulaId,
+      actor_id: profesorId,
+      detalles: { nombre: local?.nombre || null, evaluaciones: evaluacionesDelAula.length },
+      creado_en: new Date().toISOString()
+    })
+    localStorage.setItem(STORAGE_AUDITORIA, JSON.stringify(logs))
+  } catch (_) {}
+
+  return { success: true, message: 'Aula eliminada.' }
 }

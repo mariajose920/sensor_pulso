@@ -27,11 +27,18 @@
     "test:rf69": "node scripts/test-rf69-manejo-secretos.js",
     "test:rf110": "node scripts/test-rf110-respuesta-simultanea.js",
     "test:rf33": "node scripts/test-rf33-casos-precargados.mjs",
-    "test:rf113": "node scripts/test-rf113-panel-en-vivo.js"
+    "test:rf107": "node scripts/test-rf107-calificacion.mjs",
+    "test:rf104": "node scripts/test-rf104-asignacion-eliminar.mjs",
+    "test:rf109-tiempo": "node scripts/test-tiempo-evaluacion.mjs",
+    "test:aulas-masivo": "node scripts/test-aulas-masivo.mjs",
+    "test:invitaciones-lote": "node scripts/test-invitaciones-lote.mjs",
+    "test:rf113": "node scripts/test-rf113-panel-en-vivo.js",
+    "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
     "jspdf": "^4.2.1",
+    "nodemailer": "^10.5.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
