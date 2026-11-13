@@ -349,6 +349,10 @@
 
                   <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
+                <p v-if="ev.modo === 'en_vivo' && ev.abre_en && ev.estado === 'programada'" class="eval-inicio-auto" data-testid="inicio-automatico-aviso">
+                  ⏱ Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
+                  (no hace falta iniciarla en vivo)
+                </p>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
                 <p class="eval-card-desc">{{ ev.descripcion || 'Sin instrucciones adicionales especificadas.' }}</p>
               </div>
@@ -411,6 +415,20 @@
                   <span>🎯 Asignar</span>
                 </button>
 
+                <!-- Botón Docente: eliminar la evaluación (con sus asignaciones y resultados) -->
+                <button
+                  v-if="isAdmin || isProfesor"
+                  type="button"
+                  class="btn-eval-accion btn-secundario-eval"
+                  data-testid="eliminar-evaluacion-aula"
+                  style="flex: 1; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;"
+                  :disabled="eliminandoEvaluacionId === ev.id"
+                  title="Eliminar esta evaluación y sus asignaciones"
+                  @click="confirmarEliminarEvaluacionAsignada(ev)"
+                >
+                  <span>🗑️ Eliminar</span>
+                </button>
+
                 <button
                   v-if="(isProfesor || isAdmin) && ev.modo === 'en_vivo' && ev.estado === 'programada'"
                   type="button"
@@ -418,7 +436,7 @@
                   :disabled="Boolean(controlandoEvaluacionId)"
                   @click="controlarEnVivo(ev, 'iniciar')"
                 >
-                  Iniciar en vivo
+                  {{ ev.abre_en ? 'Iniciar ahora (adelantar)' : 'Iniciar en vivo' }}
                 </button>
 
                 <button
@@ -1177,7 +1195,20 @@
             />
           </div>
           <div v-else class="form-group mb-3">
-            <label class="form-label" for="rf109-duracion">Tiempo límite en minutos</label>
+            <label class="form-label" for="rf109-inicio-auto">Inicio automático (opcional)</label>
+            <input
+              id="rf109-inicio-auto"
+              v-model="abreEnAplicacion"
+              type="datetime-local"
+              class="form-input"
+              data-testid="inicio-automatico"
+            />
+            <small class="help-text">
+              Si indicas fecha y hora, la evaluación en vivo se inicia sola y no tendrás que entrar a pulsar «Iniciar en vivo».
+              Déjalo vacío para iniciarla tú a mano.
+            </small>
+
+            <label class="form-label" for="rf109-duracion" style="margin-top: 0.75rem;">Tiempo límite en minutos</label>
             <input
               id="rf109-duracion"
               v-model.number="duracionAplicacionMin"
@@ -1292,6 +1323,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import {
+  eliminarEvaluacion,
+  contarIntentos,
   asignarEvaluacion,
   controlarEvaluacionEnVivo
 } from '../services/evaluacionesService'
@@ -1799,6 +1832,31 @@ const recargarEvaluacionesRF109 = async () => {
   evaluaciones.value = res.data
 }
 
+// Eliminar una evaluación asignada (pide confirmación y avisa si ya hay intentos de estudiantes)
+const eliminandoEvaluacionId = ref('')
+
+const confirmarEliminarEvaluacionAsignada = async (ev) => {
+  const intentos = await contarIntentos(ev.id)
+  const aviso = intentos > 0
+    ? `«${ev.titulo}» ya tiene ${intentos} intento(s) de estudiantes: se borrarán también sus respuestas y notas.`
+    : `Se eliminará «${ev.titulo}» y su asignación.`
+  if (!window.confirm(`${aviso}\n\nEsta acción no se puede deshacer. ¿Eliminar la evaluación?`)) return
+  eliminandoEvaluacionId.value = ev.id
+  try {
+    const res = await eliminarEvaluacion({ evaluacionId: ev.id, puedeGestionar: isProfesor.value || isAdmin.value })
+    if (!res.success) {
+      mostrarFeedback(false, res.error)
+      return
+    }
+    await recargarEvaluacionesRF109()
+    mostrarFeedback(true, `Evaluación «${ev.titulo}» eliminada.`)
+  } catch (error) {
+    mostrarFeedback(false, error.message)
+  } finally {
+    eliminandoEvaluacionId.value = ''
+  }
+}
+
 const abrirModalAsignar = (ev = null) => {
   evaluacionParaAsignarId.value = ev?.id || evaluaciones.value[0]?.id || ''
   cargarConfiguracionAsignacion()
@@ -1819,7 +1877,8 @@ const guardarAsignacionEvaluacion = async () => {
 
   try {
     const esVentana = modoAplicacion.value === 'ventana'
-    const abre = esVentana ? new Date(abreEnAplicacion.value) : null
+    // En vivo, la fecha es el inicio automático (opcional); con fechas es la apertura
+    const abre = (esVentana || abreEnAplicacion.value) ? new Date(abreEnAplicacion.value) : null
     const cierra = esVentana ? new Date(cierraEnAplicacion.value) : null
 
     if (esVentana && !(abre < cierra)) {
@@ -3430,4 +3489,5 @@ const evaluacionesVisibles = computed(() => {
   color: #b91c1c;
   border: 1px solid #fecaca;
 }
+.eval-inicio-auto { margin: 0.4rem 0 0; padding: 0.3rem 0.6rem; border-radius: 8px; background: #dbeafe; color: #1e40af; font-size: 0.82rem; font-weight: 600; display: inline-block; }
 </style>

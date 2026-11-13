@@ -48,17 +48,46 @@ export function similitudRasgos(a, b) {
 }
 
 /**
- * Calificación de una medición contra el criterio de una evaluación (sin las validaciones de ventana).
- * evaluacion: { criterio }, medicion: { bpm_promedio, spo2_promedio, regularidad, ritmo },
- * referencia: { bpm, regularidad, ritmo, nombre } (solo para similitud_minima).
- * Devuelve { valor, similitud, cumple, puntaje, motivo } o lanza Error si falta un dato.
+ * Avisos que acompañan la retroalimentación (no bloquean la entrega): señal mala o medición anterior a la apertura.
+ * Misma regla que `evaluar_criterio` (migración 20261113000700).
  */
-export function calificarEjercicio({ criterio, medicion, referencia = null }) {
+export function avisosDeMedicion(medicion, apertura = null) {
+  const avisos = []
+  if (medicion?.calidad === 'mala') avisos.push('La señal de esta medición era de calidad mala, así que el valor puede no ser confiable.')
+  const inicio = medicion?.inicio ? new Date(medicion.inicio).getTime() : null
+  const desde = apertura ? new Date(apertura).getTime() : null
+  if (inicio !== null && desde !== null && inicio < desde) avisos.push('Esta medición es anterior a la apertura de la evaluación.')
+  return avisos
+}
+
+/**
+ * Calificación de una medición contra el criterio de una evaluación.
+ * La entrega NUNCA se bloquea por la calidad de la medición: con un dato que falta o una señal mala se califica con 0 o con
+ * lo que tenga, y el motivo explica qué pasó. Solo lanza Error si el criterio mismo no es válido.
+ * medicion: { bpm_promedio, spo2_promedio, regularidad, ritmo, calidad, inicio },
+ * referencia: { bpm, regularidad, ritmo, nombre } (solo para similitud_minima), apertura: fecha de apertura (opcional).
+ * Devuelve { valor, similitud, cumple, puntaje, motivo, avisos }.
+ */
+export function calificarEjercicio({ criterio, medicion, referencia = null, apertura = null }) {
   const tipo = criterio?.tipo
+  const avisos = avisosDeMedicion(medicion, apertura)
+  const conAvisos = (resultado) => ({
+    ...resultado,
+    avisos,
+    motivo: avisos.length ? `${resultado.motivo} Aviso: ${avisos.join(' ')}` : resultado.motivo
+  })
+
   if (tipo === 'bpm_en_rango' || tipo === 'spo2_en_rango') {
     const esBpm = tipo === 'bpm_en_rango'
     const valor = esBpm ? medicion?.bpm_promedio : medicion?.spo2_promedio
-    if (!hay(valor)) throw new Error(esBpm ? 'La medición no tiene BPM' : 'La medición no tiene SpO₂')
+    if (!hay(valor)) {
+      return conAvisos({
+        valor: null, similitud: null, cumple: false, puntaje: 0,
+        motivo: esBpm
+          ? 'Esta medición no tiene BPM, así que no se puede comparar con el rango pedido.'
+          : 'Esta medición no tiene SpO₂, así que no se puede comparar con el rango pedido.'
+      })
+    }
     const v = Number(valor)
     const min = Number(criterio.min)
     const max = Number(criterio.max)
@@ -68,22 +97,32 @@ export function calificarEjercicio({ criterio, medicion, referencia = null }) {
     const motivo = cumple
       ? `Tu ${nombre} (${v} ${unidad}) está dentro del rango pedido (${min} a ${max} ${unidad}).`
       : `Tu ${nombre} (${v} ${unidad}) está ${v < min ? 'por debajo' : 'por encima'} del rango pedido (${min} a ${max} ${unidad}).`
-    return { valor: v, similitud: null, cumple, puntaje: puntajeRango(v, min, max), motivo }
+    return conAvisos({ valor: v, similitud: null, cumple, puntaje: puntajeRango(v, min, max), motivo })
   }
   if (tipo === 'similitud_minima') {
-    if (!referencia) throw new Error('La evaluación no tiene señal de referencia definida')
+    if (!referencia) {
+      return conAvisos({
+        valor: null, similitud: null, cumple: false, puntaje: 0,
+        motivo: 'El profesor aún no definió la señal de referencia. Tu entrega quedó registrada y se recalificará cuando la defina.'
+      })
+    }
     const sim = similitudRasgos(
       { bpm: medicion?.bpm_promedio, regularidad: medicion?.regularidad, ritmo: medicion?.ritmo },
       referencia
     )
-    if (sim === null) throw new Error('No hay BPM suficiente para comparar con la referencia')
+    if (sim === null) {
+      return conAvisos({
+        valor: null, similitud: null, cumple: false, puntaje: 0,
+        motivo: 'No hay BPM suficiente en esta medición para compararla con la referencia.'
+      })
+    }
     const minimo = Number(criterio.valor)
     const cumple = sim >= minimo
     const nombre = referencia.nombre || 'la referencia'
     const motivo = cumple
       ? `Tu señal tiene ${sim} % de similitud con «${nombre}» (mínimo ${minimo} %).`
       : `Tu señal tiene ${sim} % de similitud con «${nombre}»; el mínimo era ${minimo} %.`
-    return { valor: sim, similitud: sim, cumple, puntaje: puntajeSimilitud(sim, minimo), motivo }
+    return conAvisos({ valor: sim, similitud: sim, cumple, puntaje: puntajeSimilitud(sim, minimo), motivo })
   }
   throw new Error('La evaluación no tiene un criterio válido')
 }
@@ -115,8 +154,6 @@ export function resumenResultado(r) {
 export function mensajeErrorCalificacion(error) {
   const texto = String(error?.message || error || '')
   if (/Ya usaste todos tus intentos/i.test(texto)) return texto
-  if (/anterior a la apertura/i.test(texto)) return 'Esa medición es anterior a la apertura de la evaluación. Haz una medición nueva.'
-  if (/calidad de se(ñ|n)al mala/i.test(texto)) return 'La señal de esa medición es mala. Repite la medición con el dedo quieto.'
   if (/est(á|a) cerrada/i.test(texto)) return 'La evaluación ya está cerrada.'
   return texto || 'No se pudo calificar el ejercicio.'
 }

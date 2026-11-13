@@ -66,7 +66,7 @@ prueba('faltan se informa', requisitosCompletos({ ...req, consentimientoVersion:
 console.log('Sesión real o de demostración')
 const srv = readFileSync(new URL('../src/services/canalesService.js', import.meta.url), 'utf8')
 prueba('el servidor solo se usa con una sesión real (uuid)', srv.includes('hayCuenta && sesionReal') && srv.includes('esUuid(canalesState.sesionActivaId)'))
-const vistaV = readFileSync(new URL('../src/components/VinculacionCanales.vue', import.meta.url), 'utf8')
+const vistaV = readFileSync(new URL('../src/components/CanalesPacientesPanel.vue', import.meta.url), 'utf8')
 prueba('ya no existe «Alternar Rol Demo»', !/Alternar Rol Demo|alternarRolDemo/.test(vistaV))
 
 console.log('Migración y archivos')
@@ -78,8 +78,8 @@ prueba('la función exige ficha, política y consentimiento', /RF03/.test(sql) &
 prueba('la función no se da a anon', /revoke all on function public\.agregar_canal_automatico[^;]*from public, anon/.test(sql))
 prueba('RLS en la tabla de requisitos', /alter table public\.sesion_canal_requisitos enable row level security/.test(sql))
 prueba('los clientes no escriben requisitos', /revoke insert, update, delete on public\.sesion_canal_requisitos from authenticated/.test(sql))
-const vista = readFileSync(new URL('../src/components/VinculacionCanales.vue', import.meta.url), 'utf8')
-prueba('el botón solo se muestra si evaluarAgregarCanal.visible', /v-if="estadoAgregarCanal\.visible"/.test(vista))
+const vista = readFileSync(new URL('../src/components/CanalesPacientesPanel.vue', import.meta.url), 'utf8')
+prueba('el botón del profesor depende de evaluarAgregarCanal (puede / motivo)', /:disabled="!estadoAgregarCanal\.puede/.test(vista) && /estadoAgregarCanal\.motivo/.test(vista))
 
 console.log(`\n${ok} pruebas pasadas, ${mal} fallidas`)
 process.exit(mal ? 1 : 0)

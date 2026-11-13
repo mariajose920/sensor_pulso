@@ -47,7 +47,7 @@ console.log('Gráficas')
 prueba('con WiFi y con USB la gráfica aparece apenas hay canal y sensor', !vista.includes('mostrarGraficas') && vista.includes('const medicionActiva = computed(() => canalSeleccionadoListo.value && sensorDetectado.value)'))
 prueba('las gráficas aparecen con sensor detectado (y se mantienen congeladas si se pierde la comunicación)', vista.includes('v-if="(sensorDetectado || perdioConexion) && graficablesPropios.length >= 1"'))
 prueba('el docente no ve el monitor de 5 canales (usa las gráficas)', vista.includes('v-if="canalesMostrados.length && !esDocenteVista"'))
-prueba('estudiantes siguen eligiendo canal a mano', vista.includes('<VinculacionCanales'))
+prueba('el estudiante tiene su canal automático (sin el panel de 5 canales ni elegir a mano)', !vista.includes('<VinculacionCanales') && vista.includes('<CanalesPacientesPanel @agregado="alAgregarCanal" @ir-a-paso='))
 
 console.log('Solo un botón para agregar canales')
 prueba('el panel ya no lista canales ni pacientes', !panel.includes('lista-pacientes') && !panel.includes('Pacientes y canales ('))

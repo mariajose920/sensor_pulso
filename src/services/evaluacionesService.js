@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js'
 import { camposTipoParaGuardar, ejerciciosParaGuardar, modeloDesdeFila, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { explicarErrorBase } from '../utils/erroresBase.js'
 
 const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
 const CODIGO_VIOLA_CHECK = '23514'
@@ -12,9 +13,12 @@ export const EVALUACIONES_PRECARGADAS = [
     id: 'precargada-01',
     titulo: 'Evaluación Práctica: Medición de Pulso y Ritmo Cardíaco en Reposo',
     descripcion: 'Práctica de adquisición de bioseñal fotopletismográfica (PPG), frecuencia cardíaca y evaluación del ritmo sinusal.',
-    tipo: 'ejercicio_aplicado',
-    ejercicio: 'medir_pulso',
-    criterio: { tipo: 'bpm_en_rango', min: 60, max: 100 },
+    tipo: 'mixta',
+    ejercicio: null,
+    criterio: null,
+    evaluacion_ejercicios: [
+      { orden: 1, ejercicio: 'medir_pulso', criterio: { tipo: 'bpm_en_rango', min: 60, max: 100 }, puntaje: 20 }
+    ],
     precargada: true,
     preguntas: [
       {
@@ -83,9 +87,12 @@ export const EVALUACIONES_PRECARGADAS = [
     id: 'precargada-02',
     titulo: 'Evaluación Práctica: Saturación de Oxígeno (SpO₂) y Detección de Hipoxia',
     descripcion: 'Medición de saturación de oxígeno mediante oximetría óptica con sensor MAX30102 y cálculo del ratio de modulación.',
-    tipo: 'ejercicio_aplicado',
-    ejercicio: 'medir_spo2',
-    criterio: { tipo: 'spo2_en_rango', min: 95, max: 100 },
+    tipo: 'mixta',
+    ejercicio: null,
+    criterio: null,
+    evaluacion_ejercicios: [
+      { orden: 1, ejercicio: 'medir_spo2', criterio: { tipo: 'spo2_en_rango', min: 95, max: 100 }, puntaje: 20 }
+    ],
     precargada: true,
     preguntas: [
       {
@@ -225,9 +232,12 @@ export const EVALUACIONES_PRECARGADAS = [
     id: 'precargada-04',
     titulo: 'Control Práctico: Morfología y Comparación de Señales PPG',
     descripcion: 'Práctica de contraste y análisis morfológico de ondas de pulso arterial con señal de referencia.',
-    tipo: 'ejercicio_aplicado',
-    ejercicio: 'comparar_senales',
-    criterio: { tipo: 'similitud_minima', valor: 75 },
+    tipo: 'mixta',
+    ejercicio: null,
+    criterio: null,
+    evaluacion_ejercicios: [
+      { orden: 1, ejercicio: 'comparar_senales', criterio: { tipo: 'similitud_minima', valor: 75 }, puntaje: 20 }
+    ],
     precargada: true,
     preguntas: [
       {
@@ -395,13 +405,10 @@ export async function crearEvaluacion({
   if (conSesion) {
     const { data, error } = await supabase.from('evaluaciones').insert(fila).select().single()
     if (error || !data) {
-      if (error?.code === CODIGO_VIOLA_CHECK) {
-        return { success: false, origen: 'supabase', error: 'La base rechazó el tipo o el criterio de la evaluación.' }
-      }
       return {
         success: false,
         origen: 'supabase',
-        error: error?.message || 'No se pudo guardar la evaluación en Supabase.'
+        error: explicarErrorBase(error, fila.tipo)
       }
     }
 
@@ -411,7 +418,9 @@ export async function crearEvaluacion({
       const { error: errEj } = await supabase.from('evaluacion_ejercicios')
         .insert(filasEjercicios.map((f) => ({ ...f, evaluacion_id: data.id })))
       if (errEj) {
-        return { success: false, origen: 'supabase', error: `Evaluación creada, pero falló guardar los ejercicios: ${errEj.message}` }
+        // No dejar una evaluación mixta sin sus ejercicios
+        await supabase.from('evaluaciones').delete().eq('id', data.id)
+        return { success: false, origen: 'supabase', error: explicarErrorBase(errEj, fila.tipo) }
       }
     }
 
@@ -473,7 +482,7 @@ export async function crearEvaluacion({
   const local = { 
     ...fila, 
     evaluacion_ejercicios: ejerciciosParaGuardar(modelo, { exigirReferencia }),
-    id: `eval-${Date.now()}`, 
+    id: `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, 
     preguntas, 
     precargadaBaseId,
     creado_en: new Date().toISOString() 
@@ -563,11 +572,14 @@ export async function actualizarTipoEvaluacion({ evaluacionId, modelo, puedeGest
       if (filasEjercicios.length) {
         const { error: errEj } = await supabase.from('evaluacion_ejercicios')
           .insert(filasEjercicios.map((f) => ({ ...f, evaluacion_id: evaluacionId })))
-        if (errEj) return { success: false, error: `No se pudieron guardar los ejercicios: ${errEj.message}` }
+        if (errEj) return { success: false, error: explicarErrorBase(errEj, campos.tipo) }
       }
       return { success: true, origen: 'supabase', data }
     }
-    if (error?.code === CODIGO_VIOLA_CHECK) return { success: false, error: 'La base rechazó el tipo o el criterio de la evaluación.' }
+    // Una evaluación de la base (id uuid) nunca se "guarda" solo en este navegador: se explica el error
+    if (error && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))) {
+      return { success: false, error: explicarErrorBase(error, campos.tipo) }
+    }
   } catch (_) {}
 
   const locales = cargarLocales()
@@ -635,6 +647,8 @@ export async function asignarEvaluacion({
     return { success: false, error: 'Debes seleccionar al menos un estudiante para este alcance.' }
   }
 
+  // Una evaluación de la base (id uuid) solo se da por asignada si la base lo confirma: el error real se muestra
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))
   try {
     const { data, error } = await supabase.rpc('asignar_evaluacion_rf109', {
       p_evaluacion_id: evaluacionId,
@@ -650,7 +664,12 @@ export async function asignarEvaluacion({
     if (!error && data) {
       return { success: true, data }
     }
-  } catch (_) {}
+    if (error && esDeLaBase) {
+      return { success: false, error: error.message || 'No se pudo asignar la evaluación.' }
+    }
+  } catch (errorRed) {
+    if (esDeLaBase) return { success: false, error: `No se pudo asignar la evaluación: ${errorRed.message}` }
+  }
 
   // Respaldo resiliente estructurado (RF104 / RF109)
   const filas = []
@@ -662,6 +681,36 @@ export async function asignarEvaluacion({
     filas.push(...estudiantesIds.map(uid => ({ evaluacion_id: evaluacionId, alcance: 'estudiante', curso_id: null, usuario_id: uid })))
   }
   return { success: true, data: filas }
+}
+
+/**
+ * Elimina una evaluación con sus asignaciones, ejercicios, intentos y resultados (borrado en cascada).
+ * Solo la puede borrar el profesor del aula o un administrador (política RLS evaluaciones_borrar).
+ */
+export async function eliminarEvaluacion({ evaluacionId, puedeGestionar = true }) {
+  if (!puedeGestionar) return { success: false, error: 'No tienes permiso para eliminar evaluaciones.' }
+  if (!evaluacionId) return { success: false, error: 'No se indicó qué evaluación eliminar.' }
+
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))
+  if (esDeLaBase) {
+    try {
+      const { data, error } = await supabase.from('evaluaciones').delete().eq('id', evaluacionId).select('id')
+      if (error) return { success: false, error: error.message }
+      if (!Array.isArray(data) || !data.length) {
+        return { success: false, error: 'No se pudo eliminar: la evaluación no existe o no tienes permiso.' }
+      }
+    } catch (errorRed) {
+      return { success: false, error: `No se pudo eliminar la evaluación: ${errorRed.message}` }
+    }
+  }
+
+  const locales = cargarLocales()
+  const quedan = locales.filter((e) => e.id !== evaluacionId)
+  if (!esDeLaBase && quedan.length === locales.length) {
+    return { success: false, error: 'No se encontró la evaluación.' }
+  }
+  guardarLocales(quedan)
+  return { success: true }
 }
 
 export async function controlarEvaluacionEnVivo(evaluacionId, accion) {
@@ -731,6 +780,7 @@ export {
   obtenerOpcionesReferencia,
   calificarEjercicioAplicado,
   calificarEjercicioMixto,
+  obtenerResultadoEvaluacion,
   recalificarIntento,
   obtenerResultadosEjercicio
 } from './calificacionEjercicioService.js'

@@ -82,3 +82,57 @@ Nuevo tipo `mixta` (migración `20261113000200_rf107_evaluacion_mixta.sql`, tamb
 - Al terminar, *Aulas* muestra «Aula creada» y el botón **«Volver a la creación de la evaluación»**. Ese botón también aparece mientras se crea el aula, por si se cambia de idea.
 - *Evaluaciones* vuelve con el aula nueva elegida y el borrador recuperado. Si no hay borrador, igual avisa y deja seguir.
 - Archivos: `EvaluacionesView.vue` (borrador y botón) y `AulasView.vue` (parámetros `crear` y `volver`, y botón de regreso).
+
+## Resultado y correcciones al entregar
+Al entregar (y después, con «Ver correcciones» en el listado), el estudiante ve su calificación automática. Migración `20261113000300_rf107_resultado_evaluacion.sql` (también en la base completa) y util `src/utils/correccionEvaluacion.js`.
+
+- **Resumen:** porcentaje logrado, puntos obtenidos de los posibles, barra y el **nivel** (logrado, medianamente logrado o no logrado) con una frase que lo explica con los umbrales de la evaluación (RF112, por defecto 70 % y 40 %). Cuenta además las preguntas correctas, incorrectas, por revisar y sin responder.
+- **Cada pregunta:** su estado (✓ correcta, ✗ incorrecta, ⏳ pendiente de revisión o sin responder), los puntos obtenidos, **su respuesta**, la **respuesta correcta** cuando falló (alternativa con su texto, verdadero/falso en palabras, o número con su tolerancia) y la **explicación** si la pregunta la tiene. Las preguntas abiertas las revisa el profesor: no suman puntos hasta entonces.
+- **Cada ejercicio aplicado:** si cumple, cumple parcialmente o no cumple el criterio, los puntos (o el porcentaje en el ejercicio simple) y el motivo («Tu pulso (120 BPM) está por encima del rango pedido…»).
+- **Seguridad de la clave:** las claves siguen sin ser legibles para el estudiante. Solo la función `resultado_evaluacion(intento)` las devuelve, y únicamente al **dueño del intento** y **después de entregarlo**. Hasta entonces no hay correcciones.
+- **Sin conexión:** si la entrega quedó en cola (RF110), se avisa y el resultado se puede ver cuando se envíe.
+- **Límite:** apenas se entrega, se ven las respuestas correctas. Si el profesor no quiere que se vean mientras otros estudiantes aún no rinden la evaluación, habría que ocultarlas hasta el cierre. Se puede agregar como opción de la evaluación.
+
+## Cambiar el tipo de una evaluación ya creada
+- En *Evaluaciones*, cada evaluación guardada tiene **«✏️ Cambiar tipo»**. Abre el mismo formulario del tipo y permite dejarla como **solo preguntas**, **solo ejercicio aplicado** o **ambas** (preguntas + ejercicios), con su criterio, referencia, puntajes e intentos. Al guardar se reemplazan sus ejercicios.
+- Si ya tiene intentos de estudiantes, el tipo queda bloqueado (cambiarlo alteraría notas ya puestas). Para tipos con preguntas (solo preguntas o ambas), la evaluación debe tener preguntas; si no, se avisa.
+- Al cargar una **plantilla precargada** en el formulario también se respeta su tipo. Las plantillas que traen preguntas y un ejercicio (pulso, SpO₂ y comparación de señales) ahora son de tipo **mixta**, y se pueden cambiar a solo preguntas o solo ejercicio antes de guardar.
+
+## Error «La base rechazó el tipo o el criterio de la evaluación»
+Casi siempre significa que **la base de Supabase no tiene aplicadas las migraciones de RF107** (la restricción del tipo no conoce «mixta»). Ahora el mensaje lo dice y nombra la migración que falta. Solución: en Supabase → SQL Editor, ejecutar `supabase/rf107_aplicar_en_supabase.sql` (junta las tres migraciones) o los tres archivos de `supabase/migrations/` en orden (\`20261113000100\`, \`20261113000200\`, \`20261113000300\`). Al crear una evaluación mixta, si falla guardar sus ejercicios, la evaluación creada se elimina para no dejarla a medias.
+
+## Asignar al crear (curso y fechas) y eliminar evaluaciones
+Complementa RF104 (asignación) y RF109 (modos de aplicación) desde la pantalla *Evaluaciones*.
+- **Al crear una evaluación o usar una plantilla:** el formulario trae la sección «📅 Asignación a los estudiantes». Con «Asignar a los estudiantes al guardar» marcado pide **a qué curso** (o toda el aula), **cómo se aplica** y, según eso, la **fecha y hora de inicio y de término** o la **duración** si es en vivo. Propone fechas (dentro de una hora, por una semana) y valida: ambas fechas, término posterior al inicio y término en el futuro. Si falta algo no se guarda; si se guarda y la asignación falla, lo dice y se puede reintentar con el botón «Asignar».
+- **En cada evaluación guardada:** botón **«🎯 Asignar»** con el mismo formulario.
+- **Eliminar:** botón **«🗑️ Eliminar»** en la lista de *Evaluaciones* y en las evaluaciones asignadas de la página del aula. Pide confirmación y, si ya hay estudiantes que la rindieron, avisa cuántos intentos se borrarán con sus notas (borrado en cascada). Solo el profesor del aula o un administrador (política `evaluaciones_borrar`).
+- **Corrección:** antes, si la base rechazaba una asignación (por ejemplo «solo puedes configurar antes de que abra»), la pantalla igual decía que se había asignado. Ahora, en evaluaciones guardadas, el error real se muestra; el respaldo local solo vale para evaluaciones de prueba.
+- **Archivos:** `src/utils/asignacionEvaluacion.js`, `src/components/AsignacionEvaluacionForm.vue`, `eliminarEvaluacion` y `asignarEvaluacion` en `evaluacionesService.js`, y `scripts/test-rf104-asignacion-eliminar.mjs` (`npm run test:rf104`).
+- **Límite:** la base solo deja configurar una evaluación antes de que abra (`borrador` o `programada`); una ya abierta no se puede reasignar, solo eliminar.
+
+## Cuánto falta para que una evaluación esté disponible (estudiante)
+En *Mis evaluaciones*, cada tarjeta muestra una cuenta regresiva que se actualiza cada segundo (RF109):
+- **Aún no abre:** «Estará disponible en 2 d 3 h 0 min» (cuando falta poco cuenta los segundos). Si es en vivo y el profesor no la inició: «Se abrirá cuando tu profesor la inicie».
+- **Abierta:** «Disponible ahora · se cierra en 1 h 59 min». Con 10 minutos o menos se resalta como urgente.
+- **Al rendir:** el encabezado muestra «Tiempo restante: …» (urgente con 5 minutos o menos; «Se acabó el tiempo: entrega ahora» al terminar). Esta cuenta es informativa: quien decide si la entrega se acepta es la base de datos.
+- **Cambio automático:** cuando llega la hora de apertura o de cierre, el listado se vuelve a pedir una vez para reflejar el nuevo estado.
+- **Límite:** usa el reloj del equipo del estudiante; si está desfasado, el contador puede diferir unos segundos del servidor.
+- **Archivos:** `src/utils/tiempoEvaluacion.js` y `scripts/test-tiempo-evaluacion.mjs` (`npm run test:rf109-tiempo`).
+
+## Inicio automático de la evaluación en vivo
+Migración `20261113000400_rf109_inicio_automatico.sql` (también en la base completa). El profesor **no tiene que entrar al aula a pulsar «Iniciar en vivo»**: la evaluación se abre sola a la hora indicada, dura su tiempo límite y se cierra sola.
+
+- **Qué pide el formulario de asignación:** «¿Cuándo empieza?» con tres opciones: **en una fecha y hora**, **dentro de N minutos** (se convierte en fecha al guardar y muestra «Empezará el …») o, solo en vivo, **cuando yo la inicie** (manual, como antes). En el modo con fechas también se puede empezar «dentro de N minutos»; el término sigue siendo una fecha. Se valida que el inicio no esté vencido y que el término sea posterior.
+- **Cómo se cumple la hora:** la base considera abierta una evaluación en vivo desde `coalesce(iniciada_en, abre_en)` hasta ese momento más el tiempo límite (`evaluacion_abierta`). Usa el reloj de la base, así que funciona aunque nadie abra ninguna pantalla. `activar_evaluaciones_programadas()` solo ordena el estado (en curso e inicio real) para los paneles del profesor; se llama al cargar *Mis evaluaciones* y las evaluaciones del aula.
+- **Estudiante:** ve «Estará disponible en …» y, a la hora, el listado se actualiza solo y aparece «Rendir evaluación» (ver «Cuánto falta»). Pasado el tiempo, queda como cerrada.
+- **Profesor:** la tarjeta de la evaluación dice «Inicia sola el …». «Iniciar ahora (adelantar)» sigue sirviendo para empezar antes; si ya está abierta no la reinicia. «Cerrar en vivo» funciona también sobre una abierta automáticamente. En el modal de asignar del aula, la evaluación en vivo tiene el campo «Inicio automático (opcional)».
+- **Límite:** una evaluación abierta no se puede reasignar. Hay que aplicar la migración en Supabase (SQL Editor) antes de usarlo; sin ella el campo de inicio se ignora y la evaluación sigue siendo manual.
+
+## Ejercicio aplicado del estudiante: medir, volver y entregar sin bloqueos
+
+- **Realizar medición / Hacer comparación**: dentro del ejercicio hay un botón que lleva a Medición o Comparación. Antes de salir se guarda un borrador (respuestas y mediciones elegidas) en la pestaña. En esas pantallas aparece «Volver a la evaluación», que reabre la misma evaluación (`/mis-evaluaciones?abrir=<id>`), restaura el borrador y deja elegida la medición recién guardada.
+- **Elegir una medición guardada**: la lista incluye todas las mediciones del estudiante, también las de señal mala, con su calidad a la vista.
+- **Entrega sin bloqueos** (migración `20261113000700_rf107_entrega_sin_bloqueos.sql`): solo se exige que la medición sea del estudiante. Señal mala, medición anterior a la apertura, dato faltante o referencia sin definir ya no impiden entregar: se califica (con 0 si no hay dato) y la corrección agrega un «Aviso:» que explica qué pasó.
+- **Evaluación mixta**: al entregar se califican solos los ejercicios con medición elegida; los que no tienen medición se entregan con 0 si el estudiante lo confirma.
+- **Resultados**: al entregar se muestran el porcentaje, el nivel y la corrección de cada pregunta y ejercicio. Si la base aún no tiene `resultado_evaluacion`, se usa un resultado de respaldo (correcta/incorrecta, sin la respuesta correcta) con un aviso.
+- **Mis evaluaciones**: filtros por estado con contador, tarjetas con icono de tipo y selector de mediciones en forma de lista.
