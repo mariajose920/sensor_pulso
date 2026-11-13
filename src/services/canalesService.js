@@ -2,6 +2,7 @@ import { reactive, computed } from 'vue'
 import { supabase } from './supabase.js'
 import { pacienteService } from './pacienteService.js'
 import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
+import { consentimientoEstado } from './consentimientoService.js'
 import {
   MAX_CANALES_DOCENTE,
   esDocente,
@@ -355,7 +356,7 @@ export function esUuid(valor) { return typeof valor === 'string' && UUID_RE.test
  * Con `canalExistente` solo se completan los requisitos de un canal que ya es mío (p. ej. tras recargar).
  * Solo profesor/admin: la base de datos lo vuelve a exigir (RNF12).
  */
-export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, canalExistente = null, comoEstudiante = false }) {
+export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, canalExistente = null, comoEstudiante = false, declaracionExistenteId = null }) {
   if (comoEstudiante) {
     // Estudiante (RF111): un solo canal, asignado solo, con su ficha, los términos y el consentimiento.
     // El único paciente que puede medir es él mismo: el nombre de la ficha es siempre el de su cuenta.
@@ -393,24 +394,32 @@ export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoV
     } catch { hayCuenta = false }
 
     if (hayCuenta && sesionReal) {
-      const guardada = await pacienteService.guardarDeclaracion(ficha, { adicional: true, sesionId: canalesState.sesionActivaId })
-      if (!guardada.ok) throw new Error(guardada.errores?.[0] || 'No se pudo guardar la ficha del paciente.')
-      declaracionId = guardada.declaracionId || null
-      if (!guardada.declaracionId) {
-        // Se muestra el motivo real (p. ej. migración sin aplicar o cifrado caído) para no adivinar
-        throw new Error(`No se pudo guardar la ficha del paciente en el servidor${guardada.errorServidor ? `: ${guardada.errorServidor}` : ''}. Intenta de nuevo.`)
+      if (declaracionExistenteId) {
+        // Estudiante: su ficha ya está guardada en la base (paso 2); se reutiliza, no se guarda otra ni se modifica
+        if (!esUuid(declaracionExistenteId)) {
+          throw new Error('Tu ficha todavía no está guardada en la base de datos. Revisa el aviso de guardado de tu ficha (paso 2) y vuelve a intentarlo.')
+        }
+        declaracionId = declaracionExistenteId
+      } else {
+        const guardada = await pacienteService.guardarDeclaracion(ficha, { adicional: true, sesionId: canalesState.sesionActivaId })
+        if (!guardada.ok) throw new Error(guardada.errores?.[0] || 'No se pudo guardar la ficha del paciente.')
+        declaracionId = guardada.declaracionId || null
+        if (!guardada.declaracionId) {
+          // Se muestra el motivo real (p. ej. migración sin aplicar o cifrado caído) para no adivinar
+          throw new Error(`No se pudo guardar la ficha del paciente en el servidor${guardada.errorServidor ? `: ${guardada.errorServidor}` : ''}. Intenta de nuevo.`)
+        }
       }
 
       const { data, error } = comoEstudiante
         ? await supabase.rpc('asignar_canal_estudiante', {
           p_sesion: canalesState.sesionActivaId,
-          p_declaracion: guardada.declaracionId,
+          p_declaracion: declaracionId,
           p_politica_version: politicaVersion,
           p_consentimiento_version: consentimientoVersion
         })
         : await supabase.rpc('agregar_canal_automatico', {
           p_sesion: canalesState.sesionActivaId,
-          p_declaracion: guardada.declaracionId,
+          p_declaracion: declaracionId,
           p_politica_version: politicaVersion,
           p_consentimiento_version: consentimientoVersion,
           p_canal: canalExistente
@@ -451,4 +460,37 @@ export async function agregarOtroCanal({ ficha, politicaVersion, consentimientoV
  */
 export function asignarmeCanalConFicha({ ficha, politicaVersion, consentimientoVersion }) {
   return agregarOtroCanal({ ficha, politicaVersion, consentimientoVersion, comoEstudiante: true })
+}
+
+/** Error con el que la pantalla sabe si lo que falta es la ficha o el consentimiento (para llevar a la persona al paso). */
+export class FaltaRequisitoCanal extends Error {
+  constructor(mensaje, requisito) {
+    super(mensaje)
+    this.name = 'FaltaRequisitoCanal'
+    this.requisito = requisito // 'ficha' | 'consentimiento'
+  }
+}
+
+/**
+ * El canal del estudiante se asigna SOLO, sin botones: toma el siguiente canal libre y lo liga a su propia ficha, ya guardada
+ * en la base (paso 2). El único paciente que puede medir es él mismo. No modifica la ficha: solo la usa.
+ */
+export async function asignarCanalAutomaticoEstudiante() {
+  if (esDocente(usuarioActual.rol)) throw new Error('El profesor y el administrador usan «Agregar canal».')
+  if (miCanalAsignado.value) return { ok: true, canal: miCanalAsignado.value, yaTenia: true }
+
+  const ficha = await pacienteService.obtenerDeclaracionActiva()
+  if (!ficha || ficha.incompleta || ficha.estadoLectura === 'incompleta') {
+    throw new FaltaRequisitoCanal('Completa tu ficha del paciente (paso 2) para que se te asigne tu canal.', 'ficha')
+  }
+  if (!consentimientoEstado.value.vigente) {
+    throw new FaltaRequisitoCanal('Acepta el consentimiento informado (paso 1) para que se te asigne tu canal.', 'consentimiento')
+  }
+  return agregarOtroCanal({
+    ficha: { ...ficha },
+    politicaVersion: POLITICA_VERSION,
+    consentimientoVersion: consentimientoEstado.value.version,
+    comoEstudiante: true,
+    declaracionExistenteId: ficha.id || null
+  })
 }

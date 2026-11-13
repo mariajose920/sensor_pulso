@@ -2740,7 +2740,8 @@ begin
   update public.sesion_canales set usuario_id = v_uid, asignado_en = now()
    where sesion_id = p_sesion and canal = v_canal;
 
-  update public.declaraciones_paciente set sesion_id = p_sesion, canal = v_canal where id = p_declaracion;
+  -- La ficha del estudiante es su ficha propia (sesion_id nulo): se reutiliza tal cual y NO se liga a la sesión, así sigue
+  -- siendo su ficha guardada de siempre y no se le vuelve a pedir. La constancia queda en sesion_canal_requisitos.
 
   insert into public.sesion_canal_requisitos
     (sesion_id, canal, usuario_id, declaracion_id, politica_version, consentimiento_version)
@@ -2751,3 +2752,38 @@ end $$;
 
 revoke all on function public.asignar_canal_estudiante(uuid, uuid, text, text) from public, anon;
 grant execute on function public.asignar_canal_estudiante(uuid, uuid, text, text) to authenticated;
+
+
+-- sensor_pulso · RF03 (ampliación): la ficha propia del paciente se conserva en la base
+-- La ficha propia de cada persona (estudiante, profesor o administrador) debe quedar guardada aunque cierre la sesión o
+-- pasen días sin conectarse, y solo cambiar cuando la persona lo pida. La retención diaria (RF60) borraba las fichas por
+-- fecha de creación (365 días), también la propia. Ahora la retención solo alcanza a las fichas de canales adicionales y
+-- de sesiones (sesion_id no nulo); la ficha propia (sesion_id nulo) solo se elimina cuando la persona ejerce su derecho
+-- de supresión (función de derechos del titular) o borra su cuenta.
+
+create or replace function public.aplicar_retencion()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare r record; n integer; total integer := 0;
+begin
+  for r in select * from public.politicas_retencion where activa loop
+    if r.tabla = 'lecturas' and r.accion = 'borrar' then
+      delete from public.lecturas where t < now() - make_interval(days => r.dias);
+    elsif r.tabla = 'intentos_login' and r.accion = 'borrar' then
+      delete from public.intentos_login where ocurrio_en < now() - make_interval(days => r.dias);
+    elsif r.tabla = 'limites_peticiones' and r.accion = 'borrar' then
+      delete from public.limites_peticiones where ventana < now() - make_interval(days => r.dias);
+    elsif r.tabla = 'declaraciones_paciente' and r.accion = 'borrar' then
+      -- La ficha propia (sesion_id nulo) se conserva: solo se borran las fichas ligadas a una sesión/canal.
+      delete from public.declaraciones_paciente
+       where creado_en < now() - make_interval(days => r.dias)
+         and sesion_id is not null;
+    else
+      continue;
+    end if;
+    get diagnostics n = row_count;
+    total := total + n;
+  end loop;
+  insert into public.auditoria (accion, entidad, detalle) values ('retencion', 'sistema', jsonb_build_object('filas', total));
+  return total;
+end $$;
+revoke all on function public.aplicar_retencion() from public, anon, authenticated;

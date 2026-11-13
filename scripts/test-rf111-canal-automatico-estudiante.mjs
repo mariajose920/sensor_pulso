@@ -3,7 +3,9 @@
 import { readFileSync } from 'node:fs'
 import { evaluarAsignacionEstudiante, siguienteCanalLibre } from '../src/utils/canalesMultiples.js'
 import { supabase } from '../src/services/supabase.js'
-import { canalesState, usuarioActual, miCanalAsignado, asignarmeCanalConFicha, estadoAsignacionEstudiante, requisitosCanales } from '../src/services/canalesService.js'
+import { canalesState, usuarioActual, miCanalAsignado, asignarmeCanalConFicha, estadoAsignacionEstudiante, requisitosCanales, asignarCanalAutomaticoEstudiante, FaltaRequisitoCanal } from '../src/services/canalesService.js'
+import { pacienteService } from '../src/services/pacienteService.js'
+import { consentimientoEstado } from '../src/services/consentimientoService.js'
 import { POLITICA_VERSION } from '../src/data/politicaPrivacidad.js'
 
 let fallos = 0
@@ -92,17 +94,73 @@ marcar(!/Tomar este Canal|Tomar este canal|(?<!des)vincular\(ch\.canal\)/.test(v
 marcar(/const canalesVisibles = computed\(\(\) => canalesState\.canales\.filter\(c => c\.usuario_id\)\)/.test(vista), 'Como en el perfil del profesor, solo se listan los canales ya tomados')
 marcar(/v-if="esProfesorOAdmin" class="docente-controls"/.test(vista), 'El control de rondas («Abrir siguiente ronda») solo lo ve el profesor o el administrador')
 
-// --- Medición: el estudiante agrega un solo canal, con sus datos, y el paciente es él mismo
+// --- Canal automático del estudiante: sin botones, con su ficha ya guardada
+const rpcOriginal2 = supabase.rpc
+supabase.rpc = async () => { throw new Error('sin red') }
+const fichaOriginal = pacienteService.obtenerDeclaracionActiva
+usuarioActual.rol = 'estudiante'
+usuarioActual.id = 'usr-estudiante-01'
+usuarioActual.nombre = 'Adán Ramos'
+const fichaGuardada = { ...ficha, id: 'ficha-local-1', nombre: 'Adán Ramos', estadoLectura: 'completa' }
+const fallaCon = async () => { try { await asignarCanalAutomaticoEstudiante(); return null } catch (err) { return err } }
+const quitarCanal = () => { for (const c of canalesState.canales) if (c.usuario_id === usuarioActual.id) c.usuario_id = null; for (const k of Object.keys(requisitosCanales)) delete requisitosCanales[k] }
+
+canalesState.canales = ocupar(libres(), 1, 'otro-1')
+consentimientoEstado.value = { ...consentimientoEstado.value, vigente: true, version: '1.0' }
+
+pacienteService.obtenerDeclaracionActiva = async () => null
+let err2 = await fallaCon()
+marcar(err2 instanceof FaltaRequisitoCanal && err2.requisito === 'ficha' && !miCanalAsignado.value, 'Sin ficha guardada no se asigna el canal y se pide completar la ficha (paso 2)')
+pacienteService.obtenerDeclaracionActiva = async () => ({ ...fichaGuardada, incompleta: true, estadoLectura: 'incompleta' })
+err2 = await fallaCon()
+marcar(err2 instanceof FaltaRequisitoCanal && err2.requisito === 'ficha', 'Con la ficha guardada pero ilegible tampoco se asigna')
+pacienteService.obtenerDeclaracionActiva = async () => fichaGuardada
+consentimientoEstado.value = { ...consentimientoEstado.value, vigente: false }
+err2 = await fallaCon()
+marcar(err2 instanceof FaltaRequisitoCanal && err2.requisito === 'consentimiento' && !miCanalAsignado.value, 'Sin el consentimiento informado no se asigna y se lleva a ese paso')
+consentimientoEstado.value = { ...consentimientoEstado.value, vigente: true }
+
+const guardarOriginal = pacienteService.guardarDeclaracion
+let seGuardoOtraFicha = false
+pacienteService.guardarDeclaracion = async () => { seGuardoOtraFicha = true; return { ok: true } }
+const auto = await asignarCanalAutomaticoEstudiante()
+marcar(auto.ok && auto.canal === 2 && miCanalAsignado.value === 2, 'Con su ficha y el consentimiento, el canal se asigna solo (el siguiente libre: el 2)')
+marcar(requisitosCanales[2]?.ficha?.nombre === 'Adán Ramos' && requisitosCanales[2]?.declaracionId === null, 'El canal queda con los datos de su propia ficha')
+marcar(!seGuardoOtraFicha, 'No guarda ni modifica la ficha: solo la usa')
+const otraVez = await asignarCanalAutomaticoEstudiante()
+marcar(otraVez.yaTenia && otraVez.canal === 2, 'Si ya tiene canal no se le asigna otro')
+pacienteService.guardarDeclaracion = guardarOriginal
+quitarCanal()
+usuarioActual.rol = 'profesor'
+err2 = await fallaCon()
+marcar(err2 && /Agregar canal/.test(err2.message), 'El profesor no usa la asignación automática del estudiante')
+usuarioActual.rol = 'estudiante'
+canalesState.canales = todos
+err2 = await fallaCon()
+marcar(err2 && /No quedan canales libres/.test(err2.message), 'Si no queda ningún canal libre, avisa que hay que esperar en vez de asignar')
+pacienteService.obtenerDeclaracionActiva = fichaOriginal
+supabase.rpc = rpcOriginal2
+
+// --- La base: la ficha propia no se liga a la sesión y la retención no la borra
+const sqlEst = readFileSync(new URL('../supabase/migrations/20261113000500_rf111_canal_estudiante_con_ficha.sql', import.meta.url), 'utf8')
+marcar(!/update public\.declaraciones_paciente set sesion_id/.test(sqlEst), 'Asignar el canal no convierte la ficha propia en una ficha de sesión (sigue siendo su ficha de siempre)')
+const sqlRet = readFileSync(new URL('../supabase/migrations/20261113000600_rf03_ficha_propia_persistente.sql', import.meta.url), 'utf8')
+marcar(sqlRet.includes('and sesion_id is not null') && sqlRet.includes('create or replace function public.aplicar_retencion'), 'La retención diaria ya no borra la ficha propia (solo las fichas ligadas a una sesión)')
+marcar(readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql', import.meta.url), 'utf8').includes('ficha propia del paciente se conserva'), 'La base completa incluye la migración de la ficha persistente')
+
+// --- Cerrar sesión no pierde la ficha
+const auth = readFileSync(new URL('../src/composables/useAuth.js', import.meta.url), 'utf8')
+marcar(/pacienteService\.esperarGuardado\(\)/.test(auth) && /pacienteService\.reintentarSincronizacion\(\)/.test(auth) && auth.indexOf('await supabase.auth.signOut()', auth.indexOf('esperarGuardado')) > auth.indexOf('esperarGuardado'), 'Al cerrar sesión primero se termina de guardar la ficha en la base y recién después se sale')
+
+// --- Medición: el estudiante no ve los 5 canales ni botones; el canal se asigna solo
 const medicion = readFileSync(new URL('../src/views/MedicionView.vue', import.meta.url), 'utf8')
 const panel = readFileSync(new URL('../src/components/CanalesPacientesPanel.vue', import.meta.url), 'utf8')
-const modalVista = readFileSync(new URL('../src/components/AgregarCanalModal.vue', import.meta.url), 'utf8')
-marcar(/<CanalesPacientesPanel @agregado="alAgregarCanal" \/>/.test(medicion), 'En Medición el estudiante usa el mismo panel simple del profesor (un botón para agregar su canal)')
-marcar(/<VinculacionCanales solo-lectura/.test(medicion), 'El detalle de los canales de la ronda queda solo para consultar')
-marcar(/data-testid="agregar-mi-canal"/.test(panel) && /Agregar mi canal/.test(panel) && /v-if="!miCanalAsignado"/.test(panel), 'El panel del estudiante muestra «Agregar mi canal» y lo oculta cuando ya tiene su canal')
-marcar(/data-testid="liberar-mi-canal"/.test(panel) && /desvincularMiCuenta\(null\)/.test(panel), 'Con su canal asignado puede liberarlo para volver a empezar')
-marcar(/data-testid="un-solo-canal"/.test(panel) && /el paciente eres tú/.test(panel), 'El panel explica que tiene un solo canal y que el paciente es él mismo')
-marcar(/:readonly="Boolean\(nombreFijo\)"/.test(modalVista) && /data-testid="canal-paciente-eres-tu"/.test(modalVista), 'En el asistente del estudiante el nombre del paciente es fijo (el suyo) y no se puede cambiar')
-marcar(/modo="estudiante"|esEstudiante \? 'estudiante' : 'docente'/.test(panel), 'El panel abre el asistente en modo estudiante')
+marcar(/<CanalesPacientesPanel @agregado="alAgregarCanal" @ir-a-paso=/.test(medicion), 'En Medición el estudiante usa el panel simple, que lo lleva a su ficha o consentimiento si falta algo')
+marcar(!/VinculacionCanales/.test(medicion), 'En Medición el estudiante ya no ve el panel de los 5 canales ni de las rondas')
+marcar(/data-testid="canal-automatico"/.test(panel) && /onMounted\(\(\) => \{ asegurarCanal\(\) \}\)/.test(panel), 'El canal del estudiante se asigna solo al entrar a medir')
+marcar(!/data-testid="agregar-mi-canal"/.test(panel), 'El estudiante ya no tiene botón para agregar canal')
+marcar(/data-testid="liberar-mi-canal"/.test(panel) && /data-testid="un-solo-canal"/.test(panel) && /el paciente eres tú/.test(panel), 'Muestra su único canal, que el paciente es él mismo, y permite liberarlo')
+marcar(/data-testid="ir-a-ficha"/.test(panel) && /data-testid="reintentar-canal"/.test(panel), 'Si falta la ficha lo lleva a ella; si falló la asignación ofrece reintentar')
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : '\nTodas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)

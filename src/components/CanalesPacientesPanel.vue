@@ -1,31 +1,29 @@
 <template>
   <section class="agregar-canal" aria-label="Agregar canal de medición" data-testid="canales-pacientes">
-    <!-- Estudiante: un solo canal y un solo paciente, él mismo -->
-    <template v-if="esEstudiante">
-      <button
-        v-if="!miCanalAsignado"
-        type="button"
-        class="btn btn-primary"
-        data-testid="agregar-mi-canal"
-        :disabled="!estadoAsignacionEstudiante.puede || canalesState.cargando"
-        :title="estadoAsignacionEstudiante.puede ? 'Se te asigna el siguiente canal libre, con tus datos' : estadoAsignacionEstudiante.motivo"
-        @click="modalVisible = true"
-      >
-        ➕ Agregar mi canal
-      </button>
-      <template v-else>
+    <!-- Estudiante: un solo canal y un solo paciente (él mismo). El canal se asigna SOLO, con los datos de su ficha -->
+    <div v-if="esEstudiante" class="canal-auto" data-testid="canal-automatico">
+      <template v-if="miCanalAsignado">
         <span class="mi-canal" data-testid="mi-canal-asignado">✓ Tu canal: <strong>Canal {{ miCanalAsignado }}</strong></span>
+        <p class="nota" data-testid="un-solo-canal">
+          Se te asignó automáticamente, con los datos de tu ficha: el paciente eres tú y solo puedes medirte a ti mismo.
+        </p>
         <button type="button" class="btn btn-secondary btn-sm" data-testid="liberar-mi-canal" :disabled="canalesState.cargando" @click="liberarMiCanal">
           Liberar mi canal
         </button>
       </template>
-      <p v-if="!miCanalAsignado && !estadoAsignacionEstudiante.puede" class="nota" data-testid="agregar-canal-motivo">{{ estadoAsignacionEstudiante.motivo }}</p>
-      <p v-else-if="!miCanalAsignado" class="nota" data-testid="sin-pacientes">
-        Pulsa «Agregar mi canal» para ingresar tus datos: solo puedes medirte a ti mismo y al terminar aparece tu gráfica.
-      </p>
-      <p v-else class="nota" data-testid="un-solo-canal">Tienes un solo canal y el paciente eres tú. Libéralo si necesitas volver a empezar.</p>
-      <p v-if="mensajeError" class="nota nota-error" role="alert">{{ mensajeError }}</p>
-    </template>
+      <p v-else-if="asignando" class="nota" role="status" data-testid="asignando-canal">Asignándote tu canal…</p>
+      <template v-else>
+        <p class="nota" :class="{ 'nota-error': !requisitoFaltante }" role="status" data-testid="canal-motivo">
+          {{ mensajeError || 'Tu canal se asigna solo.' }}
+        </p>
+        <button v-if="requisitoFaltante" type="button" class="btn btn-primary btn-sm" data-testid="ir-a-ficha" @click="$emit('ir-a-paso', requisitoFaltante)">
+          {{ requisitoFaltante === 'ficha' ? 'Ir a mi ficha' : 'Ir al consentimiento' }}
+        </button>
+        <button v-else type="button" class="btn btn-primary btn-sm" data-testid="reintentar-canal" :disabled="canalesState.cargando" @click="asegurarCanal">
+          Reintentar
+        </button>
+      </template>
+    </div>
 
     <!-- Profesor y administrador: varios pacientes -->
     <template v-else>
@@ -46,8 +44,9 @@
     </template>
 
     <AgregarCanalModal
+      v-if="!esEstudiante"
       :visible="modalVisible"
-      :modo="esEstudiante ? 'estudiante' : 'docente'"
+      modo="docente"
       :canal-existente="null"
       @cerrar="modalVisible = false"
       @agregado="alAgregar"
@@ -56,18 +55,41 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AgregarCanalModal from './AgregarCanalModal.vue'
 import {
-  canalesState, misCanales, estadoAgregarCanal, estadoAsignacionEstudiante, miCanalAsignado, usuarioActual, desvincularMiCuenta
+  canalesState, misCanales, estadoAgregarCanal, miCanalAsignado, usuarioActual, desvincularMiCuenta,
+  cargarSesionYCanales, asignarCanalAutomaticoEstudiante, FaltaRequisitoCanal
 } from '../services/canalesService.js'
 import { esDocente } from '../utils/canalesMultiples.js'
 
-const emit = defineEmits(['agregado'])
+const emit = defineEmits(['agregado', 'ir-a-paso'])
 
 const modalVisible = ref(false)
 const esEstudiante = computed(() => !esDocente(usuarioActual.rol))
 const mensajeError = ref('')
+const asignando = ref(false)
+const requisitoFaltante = ref('') // 'ficha' | 'consentimiento' cuando lo que falta es un paso previo
+
+// Estudiante: el canal se asigna solo al entrar a medir. Si falta la ficha o el consentimiento, se lleva a ese paso.
+async function asegurarCanal() {
+  if (!esEstudiante.value || miCanalAsignado.value || asignando.value) return
+  asignando.value = true
+  mensajeError.value = ''
+  requisitoFaltante.value = ''
+  try {
+    await cargarSesionYCanales()
+    const res = await asignarCanalAutomaticoEstudiante()
+    if (!res.yaTenia) emit('agregado', res.canal)
+  } catch (err) {
+    mensajeError.value = err.message
+    requisitoFaltante.value = err instanceof FaltaRequisitoCanal ? err.requisito : ''
+  } finally {
+    asignando.value = false
+  }
+}
+
+onMounted(() => { asegurarCanal() })
 
 // Estudiante: libera su único canal para poder volver a empezar
 async function liberarMiCanal() {
@@ -89,6 +111,7 @@ function alAgregar(canal) {
 .agregar-canal { margin: 0 0 1.25rem; display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
 .nota { margin: 0; font-size: 0.875rem; color: var(--color-muted); }
 .nota-error { color: var(--color-danger); }
+.canal-auto { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
 .mi-canal { font-weight: 600; color: #166534; }
 @media (max-width: 560px) { .agregar-canal .btn { width: 100%; } }
 </style>

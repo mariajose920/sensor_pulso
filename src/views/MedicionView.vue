@@ -473,12 +473,8 @@
         <CanalesPacientesPanel v-if="fuenteConectada" @agregado="alAgregarCanal" />
       </template>
       <template v-else>
-        <!-- Estudiantes y usuarios: un solo canal y un solo paciente, ellos mismos (se asigna solo con un botón) -->
-        <CanalesPacientesPanel @agregado="alAgregarCanal" />
-        <details class="herramientas-prueba" data-testid="canales-de-la-ronda">
-          <summary>Canales de la ronda (quién está midiendo)</summary>
-          <VinculacionCanales solo-lectura @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
-        </details>
+        <!-- Estudiantes y usuarios: un solo canal y un solo paciente, ellos mismos. El canal se asigna solo, con los datos de su ficha -->
+        <CanalesPacientesPanel @agregado="alAgregarCanal" @ir-a-paso="pasoActual = $event === 'ficha' ? 2 : 1" />
       </template>
       </template>
 
@@ -1150,7 +1146,6 @@ import VistaPreviaAnonimizacion from '../components/VistaPreviaAnonimizacion.vue
 import ConfirmacionExplicitaTitular from '../components/ConfirmacionExplicitaTitular.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import ExplicacionResultados from '../components/ExplicacionResultados.vue'
-import VinculacionCanales from '../components/VinculacionCanales.vue'
 import ComparadorRangoCard from '../components/ComparadorRangoCard.vue'
 import InterpretacionResultados from '../components/InterpretacionResultados.vue'
 import AlertaFueraRangoBanner from '../components/AlertaFueraRangoBanner.vue'

@@ -41,3 +41,15 @@ Migración `supabase/migrations/20261113000500_rf111_canal_estudiante_con_ficha.
 - **Detalle de la ronda:** quien quiera ver quién ocupa cada canal lo encuentra en el desplegable «Canales de la ronda» (solo consulta; no repite el botón de agregar).
 - **Archivos:** `CanalesPacientesPanel.vue` (modo estudiante), `AgregarCanalModal.vue` (nombre fijo), `VinculacionCanales.vue` (`solo-lectura`), `MedicionView.vue` y `canalesService.js`.
 - **Límite:** el nombre «de la cuenta» sale del perfil; si el perfil no tiene nombre, el estudiante lo escribe una vez en la ficha.
+
+## Canal automático del estudiante (sin botones ni 5 canales)
+- **Un canal siempre listo, sin elegir:** al entrar a medir, el estudiante ya no ve los 5 canales, ni la ronda, ni botones. Su canal se **asigna solo**, con los datos de su propia ficha: «✓ Tu canal: Canal N · Se te asignó automáticamente, con los datos de tu ficha: el paciente eres tú».
+- **Qué usa:** la ficha que ya tiene guardada en la base (paso 2) y el consentimiento aceptado (paso 1). **No guarda ni modifica la ficha**: solo la usa. Si falta la ficha o el consentimiento, el panel lo dice y ofrece «Ir a mi ficha» o «Ir al consentimiento»; si la asignación falla, ofrece «Reintentar».
+- **Base de datos:** la asignación ya no convierte la ficha propia en una ficha de sesión (`sesion_id` sigue nulo), así se sigue reconociendo como su ficha de siempre y no se le vuelve a pedir. La constancia queda en `sesion_canal_requisitos`.
+- **Límite:** el ESP32 tiene 5 canales físicos. Si ya los ocupan 5 personas a la vez, el sistema avisa «No quedan canales libres» y hay que esperar a que se libere uno (el profesor sigue abriendo la siguiente ronda desde su perfil).
+
+## La ficha del paciente se conserva en la base (todos los roles)
+La ficha propia es la misma función para estudiante, profesor y administrador: se guarda cifrada en el servidor (RF116), se carga sola en cada sesión y **solo se modifica con «Modificar»**.
+- **Cerrar sesión:** antes de salir se espera a que termine el guardado en curso y se reintenta el pendiente (hasta 8 s). Antes, la copia del dispositivo se borraba al salir aunque el servidor no la hubiera recibido.
+- **Pasan los días:** migración `20261113000600_rf03_ficha_propia_persistente.sql`. La retención diaria (RF60) borraba las fichas 365 días después de crearlas, también la propia. Ahora solo borra las fichas ligadas a una sesión o canal; la ficha propia se elimina únicamente si la persona ejerce su derecho de supresión.
+- **Requisito del servidor:** para que la ficha llegue a la base, el servidor necesita la clave de cifrado `CLAVE_CIFRADO_CAMPOS` (mínimo 16 caracteres, RF116). Sin ella el servidor se niega a cifrar y la ficha queda solo en el dispositivo. **Debe ser la misma clave que usa Vercel**: lo cifrado con otra clave no se puede leer en producción.

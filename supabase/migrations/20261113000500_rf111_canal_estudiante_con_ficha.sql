@@ -54,7 +54,8 @@ begin
   update public.sesion_canales set usuario_id = v_uid, asignado_en = now()
    where sesion_id = p_sesion and canal = v_canal;
 
-  update public.declaraciones_paciente set sesion_id = p_sesion, canal = v_canal where id = p_declaracion;
+  -- La ficha del estudiante es su ficha propia (sesion_id nulo): se reutiliza tal cual y NO se liga a la sesión, así sigue
+  -- siendo su ficha guardada de siempre y no se le vuelve a pedir. La constancia queda en sesion_canal_requisitos.
 
   insert into public.sesion_canal_requisitos
     (sesion_id, canal, usuario_id, declaracion_id, politica_version, consentimiento_version)
