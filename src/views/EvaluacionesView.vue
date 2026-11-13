@@ -15,9 +15,15 @@
       <p v-if="!puedeGestionar" class="alert alert-error">Solo los profesores y administradores pueden crear evaluaciones.</p>
 
       <template v-else>
-        <p v-if="!aulas.length" class="alert alert-info">Primero crea un aula en la sección Aulas.</p>
+        <div v-if="!aulas.length" class="alert alert-info" data-testid="sin-aulas">
+          Para guardar la evaluación necesitas un aula. Puedes ir armándola aquí y crear el aula cuando quieras: tu evaluación en curso se conserva.
+          <button type="button" class="btn btn-primary btn-sm" data-testid="crear-aula" style="margin-left: 0.75rem;" @click="irACrearAula">
+            ➕ Crear aula
+          </button>
+        </div>
+        <p v-if="avisoRegreso" class="alert alert-success" role="status" data-testid="aviso-regreso">{{ avisoRegreso }}</p>
 
-        <div v-else>
+        <div ref="zonaCreacion">
           <!-- Selector de Modo: Crear desde Cero, Precargada o Banco de Preguntas -->
           <div class="modo-tabs">
             <button 
@@ -103,6 +109,9 @@
               <select id="eval-aula" v-model="aulaId" class="form-select" data-testid="eval-aula" @change="cargarLista">
                 <option v-for="a in aulas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
               </select>
+              <button type="button" class="btn btn-secondary btn-sm btn-crear-aula" data-testid="crear-aula" @click="irACrearAula">
+                ➕ Crear aula nueva
+              </button>
             </div>
 
             <div class="form-group">
@@ -129,7 +138,12 @@
             </div>
 
             <!-- TIPO DE EVALUACIÓN (RF106) -->
-            <TipoEvaluacionForm v-model="modelo" :mostrar-errores="intentado" />
+            <TipoEvaluacionForm
+              v-model="modelo"
+              :mostrar-errores="intentado"
+              :plantillas="opcionesReferencia.plantillas"
+              :mediciones-referencia="opcionesReferencia.mediciones"
+            />
             <!-- SECCIÓN DE PREGUNTAS (RF105 / RF108) -->
             <div class="seccion-preguntas">
               <div class="preguntas-header">
@@ -242,6 +256,15 @@
               </div>
             </div>
 
+            <!-- Asignación: a qué curso y con qué fechas -->
+            <AsignacionEvaluacionForm
+              v-model="asignacion"
+              :cursos="cursosAula"
+              con-interruptor
+              texto-interruptor="Asignar a los estudiantes al guardar"
+              :mostrar-errores="intentado"
+            />
+
             <p v-if="mensaje" class="alert" :class="mensajeError ? 'alert-error' : 'alert-success'" role="status" data-testid="eval-mensaje">
               {{ mensaje }}
             </p>
@@ -267,7 +290,7 @@
                 </div>
                 <p v-if="e.descripcion" class="lista-item-desc">{{ e.descripcion }}</p>
                 <div class="lista-footer">
-                  <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" />
+                  <TipoEvaluacionBadge :tipo="e.tipo" :ejercicio="e.ejercicio" :criterio="e.criterio" :ejercicios="e.evaluacion_ejercicios || []" />
                   <router-link 
                     v-if="e.aula_id || aulaId"
                     :to="`/aulas/${e.aula_id || aulaId}?tab=evaluaciones`"
@@ -277,6 +300,33 @@
                   >
                     ⚡ Monitoreo en Vivo
                   </router-link>
+                  <button
+                    v-if="e.tipo !== 'preguntas' && e.origen === 'supabase'"
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    data-testid="ver-resultados"
+                    @click="alternarResultados(e)"
+                  >
+                    🎯 {{ resultadosAbiertos[e.id] ? 'Ocultar resultados' : 'Resultados del ejercicio' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    data-testid="cambiar-tipo"
+                    @click="abrirEdicionTipo(e)"
+                    title="Cambiar a solo preguntas, solo ejercicio aplicado o ambas"
+                  >
+                    ✏️ Cambiar tipo
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    data-testid="asignar-evaluacion"
+                    @click="abrirAsignacion(e)"
+                    title="Elegir el curso y las fechas de inicio y término"
+                  >
+                    🎯 Asignar
+                  </button>
                   <button 
                     type="button" 
                     class="btn btn-secondary btn-sm"
@@ -285,6 +335,90 @@
                   >
                     📑 Duplicar
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm btn-eliminar-eval"
+                    data-testid="eliminar-evaluacion"
+                    :disabled="eliminandoId === e.id"
+                    @click="confirmarEliminarEvaluacion(e)"
+                    title="Eliminar la evaluación con sus asignaciones y resultados"
+                  >
+                    🗑️ Eliminar
+                  </button>
+                </div>
+                <!-- Asignar una evaluación ya guardada: curso y fechas -->
+                <div v-if="asignando.id === e.id" class="edicion-tipo" data-testid="panel-asignar">
+                  <h4>Asignar «{{ e.titulo }}»</h4>
+                  <AsignacionEvaluacionForm v-model="asignando.datos" :cursos="cursosAula" :mostrar-errores="asignando.intentado" />
+                  <p v-if="asignando.mensaje" class="alert" :class="asignando.error ? 'alert-error' : 'alert-success'" role="status" data-testid="mensaje-asignar">
+                    {{ asignando.mensaje }}
+                  </p>
+                  <div class="edicion-acciones">
+                    <button type="button" class="btn btn-secondary btn-sm" :disabled="asignando.guardando" @click="cerrarAsignacion">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="guardar-asignacion" :disabled="asignando.guardando" @click="guardarAsignacion(e)">
+                      {{ asignando.guardando ? 'Asignando…' : 'Asignar evaluación' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Cambiar el tipo de una evaluación ya guardada: preguntas, ejercicio aplicado o ambas -->
+                <div v-if="edicion.id === e.id" class="edicion-tipo" data-testid="panel-cambiar-tipo">
+                  <h4>Tipo de la evaluación</h4>
+                  <p class="header-desc">
+                    Elige si es solo de preguntas, solo de ejercicio aplicado o de ambas. Esta evaluación tiene
+                    {{ (e.preguntas || []).length }} pregunta(s).
+                  </p>
+                  <TipoEvaluacionForm
+                    v-model="edicion.modelo"
+                    :mostrar-errores="edicion.intentado"
+                    :bloqueado="edicion.bloqueado"
+                    :plantillas="opcionesReferencia.plantillas"
+                    :mediciones-referencia="opcionesReferencia.mediciones"
+                  />
+                  <p v-if="edicion.mensaje" class="alert" :class="edicion.error ? 'alert-error' : 'alert-success'" role="status" data-testid="mensaje-cambiar-tipo">
+                    {{ edicion.mensaje }}
+                  </p>
+                  <div class="edicion-acciones">
+                    <button type="button" class="btn btn-secondary btn-sm" :disabled="edicion.guardando" @click="cerrarEdicionTipo">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="guardar-tipo"
+                            :disabled="edicion.guardando || edicion.bloqueado" @click="guardarTipo(e)">
+                      {{ edicion.guardando ? 'Guardando…' : 'Guardar tipo' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- RF107: resultados del ejercicio aplicado y recalificación -->
+                <div v-if="resultadosAbiertos[e.id]" class="resultados" data-testid="resultados-ejercicio">
+                  <p v-if="resultadosError[e.id]" class="alert alert-error" role="alert">{{ resultadosError[e.id] }}</p>
+                  <p v-else-if="!(resultados[e.id] || []).length" class="header-desc">Todavía no hay entregas.</p>
+                  <table v-else class="resultados-tabla">
+                    <thead>
+                      <tr><th>Estudiante</th><th>Valor</th><th>Puntaje</th><th>Nivel</th><th>Motivo</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="r in resultados[e.id]" :key="r.id">
+                        <td>{{ r.perfiles?.nombre || 'Estudiante' }}</td>
+                        <td>{{ r.valor_obtenido ?? '—' }}</td>
+                        <td>{{ r.porcentaje }} %</td>
+                        <td>{{ ETIQUETA_NIVEL[r.nivel] || '—' }}</td>
+                        <td>
+                          <template v-if="e.tipo === 'mixta'">
+                            Total {{ r.puntaje }} / {{ r.puntaje_maximo }} pts
+                            <div v-for="ie in ordenarEjercicios(r.intento_ejercicios)" :key="ie.ejercicio_id">
+                              Ej. {{ ie.evaluacion_ejercicios?.orden }}: {{ ie.puntaje }} / {{ ie.puntaje_maximo }} pts · {{ ie.detalle?.motivo }}
+                            </div>
+                          </template>
+                          <template v-else>{{ r.detalle?.motivo || '—' }}</template>
+                        </td>
+                        <td>
+                          <button v-if="r.medicion_id || e.tipo === 'mixta'" type="button" class="btn btn-secondary btn-sm"
+                                  :disabled="recalificando === r.id" @click="recalificar(e, r)">
+                            Recalificar
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </li>
             </ul>
@@ -297,26 +431,79 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import TipoEvaluacionForm from '../components/TipoEvaluacionForm.vue'
 import TipoEvaluacionBadge from '../components/TipoEvaluacionBadge.vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { obtenerAulas } from '../services/aulasService'
 import BancoPreguntasPanel from '../components/BancoPreguntasPanel.vue'
 import { listarBancoPreguntas, seleccionarPreguntasAlAzar } from '../services/bancoPreguntasService.js'
+import AsignacionEvaluacionForm from '../components/AsignacionEvaluacionForm.vue'
+import { obtenerCursosAula } from '../services/aulasService'
+import { asignacionVacia, validarAsignacion, parametrosAsignacion, describirAsignacion, fechasSugeridas } from '../utils/asignacionEvaluacion.js'
 import { 
   crearEvaluacion, 
   obtenerEvaluacionesAula, 
   obtenerEvaluacionesPrecargadas, 
-  duplicarEvaluacion 
+  duplicarEvaluacion,
+  obtenerOpcionesReferencia,
+  obtenerResultadosEjercicio,
+  recalificarIntento,
+  actualizarTipoEvaluacion,
+  contarIntentos,
+  asignarEvaluacion,
+  eliminarEvaluacion
 } from '../services/evaluacionesService'
-import { modeloVacio, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { modeloVacio, modeloDesdeFila, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { ETIQUETA_NIVEL } from '../utils/calificacionEjercicio.js'
 
 const { currentUserId, currentUserName, currentUserEmail, isAdmin, isProfesor, can } = useAuth()
 const puedeGestionar = computed(() => isAdmin.value || isProfesor.value || can('GESTIONAR_EVALUACIONES'))
 
 const aulas = ref([])
 const aulaId = ref('')
+
+// Crear un aula sin perder lo que ya se escribió de la evaluación (se guarda un borrador en esta pestaña)
+const route = useRoute()
+const router = useRouter()
+const CLAVE_BORRADOR = 'sensor_pulso_borrador_evaluacion'
+const avisoRegreso = ref('')
+const zonaCreacion = ref(null)
+
+function guardarBorrador() {
+  try {
+    sessionStorage.setItem(CLAVE_BORRADOR, JSON.stringify({
+      titulo: titulo.value,
+      descripcion: descripcion.value,
+      modelo: modelo.value,
+      preguntas: preguntas.value,
+      plantillaSeleccionadaId: plantillaSeleccionadaId.value
+    }))
+  } catch (_) { /* sin almacenamiento: se pierde el borrador, no el flujo */ }
+}
+
+function restaurarBorrador() {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_BORRADOR)
+    sessionStorage.removeItem(CLAVE_BORRADOR)
+    if (!crudo) return false
+    const b = JSON.parse(crudo)
+    titulo.value = b.titulo || ''
+    descripcion.value = b.descripcion || ''
+    if (b.modelo) modelo.value = b.modelo
+    preguntas.value = Array.isArray(b.preguntas) ? b.preguntas : []
+    plantillaSeleccionadaId.value = b.plantillaSeleccionadaId || null
+    return true
+  } catch (_) {
+    return false
+  }
+}
+
+function irACrearAula() {
+  guardarBorrador()
+  router.push({ name: 'Aulas', query: { crear: '1', volver: 'evaluaciones' } })
+}
 const titulo = ref('')
 const descripcion = ref('')
 const modelo = ref(modeloVacio())
@@ -325,6 +512,148 @@ const intentado = ref(false)
 const guardando = ref(false)
 const mensaje = ref('')
 const mensajeError = ref(false)
+
+// RF107: referencia para comparar señales y resultados del ejercicio aplicado
+const opcionesReferencia = ref({ plantillas: [], mediciones: [] })
+const resultados = ref({})
+const resultadosAbiertos = ref({})
+const resultadosError = ref({})
+const recalificando = ref('')
+
+// Asignación: a qué curso y con qué fechas (al crear, al usar una plantilla o sobre una evaluación guardada)
+const asignacion = ref(asignacionVacia())
+const cursosAula = ref([])
+const eliminandoId = ref('')
+const asignando = ref({ id: null, datos: asignacionVacia(), intentado: false, guardando: false, mensaje: '', error: false })
+
+async function cargarCursos() {
+  cursosAula.value = []
+  if (!aulaId.value) return
+  const res = await obtenerCursosAula(aulaId.value)
+  cursosAula.value = res.success ? (res.data || []) : []
+  // un curso elegido de otra aula ya no vale
+  if (asignacion.value.cursoId && !cursosAula.value.some((c) => c.id === asignacion.value.cursoId)) asignacion.value.cursoId = ''
+}
+
+function abrirAsignacion(e) {
+  if (asignando.value.id === e.id) return cerrarAsignacion()
+  asignando.value = { id: e.id, datos: { ...asignacionVacia(), ...fechasSugeridas() }, intentado: false, guardando: false, mensaje: '', error: false }
+}
+
+function cerrarAsignacion() {
+  asignando.value = { id: null, datos: asignacionVacia(), intentado: false, guardando: false, mensaje: '', error: false }
+}
+
+async function guardarAsignacion(e) {
+  asignando.value.intentado = true
+  asignando.value.mensaje = ''
+  if (validarAsignacion(asignando.value.datos).length) return
+  asignando.value.guardando = true
+  const parametros = parametrosAsignacion(asignando.value.datos)
+  const res = await asignarEvaluacion({
+    evaluacionId: e.id,
+    ...parametros,
+    puedeGestionar: puedeGestionar.value
+  })
+  asignando.value.guardando = false
+  asignando.value.error = !res.success
+  asignando.value.mensaje = res.success ? 'Evaluación asignada.' : res.error
+  if (res.success) {
+    const texto = describirAsignacion(asignando.value.datos, cursosAula.value, parametros)
+    await cargarLista()
+    cerrarAsignacion()
+    mensajeError.value = false
+    mensaje.value = `«${e.titulo}» asignada a ${texto}.`
+  }
+}
+
+async function confirmarEliminarEvaluacion(e) {
+  const intentos = e.origen === 'supabase' ? await contarIntentos(e.id) : 0
+  const aviso = intentos > 0
+    ? `«${e.titulo}» ya tiene ${intentos} intento(s) de estudiantes: se borrarán también sus respuestas y notas.`
+    : `Se eliminará «${e.titulo}» con sus asignaciones.`
+  if (!window.confirm(`${aviso}\n\nEsta acción no se puede deshacer. ¿Eliminar la evaluación?`)) return
+  eliminandoId.value = e.id
+  const res = await eliminarEvaluacion({ evaluacionId: e.id, puedeGestionar: puedeGestionar.value })
+  eliminandoId.value = ''
+  mensajeError.value = !res.success
+  mensaje.value = res.success ? `Evaluación «${e.titulo}» eliminada.` : res.error
+  if (res.success) {
+    if (asignando.value.id === e.id) cerrarAsignacion()
+    if (edicion.value.id === e.id) cerrarEdicionTipo()
+    await cargarLista()
+  }
+}
+
+// Cambiar el tipo de una evaluación ya guardada
+const edicion = ref({ id: null, modelo: modeloVacio(), intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false })
+
+async function abrirEdicionTipo(e) {
+  if (edicion.value.id === e.id) return cerrarEdicionTipo()
+  edicion.value = {
+    id: e.id,
+    modelo: JSON.parse(JSON.stringify(modeloDesdeFila(e))),
+    intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false
+  }
+  // Con estudiantes que ya rindieron, el tipo ya no se puede cambiar
+  if (e.origen === 'supabase' && (await contarIntentos(e.id)) > 0) {
+    edicion.value.bloqueado = true
+    edicion.value.mensaje = 'Esta evaluación ya tiene intentos de estudiantes: el tipo no se puede cambiar.'
+    edicion.value.error = true
+  }
+}
+
+function cerrarEdicionTipo() {
+  edicion.value = { id: null, modelo: modeloVacio(), intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false }
+}
+
+async function guardarTipo(e) {
+  edicion.value.intentado = true
+  edicion.value.mensaje = ''
+  const destino = edicion.value.modelo
+  if (validarTipoEvaluacion(destino, { exigirReferencia: true }).length) return
+  // Las evaluaciones de preguntas o mixtas necesitan preguntas
+  if ((destino.tipo === 'preguntas' || destino.tipo === 'mixta') && !(e.preguntas || []).length) {
+    edicion.value.mensaje = 'Esta evaluación no tiene preguntas, así que no puede ser de preguntas ni mixta. Elige «Ejercicio aplicado» o crea una evaluación nueva con preguntas.'
+    edicion.value.error = true
+    return
+  }
+  edicion.value.guardando = true
+  const res = await actualizarTipoEvaluacion({ evaluacionId: e.id, modelo: destino, puedeGestionar: puedeGestionar.value })
+  edicion.value.guardando = false
+  edicion.value.error = !res.success
+  edicion.value.mensaje = res.success ? 'Tipo actualizado.' : res.error
+  if (res.success) {
+    await cargarLista()
+    cerrarEdicionTipo()
+    mensajeError.value = false
+    mensaje.value = 'Tipo de la evaluación actualizado.'
+  }
+}
+
+async function cargarResultados(e) {
+  const res = await obtenerResultadosEjercicio(e.id)
+  resultadosError.value = { ...resultadosError.value, [e.id]: res.success ? '' : res.error }
+  resultados.value = { ...resultados.value, [e.id]: res.data }
+}
+
+async function alternarResultados(e) {
+  const abierto = !resultadosAbiertos.value[e.id]
+  resultadosAbiertos.value = { ...resultadosAbiertos.value, [e.id]: abierto }
+  if (abierto) await cargarResultados(e)
+}
+
+const ordenarEjercicios = (lista) =>
+  [...(lista || [])].sort((a, b) => (a.evaluacion_ejercicios?.orden || 0) - (b.evaluacion_ejercicios?.orden || 0))
+
+async function recalificar(e, r) {
+  recalificando.value = r.id
+  const res = await recalificarIntento(r.id)
+  recalificando.value = ''
+  mensajeError.value = !res.success
+  mensaje.value = res.success ? 'Intento recalificado con el criterio actual.' : res.error
+  if (res.success) await cargarResultados(e)
+}
 
 // RF105: Evaluaciones precargadas y modo
 const modoCreacion = ref('cero') // 'cero' | 'precargada'
@@ -412,11 +741,9 @@ function cargarPlantillaEnFormulario(p) {
   plantillaSeleccionadaId.value = p.id
   titulo.value = p.titulo
   descripcion.value = p.descripcion || ''
-  modelo.value = {
-    tipo: p.tipo,
-    ejercicio: p.ejercicio,
-    criterio: p.criterio ? JSON.parse(JSON.stringify(p.criterio)) : null
-  }
+  modelo.value = JSON.parse(JSON.stringify(modeloDesdeFila(p)))
+  // modeloDesdeFila deja las evaluaciones de solo preguntas con el modelo vacío: se conserva ese tipo
+  if (p.tipo === 'preguntas') modelo.value = modeloVacio()
   preguntas.value = p.preguntas ? JSON.parse(JSON.stringify(p.preguntas)) : []
   modoCreacion.value = 'cero' // Volver al formulario para editarla
 }
@@ -433,14 +760,27 @@ async function cargarLista() {
   if (!aulaId.value) return
   const res = await obtenerEvaluacionesAula(aulaId.value)
   evaluaciones.value = res.data || []
+  await cargarCursos()
 }
 
 async function guardar() {
   intentado.value = true
   mensaje.value = ''
-  if (validarTipoEvaluacion(modelo.value).length) return
+  if (modelo.value.tipo === 'mixta' && !preguntas.value.length) {
+    mensaje.value = 'Una evaluación mixta necesita al menos una pregunta, además de los ejercicios.'
+    mensajeError.value = true
+    return
+  }
+  if (validarTipoEvaluacion(modelo.value, { exigirReferencia: !plantillaSeleccionadaId.value }).length) return
   if (!titulo.value.trim()) {
     mensaje.value = 'El título de la evaluación es obligatorio.'
+    mensajeError.value = true
+    return
+  }
+
+  // Si se pidió asignarla, hace falta el curso (o toda el aula) y las fechas antes de guardar
+  if (asignacion.value.asignar && validarAsignacion(asignacion.value).length) {
+    mensaje.value = 'Completa la asignación: ' + validarAsignacion(asignacion.value)[0]
     mensajeError.value = true
     return
   }
@@ -468,6 +808,24 @@ async function guardar() {
   mensaje.value = res.origen === 'local'
     ? 'Evaluación guardada localmente (sesión demo).'
     : `¡Evaluación guardada en Supabase con ${totalPreg} pregunta(s) vinculada(s)!`
+
+  // Asignación pedida al guardar: curso/aula y fechas
+  if (asignacion.value.asignar) {
+    const datosAsignacion = { ...asignacion.value }
+    const parametros = parametrosAsignacion(datosAsignacion) // fija la hora si se pidió «dentro de N minutos»
+    const resAsignar = await asignarEvaluacion({
+      evaluacionId: res.data.id,
+      ...parametros,
+      puedeGestionar: puedeGestionar.value
+    })
+    if (resAsignar.success) {
+      mensaje.value += ` Asignada a ${describirAsignacion(datosAsignacion, cursosAula.value, parametros)}.`
+    } else {
+      mensaje.value += ` Pero no se pudo asignar: ${resAsignar.error} Puedes asignarla con el botón «Asignar» de la lista.`
+      mensajeError.value = true
+    }
+  }
+  asignacion.value = asignacionVacia()
 
   limpiarPlantilla()
   intentado.value = false
@@ -506,8 +864,20 @@ onMounted(async () => {
   })
   aulas.value = resAulas.data || []
   if (aulas.value.length) {
-    aulaId.value = aulas.value[0].id
+    // Al volver de crear un aula, queda elegida esa aula
+    const aulaNueva = String(route.query.aula || '')
+    aulaId.value = aulas.value.some((a) => a.id === aulaNueva) ? aulaNueva : aulas.value[0].id
     await cargarLista()
+  }
+  if (route.query.borrador === '1') {
+    const hubo = restaurarBorrador()
+    avisoRegreso.value = hubo
+      ? 'Aula creada. Aquí está tu evaluación en curso, con el aula nueva elegida.'
+      : 'Aula creada. Ya puedes crear tu evaluación en esa aula.'
+    await nextTick()
+    zonaCreacion.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  } else {
+    try { sessionStorage.removeItem(CLAVE_BORRADOR) } catch (_) { /* nada */ }
   }
 
   // 2. Cargar Evaluaciones Precargadas
@@ -516,10 +886,21 @@ onMounted(async () => {
 
   // 3. Cargar Banco de Preguntas (RF108)
   await cargarBanco()
+
+  // 4. Opciones de referencia para comparar señales (RF107)
+  opcionesReferencia.value = await obtenerOpcionesReferencia(currentUserId.value)
 })
 </script>
 
 <style scoped>
+.btn-eliminar-eval { color: #b91c1c; border-color: #fecaca; }
+.edicion-tipo { margin-top: 0.75rem; padding: 0.9rem 1rem; border: 1px solid var(--color-border); border-radius: 10px; background: #f8fafc; }
+.edicion-tipo h4 { margin: 0 0 0.25rem; }
+.edicion-acciones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
+.resultados { margin-top: 0.75rem; overflow-x: auto; }
+.resultados-tabla { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.resultados-tabla th, .resultados-tabla td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: left; }
+.btn-crear-aula { margin-top: 0.5rem; }
 .evaluaciones-container { max-width: 900px; margin: 0 auto; }
 .header-desc { color: var(--color-muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
 

@@ -21,7 +21,7 @@ console.log('\n--- Pruebas de RF105: Crear Evaluación y Usar Precargadas ---')
 marcar(Array.isArray(EVALUACIONES_PRECARGADAS) && EVALUACIONES_PRECARGADAS.length >= 4, 
   'Existen al menos 4 evaluaciones precargadas sembradas en el sistema')
 
-const tiposValidos = ['preguntas', 'ejercicio_aplicado']
+const tiposValidos = ['preguntas', 'ejercicio_aplicado', 'mixta']
 const todosTiposOk = EVALUACIONES_PRECARGADAS.every(p => tiposValidos.includes(p.tipo) && p.titulo && p.precargada === true)
 marcar(todosTiposOk, 'Todas las evaluaciones precargadas tienen tipo válido y bandera precargada = true')
 
@@ -62,8 +62,9 @@ const resDuplicada = await duplicarEvaluacion({
 })
 marcar(resDuplicada.success && resDuplicada.data.titulo.includes('Medición de Pulso'), 
   'Se puede crear una evaluación a partir de una plantilla precargada')
-marcar(resDuplicada.data.modelo?.tipo === 'ejercicio_aplicado' || resDuplicada.data.tipo === 'ejercicio_aplicado', 
-  'La evaluación clonada conserva su tipo de ejercicio y criterios de calificación')
+// RF107: la plantilla trae preguntas y un ejercicio aplicado, así que es de tipo mixta
+marcar(resDuplicada.data.tipo === 'mixta' && resDuplicada.data.evaluacion_ejercicios?.[0]?.ejercicio === 'medir_pulso' && resDuplicada.data.evaluacion_ejercicios?.[0]?.criterio?.tipo === 'bpm_en_rango', 
+  'La evaluación clonada conserva su tipo (preguntas + ejercicio) y los criterios de calificación del ejercicio')
 
 // 5. Validar que la tabla evaluaciones tiene RLS en la migración oficial (Criterio 3)
 const sql = readFileSync(new URL('../supabase/migrations/20261027000500_evaluaciones.sql', import.meta.url), 'utf8')

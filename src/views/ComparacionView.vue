@@ -1,5 +1,7 @@
 <template>
   <div>
+    <!-- RF107: si el estudiante llegó desde un ejercicio de una evaluación, puede volver a ella -->
+    <VolverAEvaluacionBanner que="comparación" />
     <!-- Encabezado de la Sección Comparación -->
     <div class="card" style="margin-bottom: 1rem;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
@@ -208,6 +210,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import VolverAEvaluacionBanner from '../components/VolverAEvaluacionBanner.vue'
 import SincronizacionSenalesPanel from '../components/SincronizacionSenalesPanel.vue'
 import AnalisisAutomaticoComparacionPanel from '../components/AnalisisAutomaticoComparacionPanel.vue'
 
