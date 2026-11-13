@@ -67,7 +67,12 @@ marcar(!(await retirarEstudiantesAula({ aulaId: 'aula-001', estudiantesIds: [], 
 
 // --- La pantalla usa todo esto
 const vista = readFileSync(new URL('../src/views/AulasView.vue', import.meta.url), 'utf8')
-marcar(/data-testid="correos-invitacion"/.test(vista) && /enviarInvitacionesVarias/.test(vista), 'La pantalla de aulas invita con varios correos')
+const formulario = readFileSync(new URL('../src/components/InvitacionMasivaForm.vue', import.meta.url), 'utf8')
+const detalle = readFileSync(new URL('../src/views/AulaDetalleView.vue', import.meta.url), 'utf8')
+marcar(/data-testid="correos-invitacion"/.test(formulario) && /enviarInvitacionesVarias/.test(formulario), 'El formulario de invitaciones acepta una lista de correos y la envía junta')
+marcar(/data-testid="separadores"/.test(formulario) && /coma/.test(formulario) && /punto y coma/.test(formulario) && /salto de línea/.test(formulario), 'El formulario muestra los separadores aceptados (coma, punto y coma, espacio, salto de línea)')
+marcar(/<InvitacionMasivaForm/.test(vista) && /<InvitacionMasivaForm/.test(detalle), 'Tanto la lista de aulas como la página del aula usan el formulario de invitaciones masivas')
+marcar(!/type="email"/.test(detalle.slice(detalle.indexOf('MODAL INVITAR'), detalle.indexOf('MODAL INVITAR') + 1500)), 'La página del aula ya no tiene el campo de un solo correo')
 marcar(/route.query.unirse/.test(vista) && /data-testid="invitacion-recibida"/.test(vista), 'La pantalla de aulas recibe el enlace «Unirme al aula» del correo y deja el código escrito')
 marcar(/data-testid="retirar-seleccionados"/.test(vista) && /retirarEstudiantesAula/.test(vista), 'La pantalla de aulas retira varios estudiantes')
 marcar(/data-testid="eliminar-aula"/.test(vista) && /confirmacionNombre\.trim\(\) !== aulaAEliminar\.nombre/.test(vista), 'La pantalla de aulas elimina el aula pidiendo escribir su nombre')

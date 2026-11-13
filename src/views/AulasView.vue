@@ -261,62 +261,15 @@
           <strong>Error de envío:</strong> {{ errorInvitacionModal }}
         </div>
 
-        <form @submit.prevent="enviarInvitacion">
-          <div class="form-group">
-            <label class="form-label" for="correos-invitacion">Correos institucionales de los estudiantes (@alu.unach.cl) *</label>
-            <textarea
-              id="correos-invitacion"
-              v-model="textoCorreos"
-              class="form-input"
-              rows="4"
-              placeholder="uno@alu.unach.cl, dos@alu.unach.cl&#10;tres@alu.unach.cl"
-              data-testid="correos-invitacion"
-              :disabled="enviandoInvitacion"
-            />
-            <small class="help-text">
-              Pega o escribe varios correos separados por coma, espacio o salto de línea (hasta {{ MAX_INVITACIONES_POR_ENVIO }} por envío).
-              El código de acceso se envía a cada estudiante por Resend.
-            </small>
-          </div>
-
-          <!-- Lista de lo que se va a enviar, con × para quitar cada correo -->
-          <div v-if="correosLeidos.validos.length || correosLeidos.invalidos.length" class="correos-leidos" data-testid="correos-leidos">
-            <div class="correos-chips">
-              <span v-for="c in correosLeidos.validos" :key="c" class="chip chip-ok" data-testid="chip-valido">
-                {{ c }}
-                <button type="button" class="chip-x" :aria-label="'Quitar ' + c" :disabled="enviandoInvitacion" @click="quitarCorreo(c)">×</button>
-              </span>
-              <span v-for="c in correosLeidos.invalidos" :key="'i-' + c" class="chip chip-error" data-testid="chip-invalido"
-                    title="No es un correo de estudiante (@alu.unach.cl)">
-                {{ c }}
-                <button type="button" class="chip-x" :aria-label="'Quitar ' + c" :disabled="enviandoInvitacion" @click="quitarCorreo(c)">×</button>
-              </span>
-            </div>
-            <small class="help-text" data-testid="resumen-correos">
-              {{ correosLeidos.validos.length }} listo(s) para enviar
-              <template v-if="correosLeidos.invalidos.length"> · {{ correosLeidos.invalidos.length }} no válido(s) (se omiten)</template>
-              <template v-if="correosLeidos.repetidos.length"> · {{ correosLeidos.repetidos.length }} repetido(s) (se envía una vez)</template>
-              <template v-if="correosLeidos.excedidos.length"> · {{ correosLeidos.excedidos.length }} sobran sobre el máximo; envíalos después</template>
-            </small>
-          </div>
-
-          <!-- Resultado del último envío -->
-          <div v-if="resultadoEnvio" class="alert" :class="resultadoEnvio.fallidos.length ? 'alert-warning' : 'alert-success'"
-               style="font-size: 0.85rem; margin-top: 0.75rem;" data-testid="resultado-envio">
-            Enviadas: {{ resultadoEnvio.enviados.length }}<span v-if="resultadoEnvio.fallidos.length"> · Fallidas: {{ resultadoEnvio.fallidos.length }}</span>
-            <ul v-if="resultadoEnvio.fallidos.length" style="margin: 0.35rem 0 0; padding-left: 1.2rem;">
-              <li v-for="f in resultadoEnvio.fallidos" :key="f.correo"><strong>{{ f.correo }}</strong>: {{ f.error }}</li>
-            </ul>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary" :disabled="enviandoInvitacion">Cerrar</button>
-            <button type="submit" class="btn btn-primary" :disabled="enviandoInvitacion || !correosLeidos.validos.length" data-testid="enviar-invitaciones">
-              <span v-if="enviandoInvitacion">📨 Enviando {{ progresoEnvio.hecho }} de {{ progresoEnvio.total }}...</span>
-              <span v-else>Enviar {{ correosLeidos.validos.length > 1 ? correosLeidos.validos.length + ' invitaciones' : 'invitación' }}</span>
-            </button>
-          </div>
-        </form>
+        <InvitacionMasivaForm
+          ref="formInvitacion"
+          :aula-id="aulaSeleccionada?.id || ''"
+          :profesor-id="currentUserId || ''"
+          :profesor-nombre="currentUserName || ''"
+          :es-admin="!!isAdmin"
+          @resultado="alEnviarInvitaciones"
+          @cerrar="modalInvitarAbierto = false"
+        />
 
         <!-- Estudiantes del aula: retirar varios a la vez (RF102) -->
         <div class="estudiantes-aula" data-testid="estudiantes-aula">
@@ -469,6 +422,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { useAuth } from '../composables/useAuth'
 import { 
   obtenerAulas, 
@@ -477,7 +431,6 @@ import {
   unirseAulaPorCodigo,
   alternarEstadoCodigoAula,
   regenerarCodigoAulaDocente,
-  enviarInvitacionCorreo,
   obtenerInvitacionesAula,
   obtenerCursosAula, 
   obtenerEstudiantesAula, 
@@ -485,12 +438,10 @@ import {
   renombrarCurso, 
   eliminarCurso,
   actualizarEstudiantesCurso,
-  enviarInvitacionesVarias,
   retirarEstudiantesAula,
   eliminarAula,
   obtenerEvaluacionesAula
 } from '../services/aulasService'
-import { parsearCorreos, quitarCorreoDelTexto, MAX_INVITACIONES_POR_ENVIO } from '../utils/correosInvitacion.js'
 
 const { currentUserId, currentUserName, currentUserEmail, isProfesor, isAdmin, tienePermisoProfesor } = useAuth()
 
@@ -521,11 +472,7 @@ const formAula = ref({ nombre: '', descripcion: '' })
 
 // Modal Invitar por Correo (RF100)
 const modalInvitarAbierto = ref(false)
-const textoCorreos = ref('')
-const correosLeidos = computed(() => parsearCorreos(textoCorreos.value))
-const resultadoEnvio = ref(null)
-const progresoEnvio = ref({ hecho: 0, total: 0 })
-const enviandoInvitacion = ref(false)
+const formInvitacion = ref(null)
 // Estudiantes del aula elegida (para retirar varios a la vez)
 const estudiantesDelAula = ref([])
 const cargandoEstudiantesAula = ref(false)
@@ -651,7 +598,7 @@ const confirmarRegenerarCodigo = async (aula) => {
   }
 }
 
-// RF100: Enviar invitación real por correo (Resend)
+// RF100: Enviar invitación real por correo (Gmail)
 const formatearFechaInvitacion = (fecha) => {
   if (!fecha) return ''
   try {
@@ -677,50 +624,19 @@ const cargarHistorialInvitaciones = async (aulaId) => {
 
 const abrirModalInvitar = async (aula) => {
   aulaSeleccionada.value = aula
-  textoCorreos.value = ''
-  resultadoEnvio.value = null
+  formInvitacion.value?.limpiar?.()
   seleccionRetiro.value = []
   errorInvitacionModal.value = ''
   modalInvitarAbierto.value = true
   await Promise.all([cargarHistorialInvitaciones(aula.id), cargarEstudiantesAula(aula.id)])
 }
 
-const quitarCorreo = (correo) => {
-  textoCorreos.value = quitarCorreoDelTexto(textoCorreos.value, correo)
-}
-
-const enviarInvitacion = async () => {
-  const { validos } = correosLeidos.value
-  if (!validos.length) return
-  enviandoInvitacion.value = true
-  errorInvitacionModal.value = ''
-  resultadoEnvio.value = null
-  progresoEnvio.value = { hecho: 0, total: validos.length }
-
-  const res = await enviarInvitacionesVarias({
-    aulaId: aulaSeleccionada.value.id,
-    correos: validos,
-    profesorId: currentUserId.value,
-    profesorNombre: currentUserName.value,
-    esAdmin: isAdmin.value,
-    alProgresar: (p) => { progresoEnvio.value = p }
-  })
-  enviandoInvitacion.value = false
-
-  resultadoEnvio.value = { enviados: res.enviados || [], fallidos: res.fallidos || [] }
-  if (res.success) {
-    feedbackExito.value = true
-    feedbackMensaje.value = res.message
-    // Quedan en el cuadro solo los que fallaron y los no válidos, para corregirlos o reintentar
-    const pendientes = [...resultadoEnvio.value.fallidos.map((f) => f.correo), ...correosLeidos.value.invalidos]
-    textoCorreos.value = pendientes.join('\n')
-    if (!pendientes.length) modalInvitarAbierto.value = false
-  } else {
-    // Si el envío falla, NO dice "enviada". Se muestra el error real adentro del modal y en feedback
-    errorInvitacionModal.value = res.error
-    feedbackExito.value = false
-    feedbackMensaje.value = res.error
-  }
+// El formulario de invitaciones avisa cuando termina un envío (uno o varios correos)
+const alEnviarInvitaciones = async (res) => {
+  feedbackExito.value = !!res.success
+  feedbackMensaje.value = res.success ? res.message : res.error
+  errorInvitacionModal.value = res.success ? '' : (res.error || '')
+  if (res.success && res.todoEnviado) modalInvitarAbierto.value = false
   await cargarHistorialInvitaciones(aulaSeleccionada.value.id)
 }
 
@@ -1074,12 +990,6 @@ onMounted(async () => {
 .aula-peligro-row { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
 .btn-peligro { color: #b91c1c; border-color: #fecaca; }
 .btn-peligro:hover { background: #fef2f2; }
-.correos-leidos { margin-top: 0.5rem; }
-.correos-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.35rem; }
-.chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.2rem 0.15rem 0.6rem; border-radius: 999px; font-size: 0.78rem; }
-.chip-ok { background: #dcfce7; color: #14532d; }
-.chip-error { background: #fee2e2; color: #7f1d1d; }
-.chip-x { border: 0; background: transparent; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.4rem; color: inherit; }
 .estudiantes-aula { margin-top: 1.25rem; border-top: 1px solid var(--color-border, #e2e8f0); padding-top: 1rem; }
 .estudiantes-aula-cabecera { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 0.5rem; flex-wrap: wrap; }
 .seleccionar-todos { display: inline-flex; gap: 0.35rem; align-items: center; font-size: 0.85rem; }
