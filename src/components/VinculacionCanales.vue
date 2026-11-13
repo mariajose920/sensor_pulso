@@ -72,7 +72,7 @@
             ⚠️ Aún no tienes canales. Pulsa «Agregar canal»: el sistema te asigna uno automáticamente.
           </span>
           <span v-else class="unassigned-hint">
-            ⚠️ No tienes ningún canal asignado. Elige un canal libre a continuación (RF111):
+            ⚠️ Aún no tienes canal. Pulsa «Asignarme un canal»: el sistema te asigna uno automáticamente.
           </span>
         </template>
       </div>
@@ -109,6 +109,27 @@
       </ul>
     </div>
 
+    <!-- Estudiante (RF111): el canal se asigna solo con un botón; no se elige el número -->
+    <div v-if="estadoAsignacionEstudiante.visible" class="mis-canales" data-testid="asignacion-estudiante">
+      <div class="mis-canales-header">
+        <strong>{{ miCanalAsignado ? `Tu canal: Canal ${miCanalAsignado}` : 'Aún no tienes un canal' }}</strong>
+        <button
+          v-if="!miCanalAsignado"
+          type="button"
+          class="btn btn-primary btn-sm"
+          data-testid="asignarme-canal"
+          :disabled="!estadoAsignacionEstudiante.puede || canalesState.cargando"
+          :title="estadoAsignacionEstudiante.puede ? 'Asigna automáticamente el siguiente canal libre' : estadoAsignacionEstudiante.motivo"
+          @click="asignarmeCanal"
+        >
+          ➕ Asignarme un canal
+        </button>
+      </div>
+      <p v-if="!miCanalAsignado && !estadoAsignacionEstudiante.puede" class="mis-canales-nota" data-testid="asignarme-canal-motivo">
+        {{ estadoAsignacionEstudiante.motivo }}
+      </p>
+    </div>
+
     <AgregarCanalModal
       :visible="modalAgregarVisible"
       :canal-existente="canalPendiente"
@@ -117,8 +138,8 @@
     />
 
     <!-- Grid de los 5 Canales Físicos (RF12 / RF111) -->
-    <p v-if="esProfesorOAdmin && !canalesVisibles.length" class="mis-canales-nota" data-testid="sin-canales-tomados">
-      Todavía no hay canales tomados. Usa «Agregar canal» para empezar.
+    <p v-if="!canalesVisibles.length" class="mis-canales-nota" data-testid="sin-canales-tomados">
+      Todavía no hay canales tomados. {{ esProfesorOAdmin ? 'Usa «Agregar canal» para empezar.' : 'Pulsa «Asignarme un canal» para empezar.' }}
     </p>
     <div v-else class="canales-slots-grid">
       <div 
@@ -149,25 +170,14 @@
           <div v-else class="free-info">
             <span class="free-text">Sensor listo para medir</span>
             <small v-if="esProfesorOAdmin">Se asigna solo con «Agregar canal»</small>
-            <small v-else>Haz clic abajo para tomar este canal</small>
+            <small v-else>Se asigna solo con «Asignarme un canal»</small>
           </div>
         </div>
 
         <div class="slot-actions">
-          <!-- Si está libre, el estudiante puede elegirlo (RF111) -->
-          <button 
-            v-if="!ch.usuario_id && !esProfesorOAdmin"
-            class="btn btn-primary btn-sm btn-block"
-            @click="vincular(ch.canal)"
-            :disabled="canalesState.cargando || Boolean(miCanalAsignado)"
-            :title="miCanalAsignado ? 'Ya tienes otro canal asignado' : 'Tomar este canal libre (RF111)'"
-          >
-            {{ miCanalAsignado ? 'Ya tienes canal' : 'Tomar este Canal' }}
-          </button>
-
           <!-- Si es mi canal, puedo liberarlo -->
           <button 
-            v-else-if="ch.usuario_id === usuarioActual.id"
+            v-if="ch.usuario_id === usuarioActual.id"
             class="btn btn-danger btn-sm btn-block"
             @click="desvincular(ch.canal)"
             :disabled="canalesState.cargando"
@@ -193,7 +203,7 @@
     </div>
 
     <!-- Panel de Control Docente / Rondas (RF111) -->
-    <div class="docente-controls">
+    <div v-if="esProfesorOAdmin" class="docente-controls" data-testid="control-rondas">
       <div class="docente-info">
         <strong>Modo Ronda de Aula (RF111):</strong> 
         Al completarse la medición del grupo actual (5 estudiantes), el profesor abre la siguiente ronda.
@@ -237,6 +247,8 @@ import {
   asignarCanalProfesor,
   abrirSiguienteRonda,
   estadoAgregarCanal,
+  estadoAsignacionEstudiante,
+  asignarmeCanalAutomatico,
   misCanales,
   MAX_CANALES_DOCENTE
 } from '../services/canalesService'
@@ -249,30 +261,29 @@ const esProfesorOAdmin = computed(() => {
   return usuarioActual.rol === 'profesor' || usuarioActual.rol === 'admin'
 })
 
-// Profesor y administrador solo ven los canales ya tomados; los libres no se muestran (se asignan con «Agregar canal»)
-const canalesVisibles = computed(() =>
-  esProfesorOAdmin.value ? canalesState.canales.filter(c => c.usuario_id) : canalesState.canales
-)
+// Todos ven solo los canales ya tomados; los libres no se muestran (se asignan con «Agregar canal» o «Asignarme un canal»)
+const canalesVisibles = computed(() => canalesState.canales.filter(c => c.usuario_id))
 
 function formatearHora(isoString) {
   if (!isoString) return ''
   return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-async function vincular(canalNum) {
+// El estudiante pulsa el botón y el sistema le asigna el siguiente canal libre (RF111)
+async function asignarmeCanal() {
   errorMensaje.value = ''
   mensajeExito.value = ''
 
   // RF04: El consentimiento informado emerge cuando el usuario toma el canal
   if (!consentimientoEstado.value.vigente) {
-    emit('solicitar-consentimiento', () => vincular(canalNum))
+    emit('solicitar-consentimiento', () => asignarmeCanal())
     return
   }
 
   try {
-    await vincularMiCuentaACanal(canalNum)
-    mensajeExito.value = `¡Te has asignado el Canal ${canalNum} con éxito para la Ronda ${metricasRonda.value.rondaActual}!`
-    emit('canal-seleccionado', canalNum)
+    const { canal } = await asignarmeCanalAutomatico()
+    mensajeExito.value = `Se te asignó automáticamente el Canal ${canal} para la Ronda ${metricasRonda.value.rondaActual}. Ya puedes medir en él.`
+    emit('canal-seleccionado', canal)
     setTimeout(() => { mensajeExito.value = '' }, 4000)
   } catch (err) {
     errorMensaje.value = err.message

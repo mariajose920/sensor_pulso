@@ -34,6 +34,20 @@ export function evaluarAgregarCanal({ rol, canales, usuarioId, max = MAX_CANALES
   return { visible: true, puede: true, motivo: '', primero: propios === 0 }
 }
 
+/**
+ * ¿Se muestra y funciona el botón «Asignarme un canal» del estudiante? Igual que el del profesor, el número no se elige:
+ * el sistema toma el siguiente canal libre. Un estudiante tiene como máximo un canal.
+ */
+export function evaluarAsignacionEstudiante({ rol, canales, usuarioId }) {
+  if (esDocente(rol)) return { visible: false, puede: false, motivo: '' }
+  const propio = canalesDe(canales, usuarioId)[0]
+  if (propio) return { visible: true, puede: false, motivo: `Ya tienes el Canal ${propio.canal}. Libéralo si quieres que el sistema te asigne otro.`, asignado: propio.canal }
+  if (siguienteCanalLibre(canales) === null) {
+    return { visible: true, puede: false, motivo: 'No quedan canales libres en esta ronda. Espera a que el profesor abra la siguiente.' }
+  }
+  return { visible: true, puede: true, motivo: '' }
+}
+
 /** Canal principal de la cuenta: el que tomó primero. Pasó por el protocolo normal (pasos 1 y 2). */
 export function canalPrincipal(canales, usuarioId) {
   const propios = canalesDe(canales, usuarioId)

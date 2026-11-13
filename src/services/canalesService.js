@@ -8,6 +8,7 @@ import {
   canalesDe,
   siguienteCanalLibre,
   evaluarAgregarCanal,
+  evaluarAsignacionEstudiante,
   canalPrincipal,
   requisitosCompletos,
   canalListoParaMedir
@@ -199,6 +200,42 @@ export async function vincularMiCuentaACanal(canalNum) {
 }
 
 /**
+ * El estudiante pulsa un botón y el sistema le asigna automáticamente el siguiente canal libre (RF111).
+ * Si otro estudiante toma ese canal justo antes (la base devuelve false), se prueba con el siguiente libre.
+ * Sin sesión real de la base, se asigna en memoria con la misma regla.
+ */
+export async function asignarmeCanalAutomatico() {
+  if (miCanalAsignado.value) throw new Error(`Ya tienes asignado el Canal ${miCanalAsignado.value}.`)
+  for (let intento = 0; intento < 5; intento++) {
+    const canal = siguienteCanalLibre(canalesState.canales)
+    if (canal === null) throw new Error('No quedan canales libres en esta ronda. Espera a que el profesor abra la siguiente.')
+
+    canalesState.cargando = true
+    canalesState.error = null
+    try {
+      const { data: tomado, error } = await supabase.rpc('elegir_canal', {
+        p_sesion: canalesState.sesionActivaId,
+        p_canal: canal
+      })
+      if (!error && tomado) {
+        await cargarSesionYCanales()
+        canalesState.cargando = false
+        return { ok: true, canal }
+      }
+      if (!error && tomado === false) {
+        // Lo tomó otra cuenta un instante antes: se actualiza la lista y se intenta con el siguiente libre
+        await cargarSesionYCanales()
+        canalesState.cargando = false
+        continue
+      }
+    } catch (_) { /* sin base: se asigna en memoria */ }
+    canalesState.cargando = false
+    return vincularMiCuentaACanal(canal)
+  }
+  throw new Error('No se pudo asignar un canal libre. Inténtalo de nuevo.')
+}
+
+/**
  * Libera el canal ocupado por el usuario actual
  */
 export async function desvincularMiCuenta(canalEspecifico = null) {
@@ -309,6 +346,13 @@ export const requisitosCanales = reactive({})
 
 // Estado del botón «Agregar otro canal»
 export const estadoAgregarCanal = computed(() => evaluarAgregarCanal({
+  rol: usuarioActual.rol,
+  canales: canalesState.canales,
+  usuarioId: usuarioActual.id
+}))
+
+// Estado del botón «Asignarme un canal» (estudiante)
+export const estadoAsignacionEstudiante = computed(() => evaluarAsignacionEstudiante({
   rol: usuarioActual.rol,
   canales: canalesState.canales,
   usuarioId: usuarioActual.id
