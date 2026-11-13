@@ -2,6 +2,7 @@ import { supabase } from './supabase.js'
 import { validarCorreoInstitucional } from '../utils/validators.js'
 import { enviarCorreoInvitacion } from './emailService.js'
 import { escaparHtml, sanitizarContenidoUsuario } from './proteccionWebService.js'
+import { MAX_INVITACIONES_POR_ENVIO } from '../utils/correosInvitacion.js'
 
 const ALFABETO_CODIGO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
@@ -964,4 +965,130 @@ export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
       promedioSpo2
     }
   }
+}
+
+// ==========================================
+// RF100 / RF102: INVITAR VARIOS A LA VEZ Y ELIMINAR EL AULA
+// ==========================================
+
+const dormir = (ms) => new Promise((resolver) => setTimeout(resolver, ms))
+
+/**
+ * RF100: invita a varios estudiantes de una sola vez. Envía de a uno (el servicio de correo limita el ritmo)
+ * y devuelve qué correos salieron y cuáles fallaron, con su motivo. Un fallo no detiene al resto.
+ */
+export async function enviarInvitacionesVarias({
+  aulaId, correos, profesorId, profesorNombre, esAdmin, pausaMs = 400, alProgresar = null
+}) {
+  const lista = [...new Set((correos || []).map((c) => String(c || '').trim().toLowerCase()).filter(Boolean))]
+  if (!lista.length) return { success: false, error: 'Agrega al menos un correo.', enviados: [], fallidos: [] }
+  if (lista.length > MAX_INVITACIONES_POR_ENVIO) {
+    return {
+      success: false,
+      error: `Puedes invitar hasta ${MAX_INVITACIONES_POR_ENVIO} estudiantes por envío.`,
+      enviados: [],
+      fallidos: []
+    }
+  }
+
+  const enviados = []
+  const fallidos = []
+  for (let i = 0; i < lista.length; i++) {
+    const correo = lista[i]
+    const res = await enviarInvitacionCorreo({ aulaId, correoEstudiante: correo, profesorId, profesorNombre, esAdmin })
+    if (res.success) enviados.push(correo)
+    else fallidos.push({ correo, error: res.error })
+    if (typeof alProgresar === 'function') alProgresar({ hecho: i + 1, total: lista.length })
+    // Un error de permiso o del código desactivado se repetiría igual en todos: se corta de una vez
+    if (!res.success && /permiso|desactivado|no encontrada/i.test(res.error || '')) {
+      for (const restante of lista.slice(i + 1)) fallidos.push({ correo: restante, error: res.error })
+      break
+    }
+    if (i < lista.length - 1 && pausaMs > 0) await dormir(pausaMs)
+  }
+
+  const exito = enviados.length > 0
+  return {
+    success: exito,
+    enviados,
+    fallidos,
+    message: exito
+      ? `Se enviaron ${enviados.length} invitación(es)${fallidos.length ? ` y ${fallidos.length} fallaron` : ''}.`
+      : undefined,
+    error: exito ? undefined : (fallidos[0]?.error || 'No se pudo enviar ninguna invitación.')
+  }
+}
+
+/**
+ * RF102: elimina un aula completa con sus cursos, estudiantes, invitaciones y evaluaciones.
+ * No se puede deshacer: la pantalla pide escribir el nombre del aula antes de llamar a esta función.
+ * Solo el profesor dueño o un administrador (en Supabase lo exige además la política RLS aulas_borrar).
+ */
+export async function eliminarAula({ aulaId, profesorId, esAdmin }) {
+  if (!aulaId) return { success: false, error: 'ID de aula no proporcionado.' }
+
+  const local = aulasLocales.find((a) => a.id === aulaId)
+  if (local && !esAdmin && local.profesor_id !== profesorId) {
+    return { success: false, error: 'Solo el profesor dueño del aula o un administrador puede eliminarla.' }
+  }
+
+  // 1. Supabase: el borrado en cascada elimina cursos, estudiantes, invitaciones y evaluaciones del aula
+  let borradoRemoto = false
+  let falloRemoto = null
+  try {
+    const { data, error } = await supabase.from('aulas').delete().eq('id', aulaId).select('id')
+    if (error) falloRemoto = error
+    else borradoRemoto = Array.isArray(data) && data.length > 0
+  } catch (err) {
+    falloRemoto = err
+  }
+
+  // Un aula de la base (id uuid) que la base no borró sigue existiendo: no se puede decir que se eliminó.
+  // Un aula solo local (id de prueba) o inexistente en este navegador y en la base tampoco se da por eliminada.
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(aulaId)
+  if ((esDeLaBase && !borradoRemoto) || (!local && !borradoRemoto)) {
+    return {
+      success: false,
+      error: falloRemoto?.message
+        ? `No se pudo eliminar el aula: ${falloRemoto.message}`
+        : 'No se pudo eliminar el aula (no existe o no tienes permiso).'
+    }
+  }
+
+  // 2. Copia local: aula y todo lo que colgaba de ella
+  const evaluacionesDelAula = evaluacionesLocales.filter((e) => e.aula_id === aulaId).map((e) => e.id)
+  aulasLocales = aulasLocales.filter((a) => a.id !== aulaId)
+  aulaEstudiantesLocales = aulaEstudiantesLocales.filter((e) => e.aula_id !== aulaId)
+  cursosLocales = cursosLocales.filter((c) => c.aula_id !== aulaId)
+  cursoEstudiantesLocales = cursoEstudiantesLocales.filter((c) => c.aula_id !== aulaId)
+  invitacionesLocales = invitacionesLocales.filter((i) => i.aula_id !== aulaId)
+  evaluacionesLocales = evaluacionesLocales.filter((e) => e.aula_id !== aulaId)
+  intentosEvaluacionesLocales = intentosEvaluacionesLocales.filter(
+    (i) => i.aula_id !== aulaId && !evaluacionesDelAula.includes(i.evaluacion_id)
+  )
+  guardarEnStorage(STORAGE_AULAS, aulasLocales)
+  guardarEnStorage(STORAGE_AULA_ESTUDIANTES, aulaEstudiantesLocales)
+  guardarEnStorage(STORAGE_CURSOS, cursosLocales)
+  guardarEnStorage(STORAGE_CURSO_ESTUDIANTES, cursoEstudiantesLocales)
+  guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+  guardarEnStorage(STORAGE_EVALUACIONES, evaluacionesLocales)
+  guardarEnStorage(STORAGE_INTENTOS_EVALUACIONES, intentosEvaluacionesLocales)
+
+  // 3. Registro de auditoría local
+  try {
+    const STORAGE_AUDITORIA = 'sensor_pulso_auditoria_roles'
+    const logs = JSON.parse(localStorage.getItem(STORAGE_AUDITORIA) || '[]')
+    logs.unshift({
+      id: `audit-${Date.now()}`,
+      accion: 'eliminacion_aula',
+      tabla: 'aulas',
+      registro_id: aulaId,
+      actor_id: profesorId,
+      detalles: { nombre: local?.nombre || null, evaluaciones: evaluacionesDelAula.length },
+      creado_en: new Date().toISOString()
+    })
+    localStorage.setItem(STORAGE_AUDITORIA, JSON.stringify(logs))
+  } catch (_) {}
+
+  return { success: true, message: 'Aula eliminada.' }
 }
