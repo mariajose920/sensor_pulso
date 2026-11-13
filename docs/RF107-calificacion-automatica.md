@@ -92,3 +92,11 @@ Al entregar (y después, con «Ver correcciones» en el listado), el estudiante 
 - **Seguridad de la clave:** las claves siguen sin ser legibles para el estudiante. Solo la función `resultado_evaluacion(intento)` las devuelve, y únicamente al **dueño del intento** y **después de entregarlo**. Hasta entonces no hay correcciones.
 - **Sin conexión:** si la entrega quedó en cola (RF110), se avisa y el resultado se puede ver cuando se envíe.
 - **Límite:** apenas se entrega, se ven las respuestas correctas. Si el profesor no quiere que se vean mientras otros estudiantes aún no rinden la evaluación, habría que ocultarlas hasta el cierre. Se puede agregar como opción de la evaluación.
+
+## Cambiar el tipo de una evaluación ya creada
+- En *Evaluaciones*, cada evaluación guardada tiene **«✏️ Cambiar tipo»**. Abre el mismo formulario del tipo y permite dejarla como **solo preguntas**, **solo ejercicio aplicado** o **ambas** (preguntas + ejercicios), con su criterio, referencia, puntajes e intentos. Al guardar se reemplazan sus ejercicios.
+- Si ya tiene intentos de estudiantes, el tipo queda bloqueado (cambiarlo alteraría notas ya puestas). Para tipos con preguntas (solo preguntas o ambas), la evaluación debe tener preguntas; si no, se avisa.
+- Al cargar una **plantilla precargada** en el formulario también se respeta su tipo. Las plantillas que traen preguntas y un ejercicio (pulso, SpO₂ y comparación de señales) ahora son de tipo **mixta**, y se pueden cambiar a solo preguntas o solo ejercicio antes de guardar.
+
+## Error «La base rechazó el tipo o el criterio de la evaluación»
+Casi siempre significa que **la base de Supabase no tiene aplicadas las migraciones de RF107** (la restricción del tipo no conoce «mixta»). Ahora el mensaje lo dice y nombra la migración que falta. Solución: en Supabase → SQL Editor, ejecutar `supabase/rf107_aplicar_en_supabase.sql` (junta las tres migraciones) o los tres archivos de `supabase/migrations/` en orden (\`20261113000100\`, \`20261113000200\`, \`20261113000300\`). Al crear una evaluación mixta, si falla guardar sus ejercicios, la evaluación creada se elimina para no dejarla a medias.

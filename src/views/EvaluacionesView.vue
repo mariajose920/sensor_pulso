@@ -300,6 +300,15 @@
                   >
                     🎯 {{ resultadosAbiertos[e.id] ? 'Ocultar resultados' : 'Resultados del ejercicio' }}
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    data-testid="cambiar-tipo"
+                    @click="abrirEdicionTipo(e)"
+                    title="Cambiar a solo preguntas, solo ejercicio aplicado o ambas"
+                  >
+                    ✏️ Cambiar tipo
+                  </button>
                   <button 
                     type="button" 
                     class="btn btn-secondary btn-sm"
@@ -309,6 +318,32 @@
                     📑 Duplicar
                   </button>
                 </div>
+                <!-- Cambiar el tipo de una evaluación ya guardada: preguntas, ejercicio aplicado o ambas -->
+                <div v-if="edicion.id === e.id" class="edicion-tipo" data-testid="panel-cambiar-tipo">
+                  <h4>Tipo de la evaluación</h4>
+                  <p class="header-desc">
+                    Elige si es solo de preguntas, solo de ejercicio aplicado o de ambas. Esta evaluación tiene
+                    {{ (e.preguntas || []).length }} pregunta(s).
+                  </p>
+                  <TipoEvaluacionForm
+                    v-model="edicion.modelo"
+                    :mostrar-errores="edicion.intentado"
+                    :bloqueado="edicion.bloqueado"
+                    :plantillas="opcionesReferencia.plantillas"
+                    :mediciones-referencia="opcionesReferencia.mediciones"
+                  />
+                  <p v-if="edicion.mensaje" class="alert" :class="edicion.error ? 'alert-error' : 'alert-success'" role="status" data-testid="mensaje-cambiar-tipo">
+                    {{ edicion.mensaje }}
+                  </p>
+                  <div class="edicion-acciones">
+                    <button type="button" class="btn btn-secondary btn-sm" :disabled="edicion.guardando" @click="cerrarEdicionTipo">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-testid="guardar-tipo"
+                            :disabled="edicion.guardando || edicion.bloqueado" @click="guardarTipo(e)">
+                      {{ edicion.guardando ? 'Guardando…' : 'Guardar tipo' }}
+                    </button>
+                  </div>
+                </div>
+
                 <!-- RF107: resultados del ejercicio aplicado y recalificación -->
                 <div v-if="resultadosAbiertos[e.id]" class="resultados" data-testid="resultados-ejercicio">
                   <p v-if="resultadosError[e.id]" class="alert alert-error" role="alert">{{ resultadosError[e.id] }}</p>
@@ -368,9 +403,11 @@ import {
   duplicarEvaluacion,
   obtenerOpcionesReferencia,
   obtenerResultadosEjercicio,
-  recalificarIntento
+  recalificarIntento,
+  actualizarTipoEvaluacion,
+  contarIntentos
 } from '../services/evaluacionesService'
-import { modeloVacio, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { modeloVacio, modeloDesdeFila, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
 import { ETIQUETA_NIVEL } from '../utils/calificacionEjercicio.js'
 
 const { currentUserId, currentUserName, currentUserEmail, isAdmin, isProfesor, can } = useAuth()
@@ -434,6 +471,52 @@ const resultados = ref({})
 const resultadosAbiertos = ref({})
 const resultadosError = ref({})
 const recalificando = ref('')
+
+// Cambiar el tipo de una evaluación ya guardada
+const edicion = ref({ id: null, modelo: modeloVacio(), intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false })
+
+async function abrirEdicionTipo(e) {
+  if (edicion.value.id === e.id) return cerrarEdicionTipo()
+  edicion.value = {
+    id: e.id,
+    modelo: JSON.parse(JSON.stringify(modeloDesdeFila(e))),
+    intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false
+  }
+  // Con estudiantes que ya rindieron, el tipo ya no se puede cambiar
+  if (e.origen === 'supabase' && (await contarIntentos(e.id)) > 0) {
+    edicion.value.bloqueado = true
+    edicion.value.mensaje = 'Esta evaluación ya tiene intentos de estudiantes: el tipo no se puede cambiar.'
+    edicion.value.error = true
+  }
+}
+
+function cerrarEdicionTipo() {
+  edicion.value = { id: null, modelo: modeloVacio(), intentado: false, guardando: false, bloqueado: false, mensaje: '', error: false }
+}
+
+async function guardarTipo(e) {
+  edicion.value.intentado = true
+  edicion.value.mensaje = ''
+  const destino = edicion.value.modelo
+  if (validarTipoEvaluacion(destino, { exigirReferencia: true }).length) return
+  // Las evaluaciones de preguntas o mixtas necesitan preguntas
+  if ((destino.tipo === 'preguntas' || destino.tipo === 'mixta') && !(e.preguntas || []).length) {
+    edicion.value.mensaje = 'Esta evaluación no tiene preguntas, así que no puede ser de preguntas ni mixta. Elige «Ejercicio aplicado» o crea una evaluación nueva con preguntas.'
+    edicion.value.error = true
+    return
+  }
+  edicion.value.guardando = true
+  const res = await actualizarTipoEvaluacion({ evaluacionId: e.id, modelo: destino, puedeGestionar: puedeGestionar.value })
+  edicion.value.guardando = false
+  edicion.value.error = !res.success
+  edicion.value.mensaje = res.success ? 'Tipo actualizado.' : res.error
+  if (res.success) {
+    await cargarLista()
+    cerrarEdicionTipo()
+    mensajeError.value = false
+    mensaje.value = 'Tipo de la evaluación actualizado.'
+  }
+}
 
 async function cargarResultados(e) {
   const res = await obtenerResultadosEjercicio(e.id)
@@ -545,11 +628,9 @@ function cargarPlantillaEnFormulario(p) {
   plantillaSeleccionadaId.value = p.id
   titulo.value = p.titulo
   descripcion.value = p.descripcion || ''
-  modelo.value = {
-    tipo: p.tipo,
-    ejercicio: p.ejercicio,
-    criterio: p.criterio ? JSON.parse(JSON.stringify(p.criterio)) : null
-  }
+  modelo.value = JSON.parse(JSON.stringify(modeloDesdeFila(p)))
+  // modeloDesdeFila deja las evaluaciones de solo preguntas con el modelo vacío: se conserva ese tipo
+  if (p.tipo === 'preguntas') modelo.value = modeloVacio()
   preguntas.value = p.preguntas ? JSON.parse(JSON.stringify(p.preguntas)) : []
   modoCreacion.value = 'cero' // Volver al formulario para editarla
 }
@@ -673,6 +754,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.edicion-tipo { margin-top: 0.75rem; padding: 0.9rem 1rem; border: 1px solid var(--color-border); border-radius: 10px; background: #f8fafc; }
+.edicion-tipo h4 { margin: 0 0 0.25rem; }
+.edicion-acciones { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
 .resultados { margin-top: 0.75rem; overflow-x: auto; }
 .resultados-tabla { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .resultados-tabla th, .resultados-tabla td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: left; }

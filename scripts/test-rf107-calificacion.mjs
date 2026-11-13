@@ -5,6 +5,8 @@ import {
   puntajeRango, puntajeSimilitud, similitudRasgos, calificarEjercicio, nivelPorPorcentaje,
   resumenResultado, mensajeErrorCalificacion
 } from '../src/utils/calificacionEjercicio.js'
+import { explicarErrorBase, MSG_FALTA_MIXTA, MSG_FALTA_CALIFICACION } from '../src/utils/erroresBase.js'
+import { crearEvaluacion, actualizarTipoEvaluacion, obtenerEvaluacionesAula } from '../src/services/evaluacionesService.js'
 import {
   formatearRespuesta, formatearCorrecta, estadoPregunta, estadoEjercicio, resumenPreguntas, explicarNivel, formatearPorcentaje
 } from '../src/utils/correccionEvaluacion.js'
@@ -190,6 +192,45 @@ marcar(readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql
 const vistaResultado = readFileSync(new URL('../src/views/MisEvaluacionesView.vue', import.meta.url), 'utf8')
 marcar(/data-testid="resultado-final"/.test(vistaResultado) && /data-testid="nivel-logro"/.test(vistaResultado) && /data-testid="correccion-pregunta"/.test(vistaResultado) && /data-testid="correccion-ejercicio"/.test(vistaResultado), 'Al entregar se muestra el nivel, el porcentaje y la corrección de cada pregunta y ejercicio')
 marcar(/await mostrarResultado\(idIntento\)/.test(vistaResultado) && /data-testid="ver-correcciones"/.test(vistaResultado), 'El resultado aparece al entregar y se puede volver a ver desde el listado')
+
+// --- Cambiar el tipo de una evaluación ya creada y errores claros de la base
+marcar(explicarErrorBase({ code: '23514', message: 'new row for relation "evaluaciones" violates check constraint "evaluaciones_tipo_check"' }, 'mixta') === MSG_FALTA_MIXTA, 'Si la base no acepta el tipo mixta, el mensaje dice qué migración aplicar')
+marcar(/20261113000200_rf107_evaluacion_mixta\.sql/.test(MSG_FALTA_MIXTA) && /SQL Editor/.test(MSG_FALTA_MIXTA), 'El mensaje nombra el archivo y dónde ejecutarlo')
+marcar(explicarErrorBase({ code: '42P01', message: 'relation "evaluacion_ejercicios" does not exist' }, 'mixta') === MSG_FALTA_MIXTA, 'Si falta la tabla de ejercicios, también remite a la migración de la mixta')
+marcar(explicarErrorBase({ code: 'PGRST204', message: "Could not find the 'max_reintentos' column" }, 'ejercicio_aplicado') === MSG_FALTA_CALIFICACION, 'Si falta la columna de intentos, remite a la migración de la calificación')
+marcar(/violates check constraint/.test(explicarErrorBase({ code: '23514', message: 'violates check constraint "evaluaciones_check"' }, 'ejercicio_aplicado')), 'Un rechazo de criterio muestra el detalle de la base')
+marcar(explicarErrorBase({ message: 'otro problema' }, 'preguntas') === 'otro problema', 'Otros errores se muestran tal cual')
+
+// Almacenamiento en memoria: en Node no existe localStorage y el servicio guarda las evaluaciones locales ahí
+const memoria = new Map()
+globalThis.window = { localStorage: { getItem: (k) => (memoria.has(k) ? memoria.get(k) : null), setItem: (k, v) => memoria.set(k, String(v)), removeItem: (k) => memoria.delete(k) } }
+globalThis.localStorage = globalThis.window.localStorage
+const aulaPrueba = 'aula-cambio-tipo'
+const gen = { aulaId: aulaPrueba, creadorId: '00000000-0000-0000-0000-0000000000aa', titulo: 'Evaluación para cambiar de tipo', puedeGestionar: true }
+const creada = await crearEvaluacion({ ...gen, modelo: modeloVacio(), preguntas: [{ enunciado: '¿Pregunta?', tipo: 'abierta', puntaje: 10 }] })
+const idEv = creada.data.id
+const buscar = async () => (await obtenerEvaluacionesAula(aulaPrueba)).data.find((e) => e.id === idEv)
+marcar(creada.success && creada.data.tipo === 'preguntas', 'Se crea una evaluación solo de preguntas')
+let cambio = await actualizarTipoEvaluacion({ evaluacionId: idEv, modelo: cambiarEjercicio(modeloVacio(), 'medir_pulso'), puedeGestionar: true })
+marcar(cambio.success && (await buscar()).tipo === 'ejercicio_aplicado' && (await buscar()).ejercicio === 'medir_pulso', 'Se cambia de solo preguntas a solo ejercicio aplicado')
+const aMixta = cambiarTipo(cambiarEjercicio(modeloVacio(), 'medir_spo2'), 'mixta')
+cambio = await actualizarTipoEvaluacion({ evaluacionId: idEv, modelo: { ...aMixta, reintentos: 2 }, puedeGestionar: true })
+let actual = await buscar()
+marcar(cambio.success && actual.tipo === 'mixta' && actual.evaluacion_ejercicios.length === 1 && actual.evaluacion_ejercicios[0].ejercicio === 'medir_spo2' && actual.max_reintentos === 2, 'Se cambia a ambas (preguntas + ejercicio) conservando el ejercicio y los intentos')
+cambio = await actualizarTipoEvaluacion({ evaluacionId: idEv, modelo: modeloVacio(), puedeGestionar: true })
+actual = await buscar()
+marcar(cambio.success && actual.tipo === 'preguntas' && actual.ejercicio === null && actual.criterio === null && actual.evaluacion_ejercicios.length === 0, 'Se vuelve a solo preguntas y se quitan los ejercicios')
+cambio = await actualizarTipoEvaluacion({ evaluacionId: idEv, modelo: { tipo: 'ejercicio_aplicado', ejercicio: null, criterio: null }, puedeGestionar: true })
+marcar(!cambio.success && (await buscar()).tipo === 'preguntas', 'Un tipo incompleto se rechaza y la evaluación no cambia')
+cambio = await actualizarTipoEvaluacion({ evaluacionId: idEv, modelo: cambiarEjercicio(modeloVacio(), 'medir_pulso'), puedeGestionar: false })
+marcar(!cambio.success, 'Sin permiso de gestión no se cambia el tipo')
+
+delete globalThis.window
+delete globalThis.localStorage
+
+const vistaEvaluaciones = readFileSync(new URL('../src/views/EvaluacionesView.vue', import.meta.url), 'utf8')
+marcar(/data-testid="cambiar-tipo"/.test(vistaEvaluaciones) && /data-testid="guardar-tipo"/.test(vistaEvaluaciones) && /actualizarTipoEvaluacion\(/.test(vistaEvaluaciones), 'Cada evaluación guardada tiene el botón «Cambiar tipo» que guarda el nuevo tipo')
+marcar(/modeloDesdeFila\(p\)/.test(vistaEvaluaciones), 'Al cargar una plantilla en el formulario se respeta su tipo (preguntas, ejercicio o ambas)')
 
 console.log(fallos ? `\nRF107: ${fallos} prueba(s) fallaron` : '\nRF107: todas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)
