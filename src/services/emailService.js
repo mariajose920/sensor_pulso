@@ -2,7 +2,7 @@ import { validarCorreoInstitucional } from '../utils/validators.js'
 
 /**
  * RF100: Servicio de envío real de invitaciones por correo electrónico.
- * Conectado con el proveedor oficial Resend.
+ * Los correos salen desde una cuenta de Gmail configurada en el servidor.
  */
 export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profesorNombre }) {
   // 1. Validar correo institucional de estudiante
@@ -44,7 +44,7 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
       return {
         success: true,
         messageId: data.id,
-        proveedor: data.provider || 'Resend',
+        proveedor: data.provider || 'Gmail',
         mensaje: data.mensaje || `Invitación enviada exitosamente a ${payload.correo}`
       }
     }
@@ -61,7 +61,7 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
     if (respuesta.status === 503) {
       return {
         success: false,
-        error: data.error || 'Servicio de correo Resend no configurado. Falta RESEND_API_KEY en variables de entorno.'
+        error: data.error || 'Servicio de correo no configurado. Faltan GMAIL_USER y GMAIL_APP_PASSWORD en variables de entorno.'
       }
     }
 
@@ -80,7 +80,7 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
 
 /**
  * RF100: envía las invitaciones de varios estudiantes en UNA sola petición a /api/invitaciones/enviar,
- * que las manda todas juntas con el endpoint de lote de Resend.
+ * que las manda todas a la vez desde la cuenta de Gmail del servidor.
  * @returns {{ success: boolean, enviados: {correo:string,id:string|null}[], fallidos: {correo:string,error:string}[], error?: string }}
  */
 export async function enviarCorreosInvitacion({ correos, codigo, aulaNombre, profesorNombre }) {

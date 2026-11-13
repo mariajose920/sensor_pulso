@@ -64,7 +64,7 @@ function apiDevPlugin() {
 // RNF03: la web se instala como app (PWA). Ver docs/RNF03-pwa.md.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  // Cargar variables en process.env para que los endpoints dev puedan leer RESEND_API_KEY
+  // Cargar variables en process.env para que los endpoints dev puedan leer GMAIL_USER y GMAIL_APP_PASSWORD
   Object.assign(process.env, env)
 
   return {

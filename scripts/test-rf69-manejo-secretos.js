@@ -226,8 +226,9 @@ test('.gitignore: Bloquea archivos .env, certificados y llaves privadas', () => 
 test('Segregación Cliente/Servidor: api/invitaciones/enviar.js no lee variables VITE_', () => {
   const rutaEnviar = path.join(ROOT, 'api/invitaciones/enviar.js')
   const contenido = fs.readFileSync(rutaEnviar, 'utf8')
-  assert(!contenido.includes('VITE_RESEND_API_KEY'), 'No debe usar fallback a VITE_RESEND_API_KEY')
-  assert(contenido.includes('process.env.RESEND_API_KEY'), 'Debe usar variable de servidor RESEND_API_KEY')
+  const correo = fs.readFileSync(path.join(ROOT, 'api/_lib/correo.js'), 'utf8')
+  assert(!contenido.includes('VITE_GMAIL') && !correo.includes('VITE_GMAIL'), 'No debe usar variables GMAIL con prefijo VITE_')
+  assert(correo.includes('process.env.GMAIL_APP_PASSWORD') && correo.includes('process.env.GMAIL_USER'), 'Debe usar las variables de servidor GMAIL_USER y GMAIL_APP_PASSWORD')
 })
 
 test('Pre-commit Hook: Ejecuta activamente scripts/revisar-secretos.mjs', () => {

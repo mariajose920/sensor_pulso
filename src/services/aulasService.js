@@ -496,7 +496,7 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   const correoLimpio = correoEstudiante.trim().toLowerCase()
 
-  // Conectar con el servicio de correo real (Resend)
+  // Conectar con el servicio de correo real (Gmail)
   const resultadoEnvio = await enviarCorreoInvitacion({
     correo: correoLimpio,
     codigo: aula.codigo,
@@ -512,7 +512,7 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
       aula_nombre: aula.nombre,
       codigo_aula: aula.codigo,
       correo: correoLimpio,
-      servicio: 'Resend',
+      servicio: 'Gmail',
       estado: 'fallido',
       error_detalle: resultadoEnvio.error,
       intentado_en: new Date().toISOString()
@@ -533,9 +533,9 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
     aula_nombre: aula.nombre,
     codigo_aula: aula.codigo,
     correo: correoLimpio,
-    servicio: 'Resend',
+    servicio: 'Gmail',
     estado: 'enviada',
-    resend_id: resultadoEnvio.messageId || null,
+    mensaje_id: resultadoEnvio.messageId || null,
     enviada_en: new Date().toISOString()
   }
 
@@ -551,7 +551,7 @@ export async function enviarInvitacionCorreo({ aulaId, correoEstudiante, profeso
 
   return {
     success: true,
-    message: `Invitación enviada con éxito a ${correoLimpio} mediante Resend (Código: ${aula.codigo}).`,
+    message: `Invitación enviada con éxito a ${correoLimpio} desde Gmail (Código: ${aula.codigo}).`,
     invitacion: nuevaInvitacion
   }
 }
@@ -972,7 +972,7 @@ export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
 // ==========================================
 
 /**
- * RF100: invita a varios estudiantes en UNA sola petición: el servidor los manda todos juntos (lote de Resend).
+ * RF100: invita a varios estudiantes en UNA sola petición: el servidor los manda todos a la vez desde Gmail.
  * Valida el aula, el permiso y el código una vez; después registra el resultado de cada correo.
  * Un correo rechazado no impide que salgan los demás; el resultado dice cuáles fallaron y por qué.
  */
@@ -1020,11 +1020,11 @@ export async function enviarInvitacionesVarias({
   const registros = [
     ...enviados.map((e, i) => ({
       id: `inv-${Date.now()}-${i}`, aula_id: aulaId, aula_nombre: aula.nombre, codigo_aula: aula.codigo,
-      correo: e.correo, servicio: 'Resend', estado: 'enviada', resend_id: e.id || null, enviada_en: ahora
+      correo: e.correo, servicio: 'Gmail', estado: 'enviada', mensaje_id: e.id || null, enviada_en: ahora
     })),
     ...fallidos.map((f, i) => ({
       id: `inv-err-${Date.now()}-${i}`, aula_id: aulaId, aula_nombre: aula.nombre, codigo_aula: aula.codigo,
-      correo: f.correo, servicio: 'Resend', estado: 'fallido', error_detalle: f.error, intentado_en: ahora
+      correo: f.correo, servicio: 'Gmail', estado: 'fallido', error_detalle: f.error, intentado_en: ahora
     }))
   ]
   invitacionesLocales.unshift(...registros)

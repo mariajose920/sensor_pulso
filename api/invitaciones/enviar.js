@@ -2,10 +2,7 @@ import { validarCorreoInstitucional } from '../../src/utils/validators.js'
 import { MAX_INVITACIONES_POR_ENVIO } from '../../src/utils/correosInvitacion.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 import { escaparHtml, aplicarCabecerasSeguridad, validarOrigenCsrf } from '../_lib/proteccionWeb.js'
-
-// Remitente por defecto: el de pruebas de Resend. Solo entrega a la cuenta dueña de la API key;
-// para invitar a estudiantes de verdad hay que verificar un dominio en Resend y definir RESEND_FROM.
-const REMITENTE_POR_DEFECTO = 'Sensor Pulso UNACH <onboarding@resend.dev>'
+import { enviarMensajes, leerConfiguracionCorreo } from '../_lib/correo.js'
 
 /**
  * Dirección de la web que llevan los botones del correo. Orden: APP_URL (producción) → el origen de la petición si es
@@ -195,82 +192,47 @@ export default async function handler(req, res) {
   const nombreDocente = (profesorNombre || 'Tu Docente').trim()
   const codigoLimpio = codigo.trim().toUpperCase()
 
-  // 3. Obtener API Key de Resend (secreto exclusivo del servidor, RF69)
-  const resendApiKey = process.env.RESEND_API_KEY
-
-  if (!resendApiKey) {
+  // 3. Cuenta de Gmail que envía (secretos exclusivos del servidor, RF69)
+  if (!leerConfiguracionCorreo().configurado) {
     return responder(res, 503, {
       ok: false,
-      error: 'Servicio de correo Resend no configurado. Falta la variable RESEND_API_KEY en el entorno.'
+      error: 'Servicio de correo no configurado. Faltan las variables GMAIL_USER y GMAIL_APP_PASSWORD en el entorno.'
     })
   }
 
-  const remitente = (process.env.RESEND_FROM || '').trim() || REMITENTE_POR_DEFECTO
-  const cabeceras = {
-    'Authorization': `Bearer ${resendApiKey.trim()}`,
-    'Content-Type': 'application/json'
-  }
   const sitio = urlBase(req)
   const urlUnirse = `${sitio}/aulas?unirse=${encodeURIComponent(codigoLimpio)}`
   const urlSitio = `${sitio}/aulas`
   const mensajes = lista.map((destino) => ({
-    from: remitente,
-    to: [destino],
+    to: destino,
     ...construirCorreo({ correo: destino, codigo: codigoLimpio, nombreAula, nombreDocente, urlUnirse, urlSitio })
   }))
 
-  // 4. Enviar todo en UNA llamada al proveedor: el endpoint de lote de Resend manda todos los correos juntos.
-  //    «permissive» deja que salgan los válidos aunque alguno sea rechazado, y devuelve el error de ese.
+  // 4. Enviar todos a la vez desde la cuenta de Gmail, un correo por estudiante.
+  //    Un correo rechazado no impide que salgan los demás; el resultado dice cuál falló y por qué.
   try {
-    const respuesta = await fetch('https://api.resend.com/emails/batch', {
-      method: 'POST',
-      headers: { ...cabeceras, 'x-batch-validation': 'permissive' },
-      body: JSON.stringify(mensajes)
-    })
-    const data = await respuesta.json().catch(() => ({}))
-
-    if (!respuesta.ok) {
-      const mensajeError = data.message || `Error del proveedor de correo (código ${respuesta.status})`
-      return responder(res, respuesta.status >= 400 && respuesta.status < 600 ? respuesta.status : 500, {
-        ok: false,
-        error: mensajeError,
-        statusCode: respuesta.status,
-        enviados: [],
-        fallidos: lista.map((c) => ({ correo: c, error: mensajeError }))
-      })
-    }
-
-    // data.data = ids de los aceptados (en orden); data.errors = [{ index, message }] de los rechazados
-    const rechazados = new Map((Array.isArray(data.errors) ? data.errors : []).map((e) => [e.index, e.message]))
-    const ids = Array.isArray(data.data) ? data.data : []
-    let siguienteId = 0
-    const enviados = []
-    const fallidos = []
-    lista.forEach((destino, indice) => {
-      if (rechazados.has(indice)) {
-        fallidos.push({ correo: destino, error: rechazados.get(indice) || 'El proveedor rechazó este correo.' })
-      } else {
-        enviados.push({ correo: destino, id: ids[siguienteId]?.id || null })
-        siguienteId++
-      }
-    })
+    const resultados = await enviarMensajes(mensajes)
+    const enviados = resultados.filter((r) => r.ok).map((r) => ({ correo: r.correo, id: r.id || null }))
+    const fallidos = resultados.filter((r) => !r.ok).map((r) => ({ correo: r.correo, error: r.error }))
 
     return responder(res, 200, {
       ok: enviados.length > 0,
-      provider: 'resend',
+      provider: 'gmail',
       id: enviados[0]?.id || null,
       enviados,
       fallidos,
+      error: enviados.length ? undefined : (fallidos[0]?.error || 'No se pudo enviar ninguna invitación.'),
       mensaje: enviados.length === 1 && !fallidos.length
         ? `Correo enviado exitosamente a ${enviados[0].correo}`
         : `Se enviaron ${enviados.length} de ${lista.length} invitaciones.`
     })
-  } catch (errorRed) {
+  } catch (errorEnvio) {
+    const mensajeError = `No se pudo enviar desde Gmail: ${errorEnvio.message}`
     return responder(res, 502, {
       ok: false,
-      error: `Error de red al conectar con Resend: ${errorRed.message}`,
+      error: mensajeError,
       enviados: [],
-      fallidos: lista.map((c) => ({ correo: c, error: `Error de red al conectar con Resend: ${errorRed.message}` }))
+      fallidos: lista.map((c) => ({ correo: c, error: mensajeError }))
     })
   }
 }

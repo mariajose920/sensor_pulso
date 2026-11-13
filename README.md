@@ -64,8 +64,8 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    SUPABASE_SECRET_KEY=...
    CLAVE_CIFRADO_CAMPOS=...           # mínimo 16 caracteres, aleatoria (RF116)
    CLAVE_VERSION_ACTIVA=1
-   RESEND_API_KEY=...                 # RF100: invitaciones por correo
-   RESEND_FROM=...                    # opcional: remitente con dominio verificado en Resend
+   GMAIL_USER=sensorpulso@gmail.com   # RF100: cuenta de Gmail que envía las invitaciones
+   GMAIL_APP_PASSWORD=...             # contraseña de aplicación de esa cuenta (no la contraseña normal)
    APP_URL=...                        # opcional: web a la que apuntan los botones del correo
    VITE_CONTACTO_PRIVACIDAD=...       # RF88: correo de privacidad (@unach.cl)
    ```
