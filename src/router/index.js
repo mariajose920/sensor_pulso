@@ -78,6 +78,12 @@ const routes = [
     component: ComparacionView
   },
   {
+    // RF34: galería de mediciones públicas anonimizadas, abierta con o sin sesión
+    path: '/galeria',
+    name: 'Galeria',
+    component: () => import('../views/GaleriaView.vue')
+  },
+  {
     path: '/aulas',
     name: 'Aulas',
     component: AulasView,

@@ -312,6 +312,7 @@ export async function obtenerMedicionesPublicas() {
             calidad: item.calidad || 'buena',
             calidadTexto: item.calidad === 'buena' ? 'Excelente' : (item.calidad === 'regular' ? 'Aceptable' : 'Baja'),
             ritmo: item.ritmo || 'normal',
+            dentroDeRango: typeof item.dentroDeRango === 'boolean' ? item.dentroDeRango : undefined,
             ritmoTexto: item.ritmo === 'normal' ? 'Sinusal Regular' : (item.ritmo || 'Evaluado'),
             autorAnonimo: 'Participante UNACH (Anónimo)',
             institucion: 'Comunidad Universitaria UNACH',
