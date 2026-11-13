@@ -6,7 +6,7 @@
 - `seed.example.sql`: ejemplo para registrar el correo del primer administrador (RF44). No poner el correo real en un archivo versionado.
 
 ## Conexión desde la web (Vue + Vite)
-1. Copiar `.env.example` a `.env.local`.
+1. Crear `.env.local` con las variables que lista el README principal (el archivo no se sube a git).
 2. El cliente está en `src/services/supabase.js` y usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`.
 3. `SUPABASE_SECRET_KEY` y `CLAVE_CIFRADO_CAMPOS` son solo del servidor (Vercel). Nunca con prefijo `VITE_` ni en el repositorio.
 

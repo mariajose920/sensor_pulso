@@ -990,7 +990,7 @@
     <!-- MODAL INVITAR ESTUDIANTE POR CORREO (RF100) -->
     <div v-if="modalInvitarAbierto" class="modal-backdrop" @click.self="modalInvitarAbierto = false">
       <div class="modal-card">
-        <h3 class="modal-title">Invitar Estudiante al Aula</h3>
+        <h3 class="modal-title">Invitar Estudiantes al Aula</h3>
         <p class="modal-subtitle">
           Aula: <strong>{{ aula?.nombre }}</strong> (Código: <code>{{ aula?.codigo }}</code>)
         </p>
@@ -999,28 +999,15 @@
           <strong>Error de envío:</strong> {{ errorInvitacionModal }}
         </div>
 
-        <form @submit.prevent="enviarInvitacion">
-          <div class="form-group">
-            <label class="form-label">Correo Institucional del Estudiante (@alu.unach.cl) *</label>
-            <input 
-              v-model="correoInvitacion" 
-              type="email" 
-              class="form-input" 
-              placeholder="estudiante@alu.unach.cl" 
-              required 
-              :disabled="enviandoInvitacion"
-            />
-            <small class="help-text">El código de acceso será enviado a través de Resend a la casilla del estudiante.</small>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary" :disabled="enviandoInvitacion">Cancelar</button>
-            <button type="submit" class="btn btn-primary" :disabled="enviandoInvitacion">
-              <span v-if="enviandoInvitacion">Enviando con Resend...</span>
-              <span v-else>Enviar Invitación</span>
-            </button>
-          </div>
-        </form>
+        <InvitacionMasivaForm
+          ref="formInvitacion"
+          :aula-id="aula?.id || ''"
+          :profesor-id="currentUserId || ''"
+          :profesor-nombre="currentUserName || ''"
+          :es-admin="!!isAdmin"
+          @resultado="alEnviarInvitaciones"
+          @cerrar="modalInvitarAbierto = false"
+        />
 
         <!-- Historial de invitaciones -->
         <div class="invitaciones-historial mt-4" style="margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1rem;">
@@ -1331,6 +1318,7 @@
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import PanelAvanceEnVivo from '../components/PanelAvanceEnVivo.vue'
+import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
@@ -1349,7 +1337,6 @@ import {
   obtenerEstadisticasEvaluacionAula,
   alternarEstadoCodigoAula,
   regenerarCodigoAulaDocente,
-  enviarInvitacionCorreo,
   obtenerInvitacionesAula,
   crearCurso,
   renombrarCurso,
@@ -1378,8 +1365,7 @@ const feedbackExito = ref(true)
 
 // Modales
 const modalInvitarAbierto = ref(false)
-const correoInvitacion = ref('')
-const enviandoInvitacion = ref(false)
+const formInvitacion = ref(null)
 const errorInvitacionModal = ref('')
 const listaInvitaciones = ref([])
 const cargandoInvitaciones = ref(false)
@@ -1598,39 +1584,25 @@ const cargarHistorialInvitaciones = async () => {
 }
 
 const abrirModalInvitar = async () => {
-  correoInvitacion.value = ''
   errorInvitacionModal.value = ''
   modalInvitarAbierto.value = true
+  formInvitacion.value?.limpiar?.()
   await cargarHistorialInvitaciones()
 }
 
-const enviarInvitacion = async () => {
-  if (!correoInvitacion.value) return
-  enviandoInvitacion.value = true
-  errorInvitacionModal.value = ''
-
-  const res = await enviarInvitacionCorreo({
-    aulaId: aula.value.id,
-    correoEstudiante: correoInvitacion.value,
-    profesorId: currentUserId.value,
-    profesorNombre: currentUserName.value,
-    esAdmin: isAdmin.value
-  })
-
-  enviandoInvitacion.value = false
-
+// El formulario de invitaciones avisa cuando termina un envío (uno o varios correos)
+const alEnviarInvitaciones = async (res) => {
   if (res.success) {
     mostrarFeedback(true, res.message)
     errorInvitacionModal.value = ''
-    correoInvitacion.value = ''
-    modalInvitarAbierto.value = false
+    if (res.todoEnviado) modalInvitarAbierto.value = false
     // Recargar estudiantes
     const resEst = await obtenerEstudiantesAula(aulaId)
     estudiantes.value = resEst.data || []
   } else {
     errorInvitacionModal.value = res.error
-    await cargarHistorialInvitaciones()
   }
+  await cargarHistorialInvitaciones()
 }
 
 // RF101: Gestión de Cursos

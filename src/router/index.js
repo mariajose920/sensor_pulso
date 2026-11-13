@@ -79,6 +79,18 @@ const routes = [
     component: ComparacionView
   },
   {
+    // RF34: galería de mediciones públicas anonimizadas, abierta con o sin sesión
+    path: '/galeria',
+    name: 'Galeria',
+    component: () => import('../views/GaleriaView.vue')
+  },
+  {
+    // RF35: una medición pública compartida por enlace, abierta con o sin sesión
+    path: '/publica/:token',
+    name: 'Publica',
+    component: () => import('../views/PublicaView.vue')
+  },
+  {
     path: '/aulas',
     name: 'Aulas',
     component: AulasView,
@@ -114,6 +126,12 @@ const routes = [
     path: '/aprendizaje/simulador',
     name: 'Simulador',
     component: SimuladorView
+  },
+  {
+    // RF33: biblioteca de casos precargados; va antes de la lección para que no se tome como slug
+    path: '/aprendizaje/casos',
+    name: 'Casos',
+    component: () => import('../views/CasosView.vue')
   },
   {
     // Práctica para las evaluaciones: abierta con o sin sesión (va antes de la lección para que no se tome como slug)

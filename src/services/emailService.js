@@ -2,7 +2,7 @@ import { validarCorreoInstitucional } from '../utils/validators.js'
 
 /**
  * RF100: Servicio de envío real de invitaciones por correo electrónico.
- * Conectado con el proveedor oficial Resend.
+ * Los correos salen desde una cuenta de Gmail configurada en el servidor.
  */
 export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profesorNombre }) {
   // 1. Validar correo institucional de estudiante
@@ -44,7 +44,7 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
       return {
         success: true,
         messageId: data.id,
-        proveedor: data.provider || 'Resend',
+        proveedor: data.provider || 'Gmail',
         mensaje: data.mensaje || `Invitación enviada exitosamente a ${payload.correo}`
       }
     }
@@ -61,7 +61,7 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
     if (respuesta.status === 503) {
       return {
         success: false,
-        error: data.error || 'Servicio de correo Resend no configurado. Falta RESEND_API_KEY en variables de entorno.'
+        error: data.error || 'Servicio de correo no configurado. Faltan GMAIL_USER y GMAIL_APP_PASSWORD en variables de entorno.'
       }
     }
 
@@ -75,5 +75,42 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
       success: false,
       error: `No se pudo conectar con el servicio de correo: ${errRed.message}`
     }
+  }
+}
+
+/**
+ * RF100: envía las invitaciones de varios estudiantes en UNA sola petición a /api/invitaciones/enviar,
+ * que las manda todas a la vez desde la cuenta de Gmail del servidor.
+ * @returns {{ success: boolean, enviados: {correo:string,id:string|null}[], fallidos: {correo:string,error:string}[], error?: string }}
+ */
+export async function enviarCorreosInvitacion({ correos, codigo, aulaNombre, profesorNombre }) {
+  const lista = [...new Set((correos || []).map((c) => String(c || '').trim().toLowerCase()).filter(Boolean))]
+  if (!lista.length) return { success: false, enviados: [], fallidos: [], error: 'Agrega al menos un correo.' }
+  if (!codigo) return { success: false, enviados: [], fallidos: [], error: 'Código de acceso no proporcionado.' }
+
+  const fallarTodos = (error) => ({ success: false, enviados: [], fallidos: lista.map((correo) => ({ correo, error })), error })
+
+  try {
+    const respuesta = await fetch('/api/invitaciones/enviar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        correos: lista,
+        codigo: String(codigo).trim().toUpperCase(),
+        aulaNombre: aulaNombre || 'Aula Virtual',
+        profesorNombre: profesorNombre || 'Docente'
+      })
+    })
+    const data = await respuesta.json().catch(() => ({}))
+
+    if (Array.isArray(data.enviados) || Array.isArray(data.fallidos)) {
+      const enviados = data.enviados || []
+      const fallidos = data.fallidos || []
+      if (enviados.length) return { success: true, enviados, fallidos }
+      return { success: false, enviados: [], fallidos, error: data.error || fallidos[0]?.error || 'No se pudo enviar ninguna invitación.' }
+    }
+    return fallarTodos(data.error || `Error al enviar correo (HTTP ${respuesta.status})`)
+  } catch (errRed) {
+    return fallarTodos(`No se pudo conectar con el servicio de correo: ${errRed.message}`)
   }
 }

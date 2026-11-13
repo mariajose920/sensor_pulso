@@ -15,7 +15,7 @@ if (supabaseUrl.startsWith('http://')) {
 }
 
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Faltan VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY. Copia .env.example a .env.local.')
+  throw new Error('Faltan VITE_SUPABASE_URL o VITE_SUPABASE_PUBLISHABLE_KEY. Créalas en .env.local (ver README).')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
