@@ -76,7 +76,7 @@ export default defineConfig(({ command, mode }) => {
     console.warn('\n[sensor_pulso] Se creó una clave de cifrado local (CLAVE_CIFRADO_CAMPOS) en .env.local para que la ficha del paciente se guarde en la base.\n' +
       '  Las fichas guardadas desde este equipo solo se pueden leer con esa clave; si usas la misma base que producción, reemplázala en .env.local por la CLAVE_CIFRADO_CAMPOS de Vercel.\n')
   }
-  // Cargar variables en process.env para que los endpoints dev puedan leer RESEND_API_KEY
+  // Cargar variables en process.env para que los endpoints dev puedan leer GMAIL_USER y GMAIL_APP_PASSWORD
   Object.assign(process.env, env)
 
   return {

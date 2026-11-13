@@ -56,9 +56,18 @@ Proyecto de la asignatura **Programación Web y Gestión de Ciberseguridad** —
    ```
 
 3. Configurar variables de entorno:
-   Copiar `.env.example` a `.env.local` (la URL y la clave publicable del proyecto ya vienen en el ejemplo):
+   Crear el archivo `.env.local` en la raíz (no se sube a git; los archivos `.env*` están ignorados) con estas variables. Los valores se piden al líder del proyecto o están en el panel de Supabase y Vercel:
    ```bash
-   cp .env.example .env.local
+   VITE_SUPABASE_URL=...              # URL del proyecto Supabase
+   VITE_SUPABASE_PUBLISHABLE_KEY=...  # clave publicable (pública por diseño)
+   # Solo servidor (funciones /api): nunca con prefijo VITE_
+   SUPABASE_SECRET_KEY=...
+   CLAVE_CIFRADO_CAMPOS=...           # mínimo 16 caracteres, aleatoria (RF116)
+   CLAVE_VERSION_ACTIVA=1
+   GMAIL_USER=sensorpulso@gmail.com   # RF100: cuenta de Gmail que envía las invitaciones
+   GMAIL_APP_PASSWORD=...             # contraseña de aplicación de esa cuenta (no la contraseña normal)
+   APP_URL=...                        # opcional: web a la que apuntan los botones del correo
+   VITE_CONTACTO_PRIVACIDAD=...       # RF88: correo de privacidad (@unach.cl)
    ```
 
 4. Iniciar el servidor de desarrollo:
