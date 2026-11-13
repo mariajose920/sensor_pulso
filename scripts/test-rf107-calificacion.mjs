@@ -2,7 +2,7 @@
 // Uso: node scripts/test-rf107-calificacion.mjs
 import { readFileSync } from 'node:fs'
 import {
-  puntajeRango, puntajeSimilitud, similitudRasgos, calificarEjercicio, nivelPorPorcentaje,
+  puntajeRango, puntajeSimilitud, similitudRasgos, calificarEjercicio, nivelPorPorcentaje, avisosDeMedicion,
   resumenResultado, mensajeErrorCalificacion
 } from '../src/utils/calificacionEjercicio.js'
 import { explicarErrorBase, MSG_FALTA_MIXTA, MSG_FALTA_CALIFICACION } from '../src/utils/erroresBase.js'
@@ -56,18 +56,28 @@ r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 120 } })
 marcar(!r.cumple && r.puntaje === 50 && /por encima/.test(r.motivo), 'Pulso 120 no cumple, puntaje parcial 50 y dice "por encima"')
 r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 45 } })
 marcar(!r.cumple && /por debajo/.test(r.motivo), 'Pulso 45 dice "por debajo"')
-marcar(lanza(() => calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: null } })), 'Sin BPM en la medición se rechaza')
+r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: null } })
+marcar(!r.cumple && r.puntaje === 0 && /no tiene BPM/.test(r.motivo), 'Sin BPM en la medición se entrega igual y califica con 0')
 const spo2 = { tipo: 'spo2_en_rango', min: 95, max: 100 }
 r = calificarEjercicio({ criterio: spo2, medicion: { spo2_promedio: 97 } })
 marcar(r.cumple && r.puntaje === 100, 'SpO2 97 cumple 95-100')
-marcar(lanza(() => calificarEjercicio({ criterio: spo2, medicion: { bpm_promedio: 70 } })), 'Sin SpO2 en la medición se rechaza')
+r = calificarEjercicio({ criterio: spo2, medicion: { bpm_promedio: 70 } })
+marcar(!r.cumple && r.puntaje === 0 && /no tiene SpO₂/.test(r.motivo), 'Sin SpO2 en la medición se entrega igual y califica con 0')
+r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 75, calidad: 'mala' } })
+marcar(r.cumple && r.puntaje === 100 && r.avisos.length === 1 && /Aviso: .*calidad mala/.test(r.motivo), 'Una señal mala NO bloquea: califica y deja un aviso en la corrección')
+r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 75, inicio: '2026-01-01T10:00:00Z' }, apertura: '2026-01-02T10:00:00Z' })
+marcar(r.puntaje === 100 && /anterior a la apertura/.test(r.motivo), 'Una medición anterior a la apertura NO bloquea: califica y avisa')
+marcar(avisosDeMedicion({ calidad: 'buena', inicio: '2026-01-03T10:00:00Z' }, '2026-01-02T10:00:00Z').length === 0, 'Sin problemas no hay avisos')
 const simil = { tipo: 'similitud_minima', valor: 75 }
 const ref = { bpm: 72, nombre: 'PPG normal' }
 r = calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 74 }, referencia: ref })
 marcar(r.cumple && r.similitud > 90 && r.puntaje === 100, 'Medición parecida a la referencia cumple la similitud mínima')
 r = calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 100 }, referencia: ref })
 marcar(!r.cumple && r.puntaje > 0 && r.puntaje < 100 && /PPG normal/.test(r.motivo), 'Medición distinta no cumple y recibe puntaje parcial')
-marcar(lanza(() => calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 74 } })), 'Sin señal de referencia se rechaza')
+r = calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 74 } })
+marcar(!r.cumple && r.puntaje === 0 && /referencia/.test(r.motivo), 'Sin señal de referencia se entrega y se recalifica cuando el profesor la defina')
+r = calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: null }, referencia: ref })
+marcar(r.puntaje === 0 && /BPM suficiente/.test(r.motivo), 'Sin BPM para comparar con la referencia califica con 0')
 marcar(lanza(() => calificarEjercicio({ criterio: { tipo: 'otro' }, medicion: {} })), 'Un criterio desconocido se rechaza')
 
 // --- Niveles (RF112)
@@ -77,8 +87,7 @@ marcar(nivelPorPorcentaje(39.9) === 'no_logrado', 'Menos de 40 %: no logrado')
 marcar(nivelPorPorcentaje(55, 80, 50) === 'medianamente_logrado', 'Respeta umbrales editables')
 marcar(/Nivel: Logrado/.test(resumenResultado({ motivo: 'ok', puntaje: 100, nivel: 'logrado', intentos_restantes: 0 })), 'El resumen muestra el nivel')
 marcar(/Te quedan 2/.test(resumenResultado({ motivo: 'ok', puntaje: 40, nivel: 'medianamente_logrado', intentos_restantes: 2 })), 'El resumen avisa los intentos que quedan')
-marcar(/medición nueva/.test(mensajeErrorCalificacion(new Error('La medición es anterior a la apertura de la evaluación'))), 'Mensaje claro para medición anterior a la apertura')
-marcar(/Repite la medición/.test(mensajeErrorCalificacion(new Error('La medición tiene calidad de señal mala'))), 'Mensaje claro para señal mala')
+marcar(/cerrada/.test(mensajeErrorCalificacion(new Error('La evaluación está cerrada'))), 'Mensaje claro cuando la evaluación está cerrada')
 
 // --- Tipos de evaluación con referencia y reintentos
 const comparar = cambiarEjercicio(modeloVacio(), 'comparar_senales')
@@ -152,7 +161,10 @@ marcar(/drop function if exists public\.calificar_ejercicio\(uuid, uuid, numeric
 marcar(/max_reintentos smallint not null default 1\s+check \(max_reintentos between 1 and 5\)/.test(sql), 'La base limita los intentos de 1 a 5')
 marcar(/calificaciones >= v_ev\.max_reintentos/.test(sql), 'La base aplica el máximo de intentos')
 marcar(/r\.usuario_id = v_ev\.creador_id/.test(sql), 'La medición de referencia debe ser del profesor creador')
-marcar(/v_m\.calidad = 'mala'/.test(sql), 'La base rechaza mediciones de calidad mala')
+const sqlSinBloqueos = readFileSync(new URL('../supabase/migrations/20261113000700_rf107_entrega_sin_bloqueos.sql', import.meta.url), 'utf8')
+marcar(!/raise exception[^;]*calidad/i.test(sqlSinBloqueos) && /v_m\.calidad = 'mala'/.test(sqlSinBloqueos) && /v_avisos/.test(sqlSinBloqueos), 'La base ya no rechaza señal mala: la califica y deja un aviso')
+marcar(!/raise exception[^;]*anterior/i.test(sqlSinBloqueos), 'La base ya no rechaza mediciones anteriores a la apertura')
+marcar(/usuario_id/.test(sqlSinBloqueos) && /medición tuya/.test(sqlSinBloqueos), 'La medición entregada debe seguir siendo del estudiante')
 marcar(/usuario_id = p_alumno/.test(sql), 'La base exige que la medición sea del estudiante')
 marcar(/profesor_de_evaluacion\(v_int\.evaluacion_id\)/.test(sql), 'Solo el profesor de la evaluación puede recalificar')
 marcar(/revoke all on function public\.evaluar_ejercicio[^;]*authenticated/.test(sql), 'El cálculo interno no se expone a los usuarios')
@@ -231,6 +243,41 @@ delete globalThis.localStorage
 const vistaEvaluaciones = readFileSync(new URL('../src/views/EvaluacionesView.vue', import.meta.url), 'utf8')
 marcar(/data-testid="cambiar-tipo"/.test(vistaEvaluaciones) && /data-testid="guardar-tipo"/.test(vistaEvaluaciones) && /actualizarTipoEvaluacion\(/.test(vistaEvaluaciones), 'Cada evaluación guardada tiene el botón «Cambiar tipo» que guarda el nuevo tipo')
 marcar(/modeloDesdeFila\(p\)/.test(vistaEvaluaciones), 'Al cargar una plantilla en el formulario se respeta su tipo (preguntas, ejercicio o ambas)')
+
+// --- Ejercicio desde la evaluación: ir a medir/comparar, volver, borrador y resultado de respaldo
+const ej = await import('../src/utils/ejercicioEvaluacion.js')
+marcar(ej.textoAccionEjercicio('medir_pulso') === 'Realizar medición' && ej.textoAccionEjercicio('comparar_senales') === 'Hacer comparación', 'Los botones dicen «Realizar medición» y «Hacer comparación»')
+const rutaIda = ej.rutaParaEjercicio('comparar_senales', { id: 'ev1', titulo: 'Prueba' })
+marcar(rutaIda.name === 'Comparacion' && rutaIda.query.evaluacion === 'ev1' && ej.rutaParaEjercicio('medir_spo2', { id: 'ev1' }).name === 'Medicion', 'Cada ejercicio lleva a Medición o Comparación con el id de la evaluación')
+const rutaVuelta = ej.rutaVolverEvaluacion('ev1')
+marcar(rutaVuelta.name === 'MisEvaluaciones' && rutaVuelta.query.abrir === 'ev1', 'El botón de volver reabre la misma evaluación')
+const almacen = { d: {}, setItem(k, v) { this.d[k] = v }, getItem(k) { return this.d[k] ?? null }, removeItem(k) { delete this.d[k] } }
+ej.guardarBorradorEvaluacion(almacen, 'ev1', { respuestas: { p1: 'a' }, medicionId: 'm1' })
+marcar(ej.leerBorradorEvaluacion(almacen, 'ev1').respuestas.p1 === 'a' && ej.leerBorradorEvaluacion(almacen, 'otra') === null, 'El borrador conserva las respuestas al salir a medir')
+ej.borrarBorradorEvaluacion(almacen, 'ev1')
+marcar(ej.leerBorradorEvaluacion(almacen, 'ev1') === null, 'El borrador se borra al entregar')
+almacen.d[ej.claveBorradorEvaluacion('mal')] = '{no es json'
+marcar(ej.leerBorradorEvaluacion(almacen, 'mal') === null && ej.guardarBorradorEvaluacion({ setItem() { throw new Error('lleno') } }, 'x', {}) === false, 'Un borrador dañado o un almacén lleno no rompen la pantalla')
+const medsPrueba = [{ id: 'a', inicio: '2026-01-01T10:00:00Z' }, { id: 'b', inicio: '2026-01-01T12:00:00Z' }, { id: 'c', inicio: '2026-01-01T13:00:00Z' }]
+marcar(ej.medicionNuevaDesde(medsPrueba, '2026-01-01T11:00:00Z').id === 'c' && ej.medicionNuevaDesde(medsPrueba, '2026-01-02T00:00:00Z') === null && ej.medicionNuevaDesde(medsPrueba, null) === null, 'Al volver se deja elegida la medición más reciente hecha después de salir')
+marcar(ej.faltaFuncionResultado({ code: 'PGRST202' }) && !ej.faltaFuncionResultado({ message: 'otro error' }), 'Se detecta cuando falta la función del resultado en la base')
+const respaldo = ej.resultadoDesdeTablas({
+  intento: { id: 'i1', puntaje: 1, puntaje_maximo: 2, porcentaje: 50, nivel: 'medianamente_logrado' },
+  evaluacion: { titulo: 'T', tipo: 'preguntas' },
+  preguntas: [{ orden: 1, puntaje: 1, preguntas: { id: 'q1', enunciado: 'E1', tipo: 'verdadero_falso' } }, { orden: 2, puntaje: 1, preguntas: { id: 'q2', enunciado: 'E2', tipo: 'verdadero_falso' } }],
+  respuestas: [{ pregunta_id: 'q1', respuesta: true, es_correcta: true, puntaje: 1 }]
+})
+marcar(respaldo.respaldo === true && respaldo.preguntas.length === 2 && respaldo.preguntas[0].es_correcta === true && respaldo.preguntas[1].respondida === false, 'El resultado de respaldo marca qué respondió bien y qué no, sin la respuesta correcta')
+
+const vistaMedicion = readFileSync(new URL('../src/views/MedicionView.vue', import.meta.url), 'utf8')
+const vistaComparacion = readFileSync(new URL('../src/views/ComparacionView.vue', import.meta.url), 'utf8')
+marcar(/<VolverAEvaluacionBanner/.test(vistaMedicion) && /<VolverAEvaluacionBanner/.test(vistaComparacion), 'Medición y Comparación muestran el botón «Volver a la evaluación»')
+const selector = readFileSync(new URL('../src/components/SelectorMedicionEjercicio.vue', import.meta.url), 'utf8')
+marcar(!/neq\('calidad', 'mala'\)/.test(vistaEstudiante) && /cargarMediciones/.test(vistaEstudiante), 'La lista de mediciones del estudiante incluye también las de señal mala')
+marcar(/data-testid="hacer-ejercicio"/.test(selector) && /<SelectorMedicionEjercicio/.test(vistaEstudiante) && /reabrirDesdeRuta/.test(vistaEstudiante), 'El ejercicio ofrece hacer la medición/comparación, elegir una guardada y reabrir la evaluación al volver')
+marcar(!/Califica todos los ejercicios antes de entregar/.test(vistaEstudiante), 'Ya no se exige calificar cada ejercicio antes de entregar: al entregar se califican solos')
+marcar(/data-testid="resultado-final"/.test(vistaEstudiante) && /data-testid="correccion-pregunta"/.test(vistaEstudiante) && /data-testid="correccion-ejercicio"/.test(vistaEstudiante), 'Al entregar se muestran las correcciones de preguntas y de ejercicios')
+marcar(/data-testid="filtros"/.test(vistaEstudiante), 'El listado se puede filtrar por estado')
 
 console.log(fallos ? `\nRF107: ${fallos} prueba(s) fallaron` : '\nRF107: todas las pruebas pasaron')
 process.exit(fallos ? 1 : 0)

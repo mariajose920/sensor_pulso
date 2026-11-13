@@ -127,3 +127,12 @@ Migración `20261113000400_rf109_inicio_automatico.sql` (también en la base com
 - **Estudiante:** ve «Estará disponible en …» y, a la hora, el listado se actualiza solo y aparece «Rendir evaluación» (ver «Cuánto falta»). Pasado el tiempo, queda como cerrada.
 - **Profesor:** la tarjeta de la evaluación dice «Inicia sola el …». «Iniciar ahora (adelantar)» sigue sirviendo para empezar antes; si ya está abierta no la reinicia. «Cerrar en vivo» funciona también sobre una abierta automáticamente. En el modal de asignar del aula, la evaluación en vivo tiene el campo «Inicio automático (opcional)».
 - **Límite:** una evaluación abierta no se puede reasignar. Hay que aplicar la migración en Supabase (SQL Editor) antes de usarlo; sin ella el campo de inicio se ignora y la evaluación sigue siendo manual.
+
+## Ejercicio aplicado del estudiante: medir, volver y entregar sin bloqueos
+
+- **Realizar medición / Hacer comparación**: dentro del ejercicio hay un botón que lleva a Medición o Comparación. Antes de salir se guarda un borrador (respuestas y mediciones elegidas) en la pestaña. En esas pantallas aparece «Volver a la evaluación», que reabre la misma evaluación (`/mis-evaluaciones?abrir=<id>`), restaura el borrador y deja elegida la medición recién guardada.
+- **Elegir una medición guardada**: la lista incluye todas las mediciones del estudiante, también las de señal mala, con su calidad a la vista.
+- **Entrega sin bloqueos** (migración `20261113000700_rf107_entrega_sin_bloqueos.sql`): solo se exige que la medición sea del estudiante. Señal mala, medición anterior a la apertura, dato faltante o referencia sin definir ya no impiden entregar: se califica (con 0 si no hay dato) y la corrección agrega un «Aviso:» que explica qué pasó.
+- **Evaluación mixta**: al entregar se califican solos los ejercicios con medición elegida; los que no tienen medición se entregan con 0 si el estudiante lo confirma.
+- **Resultados**: al entregar se muestran el porcentaje, el nivel y la corrección de cada pregunta y ejercicio. Si la base aún no tiene `resultado_evaluacion`, se usa un resultado de respaldo (correcta/incorrecta, sin la respuesta correcta) con un aviso.
+- **Mis evaluaciones**: filtros por estado con contador, tarjetas con icono de tipo y selector de mediciones en forma de lista.

@@ -10,6 +10,9 @@
       <UserIdentifier />
     </div>
 
+    <!-- RF107: si el estudiante llegó desde un ejercicio de una evaluación, puede volver a ella -->
+    <VolverAEvaluacionBanner que="medición" />
+
     <!-- Encabezado de la vista -->
     <div class="view-header">
       <div>
@@ -1127,6 +1130,7 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
+import VolverAEvaluacionBanner from '../components/VolverAEvaluacionBanner.vue'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import ConsentimientoModal from '../components/ConsentimientoModal.vue'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'

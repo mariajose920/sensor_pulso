@@ -1,5 +1,10 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import SelectorMedicionEjercicio from '../components/SelectorMedicionEjercicio.vue'
+import {
+  rutaParaEjercicio, guardarBorradorEvaluacion, leerBorradorEvaluacion, borrarBorradorEvaluacion, medicionNuevaDesde
+} from '../utils/ejercicioEvaluacion.js'
 import { tiempoEvaluacion, tiempoParaEntregar, cambioPorTiempo } from '../utils/tiempoEvaluacion.js'
 import { supabase } from '../services/supabase.js'
 import { enviarRespuestasConResiliencia } from '../services/respuestasSimultaneasService.js'
@@ -29,6 +34,21 @@ const ocupado = ref(false)
 const error = ref('')
 const mensaje = ref('')
 let heartbeatControl = null
+
+const route = useRoute()
+const router = useRouter()
+const filtro = ref('todas')
+const FILTROS = [
+  { id: 'todas', texto: 'Todas' },
+  { id: 'disponible', texto: 'Disponibles' },
+  { id: 'pendiente', texto: 'Pendientes' },
+  { id: 'entregada', texto: 'Entregadas' },
+  { id: 'cerrada', texto: 'Cerradas' }
+]
+const contarPorEstado = (id) => (id === 'todas' ? evaluaciones.value.length : evaluaciones.value.filter(ev => ev.disponibilidad === id).length)
+const evaluacionesVisibles = computed(() => (filtro.value === 'todas' ? evaluaciones.value : evaluaciones.value.filter(ev => ev.disponibilidad === filtro.value)))
+const ICONO_TIPO = { preguntas: '📝', ejercicio_aplicado: '🫀', mixta: '🧩' }
+let salioEn = null // cuándo salió a medir, para marcar las mediciones nuevas
 
 const estados = {
   pendiente: 'Pendiente de apertura',
@@ -63,7 +83,7 @@ const estaRespondida = (pregunta) => {
   return v !== undefined && v !== null && v !== '' && !(typeof v === 'number' && Number.isNaN(v))
 }
 const respondidas = computed(() => preguntas.value.filter(estaRespondida).length)
-const ejerciciosCalificados = computed(() => ejerciciosMixta.value.filter(e => resultadoPorEjercicio.value[e.id]).length)
+const ejerciciosCalificados = computed(() => ejerciciosMixta.value.filter(e => resultadoPorEjercicio.value[e.id] || medicionPorEjercicio.value[e.id]).length)
 const totalPasos = computed(() => {
   const tipo = seleccion.value?.tipo
   if (tipo === 'ejercicio_aplicado') return 1
@@ -153,6 +173,66 @@ const cargarResultadosEjercicio = async () => {
   resultadosEjercicio.value = resultado
 }
 
+// RF107: todas las mediciones guardadas del estudiante sirven para entregar (buenas o malas); se marca cuál es nueva
+const cargarMediciones = async () => {
+  const { data: usuario, error: falloUsuario } = await supabase.auth.getUser()
+  if (falloUsuario) throw falloUsuario
+  const { data, error: falloMediciones } = await supabase
+    .from('mediciones')
+    .select('id, inicio, bpm_promedio, spo2_promedio, calidad')
+    .eq('usuario_id', usuario.user.id)
+    .order('inicio', { ascending: false })
+    .limit(50)
+  if (falloMediciones) throw falloMediciones
+  const nueva = medicionNuevaDesde(data || [], salioEn)
+  mediciones.value = (data || []).map(m => ({ ...m, nueva: Boolean(nueva) && nueva.id === m.id }))
+  return nueva
+}
+
+const actualizarMediciones = () => ejecutar(async () => { await cargarMediciones() })
+
+// RF107: sale a Medición o Comparación guardando lo avanzado; allí un botón devuelve a esta evaluación
+const hacerEjercicio = (ejercicio) => {
+  const ev = seleccion.value
+  if (!ev) return
+  salioEn = new Date().toISOString()
+  guardarBorradorEvaluacion(window.sessionStorage, ev.id, {
+    respuestas: respuestas.value,
+    medicionId: medicionId.value,
+    medicionPorEjercicio: medicionPorEjercicio.value,
+    salioEn
+  })
+  if (heartbeatControl) { heartbeatControl.detener(); heartbeatControl = null }
+  router.push(rutaParaEjercicio(ejercicio, ev))
+}
+
+// Al volver (?abrir=<id>): reabre la evaluación, restaura lo avanzado y deja elegida la medición nueva
+const reabrirDesdeRuta = async () => {
+  const id = String(route.query.abrir || '')
+  if (!id) return
+  const ev = evaluaciones.value.find(e => e.id === id)
+  router.replace({ name: 'MisEvaluaciones' })
+  if (!ev) return
+  const borrador = leerBorradorEvaluacion(window.sessionStorage, id)
+  salioEn = borrador?.salioEn || null
+  await abrirEvaluacion(ev)
+  if (!seleccion.value || !borrador) return
+  respuestas.value = borrador.respuestas || {}
+  medicionId.value = borrador.medicionId || ''
+  medicionPorEjercicio.value = { ...(borrador.medicionPorEjercicio || {}) }
+  const nueva = await cargarMediciones()
+  if (nueva) {
+    if (seleccion.value.tipo === 'ejercicio_aplicado') medicionId.value = nueva.id
+    else {
+      const siguiente = ejerciciosMixta.value.find(e => !medicionPorEjercicio.value[e.id] && !resultadoPorEjercicio.value[e.id])
+      if (siguiente) medicionPorEjercicio.value = { ...medicionPorEjercicio.value, [siguiente.id]: nueva.id }
+    }
+    mensaje.value = 'Encontramos la medición que acabas de guardar y la dejamos elegida. Revísala y entrega.'
+  } else {
+    mensaje.value = 'Volviste a tu evaluación. Si guardaste una medición, elígela de la lista.'
+  }
+}
+
 // RF107: ejercicios de la evaluación mixta, mediciones elegibles y resultados que ya tenga el intento
 const prepararEjerciciosMixta = async (ev, idIntento) => {
   const { data: lista, error: falloLista } = await supabase
@@ -163,17 +243,7 @@ const prepararEjerciciosMixta = async (ev, idIntento) => {
   if (falloLista) throw falloLista
   ejerciciosMixta.value = lista || []
 
-  const { data: usuario, error: falloUsuario } = await supabase.auth.getUser()
-  if (falloUsuario) throw falloUsuario
-  const { data: meds, error: falloMediciones } = await supabase
-    .from('mediciones')
-    .select('id, inicio, bpm_promedio, spo2_promedio, calidad')
-    .eq('usuario_id', usuario.user.id)
-    .neq('calidad', 'mala')
-    .order('inicio', { ascending: false })
-    .limit(50)
-  if (falloMediciones) throw falloMediciones
-  mediciones.value = meds || []
+  await cargarMediciones()
   medicionPorEjercicio.value = {}
 
   const [{ data: previos }, { data: cfg }] = await Promise.all([
@@ -201,7 +271,12 @@ const calificarMixto = (ejercicio) => ejecutar(async () => {
   resultadoPorEjercicio.value = { ...resultadoPorEjercicio.value, [ejercicio.id]: res.resultado }
 })
 
-const abrir = (ev) => ejecutar(async () => {
+const abrir = (ev) => {
+  salioEn = null
+  return abrirEvaluacion(ev)
+}
+
+const abrirEvaluacion = (ev) => ejecutar(async () => {
   mensaje.value = ''
   const { data: id, error: falloInicio } = await supabase.rpc('iniciar_intento', {
     p_eval: ev.id
@@ -226,19 +301,7 @@ const abrir = (ev) => ejecutar(async () => {
   if (ev.tipo === 'mixta') await prepararEjerciciosMixta(ev, id)
 
   if (ev.tipo === 'ejercicio_aplicado') {
-    const { data: usuario, error: falloUsuario } = await supabase.auth.getUser()
-    if (falloUsuario) throw falloUsuario
-
-    const { data, error: falloMediciones } = await supabase
-      .from('mediciones')
-      .select('id, inicio, bpm_promedio, spo2_promedio, calidad')
-      .eq('usuario_id', usuario.user.id)
-      .neq('calidad', 'mala')
-      .order('inicio', { ascending: false })
-      .limit(50)
-
-    if (falloMediciones) throw falloMediciones
-    mediciones.value = data
+    await cargarMediciones()
     medicionId.value = ''
   }
 
@@ -259,8 +322,21 @@ const entregar = () => ejecutar(async () => {
   const idIntento = intentoId.value
   let enCola = false
   let resultadoReciente = null
-  if (ev.tipo === 'mixta' && ejerciciosMixta.value.some(e => !resultadoPorEjercicio.value[e.id])) {
-    throw new Error('Califica todos los ejercicios antes de entregar la evaluación.')
+  if (ev.tipo === 'ejercicio_aplicado' && !medicionId.value) {
+    throw new Error('Elige una medición guardada (o haz una nueva) para entregar el ejercicio.')
+  }
+  if (ev.tipo === 'mixta') {
+    // Se califican solos los ejercicios con medición elegida; los que no tienen medición quedan en 0 si el estudiante lo confirma
+    const sinMedicion = ejerciciosMixta.value.filter(e => !resultadoPorEjercicio.value[e.id] && !medicionPorEjercicio.value[e.id])
+    if (sinMedicion.length && !window.confirm(`${sinMedicion.length} ejercicio(s) no tienen medición y se entregarán con 0 puntos. ¿Entregar igual?`)) {
+      throw new Error('Entrega cancelada: elige una medición para cada ejercicio o confirma la entrega sin ella.')
+    }
+    for (const e of ejerciciosMixta.value) {
+      if (resultadoPorEjercicio.value[e.id] || !medicionPorEjercicio.value[e.id]) continue
+      const res = await calificarEjercicioMixto({ intentoId: intentoId.value, ejercicioId: e.id, medicionId: medicionPorEjercicio.value[e.id] })
+      if (!res.success) throw new Error(res.error)
+      resultadoPorEjercicio.value = { ...resultadoPorEjercicio.value, [e.id]: res.resultado }
+    }
   }
   if (ev.tipo === 'preguntas' || ev.tipo === 'mixta') {
     // RF110: Envío optimizado resiliente a alta concurrencia simultánea
@@ -283,6 +359,7 @@ const entregar = () => ejecutar(async () => {
     resultadoReciente = calificacion.resultado
   }
 
+  borrarBorradorEvaluacion(window.sessionStorage, ev.id)
   seleccion.value = null
   await cargar()
   if (enCola) {
@@ -309,7 +386,7 @@ onMounted(() => {
     ahora.value = Date.now()
     revisarCambiosPorTiempo()
   }, 1000)
-  return ejecutar(cargar)
+  return ejecutar(cargar).then(reabrirDesdeRuta)
 })
 onUnmounted(() => {
   if (relojTiempo) clearInterval(relojTiempo)
@@ -365,6 +442,10 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <p v-if="resultadoFinal.respaldo" class="me-aviso me-aviso-error" data-testid="aviso-respaldo">
+        Aún falta aplicar una actualización de la base de datos, por eso no se muestran la respuesta correcta ni la explicación. Avísale a tu profesor.
+      </p>
+
       <template v-if="resultadoFinal.preguntas.length">
         <h3 class="me-seccion">📝 Correcciones de las preguntas</h3>
         <article v-for="(p, i) in resultadoFinal.preguntas" :key="p.pregunta_id" class="me-correccion"
@@ -407,6 +488,9 @@ onUnmounted(() => {
           </div>
           <p v-if="e.motivo" class="me-explicacion">{{ e.motivo }}</p>
           <p v-else-if="!e.calificado" class="me-pista">No entregaste una medición para este ejercicio.</p>
+          <button v-if="resultadoFinal.tipo !== 'preguntas'" type="button" class="btn me-cta-ej" @click="router.push({ name: e.ejercicio === 'comparar_senales' ? 'Comparacion' : 'Medicion' })">
+            {{ e.ejercicio === 'comparar_senales' ? 'Practicar una comparación' : 'Practicar una medición' }}
+          </button>
         </article>
       </template>
 
@@ -424,10 +508,18 @@ onUnmounted(() => {
         <span>Cuando tu profesor te asigne una, aparecerá aquí.</span>
       </div>
 
+      <nav v-if="evaluaciones.length" class="me-filtros" aria-label="Filtrar evaluaciones" data-testid="filtros">
+        <button v-for="f in FILTROS" :key="f.id" type="button" class="me-filtro" :class="{ activo: filtro === f.id }"
+                :aria-pressed="filtro === f.id" @click="filtro = f.id">
+          {{ f.texto }} <span class="me-contador">{{ contarPorEstado(f.id) }}</span>
+        </button>
+      </nav>
+      <p v-if="evaluaciones.length && !evaluacionesVisibles.length" class="me-vacio">No hay evaluaciones en este grupo.</p>
+
       <div class="me-grilla">
-        <article v-for="ev in evaluaciones" :key="ev.id" class="me-tarjeta" :class="'estado-' + ev.disponibilidad" data-testid="tarjeta-evaluacion">
+        <article v-for="ev in evaluacionesVisibles" :key="ev.id" class="me-tarjeta" :class="'estado-' + ev.disponibilidad" data-testid="tarjeta-evaluacion">
           <div class="me-chips">
-            <span class="chip chip-tipo">{{ etiquetaTipo(ev.tipo, ev.ejercicio) }}</span>
+            <span class="chip chip-tipo">{{ ICONO_TIPO[ev.tipo] }} {{ etiquetaTipo(ev.tipo, ev.ejercicio) }}</span>
             <span class="chip" :class="'chip-' + ev.disponibilidad">{{ estados[ev.disponibilidad] }}</span>
             <span class="chip chip-neutro">{{ ev.modo === 'en_vivo' ? '🔴 En vivo' : '📅 Ventana de fechas' }}</span>
           </div>
@@ -536,7 +628,7 @@ onUnmounted(() => {
       <!-- RF107: ejercicios de la evaluación mixta -->
       <template v-if="seleccion.tipo === 'mixta'">
         <h3 class="me-seccion">🫀 Ejercicios aplicados</h3>
-        <p class="me-pista">Elige una medición para cada ejercicio y pulsa «Calificar». Se califican al instante y debes calificar todos antes de entregar.</p>
+        <p class="me-pista">Para cada ejercicio, haz la medición o comparación (y vuelve con el botón «Volver a la evaluación») o elige una medición ya guardada. Puedes entregar con cualquier medición, buena o mala: al entregar se califican todas y verás qué corregir.</p>
         <section v-for="(ej, i) in ejerciciosMixta" :key="ej.id" class="me-pregunta me-ejercicio"
                  :class="{ respondida: resultadoPorEjercicio[ej.id] }" data-testid="ejercicio-mixto">
           <div class="me-pregunta-cabeza">
@@ -546,17 +638,20 @@ onUnmounted(() => {
               <p class="me-pista">{{ describirCriterio(ej.ejercicio, ej.criterio) }}</p>
             </div>
           </div>
-          <div class="me-fila-ejercicio">
-            <select v-model="medicionPorEjercicio[ej.id]" class="me-campo" :aria-label="'Medición para el ejercicio ' + (i + 1)">
-              <option :value="undefined" disabled>Selecciona una medición</option>
-              <option v-for="medicion in mediciones" :key="medicion.id" :value="medicion.id">
-                {{ fechaLocal(medicion.inicio) }} · {{ medicion.bpm_promedio ?? '—' }} BPM · {{ medicion.spo2_promedio ?? '—' }} % SpO₂
-              </option>
-            </select>
-            <button type="button" class="btn btn-primary"
+          <SelectorMedicionEjercicio
+            v-model="medicionPorEjercicio[ej.id]"
+            :mediciones="mediciones"
+            :ejercicio="ej.ejercicio"
+            :nombre="'medicion-' + ej.id"
+            :deshabilitado="ocupado"
+            @ir="hacerEjercicio(ej.ejercicio)"
+            @actualizar="actualizarMediciones"
+          />
+          <div v-if="resultadoPorEjercicio[ej.id]" class="me-fila-ejercicio">
+            <button type="button" class="btn"
                     :disabled="ocupado || !medicionPorEjercicio[ej.id] || resultadoPorEjercicio[ej.id]?.intentos_restantes === 0"
                     @click="calificarMixto(ej)">
-              {{ resultadoPorEjercicio[ej.id] ? 'Calificar de nuevo' : 'Calificar' }}
+              Calificar de nuevo con la medición elegida
             </button>
           </div>
           <div v-if="resultadoPorEjercicio[ej.id]" class="me-resultado" :class="resultadoPorEjercicio[ej.id].cumple ? 'nivel-ok' : 'nivel-bajo'"
@@ -571,7 +666,6 @@ onUnmounted(() => {
             </p>
           </div>
         </section>
-        <p v-if="!mediciones.length" class="me-aviso me-aviso-error">Primero guarda una medición con buena señal en tu cuenta.</p>
       </template>
 
       <!-- Ejercicio aplicado simple -->
@@ -583,19 +677,17 @@ onUnmounted(() => {
             <p class="me-pista">{{ instruccionParaEstudiante(seleccion.tipo, seleccion.ejercicio) }}</p>
           </div>
         </div>
-        <label class="me-etiqueta" for="rf109-medicion">Medición guardada</label>
-        <select id="rf109-medicion" v-model="medicionId" class="me-campo" required>
-          <option disabled value="">Selecciona una medición</option>
-          <option v-for="medicion in mediciones" :key="medicion.id" :value="medicion.id">
-            {{ fechaLocal(medicion.inicio) }} ·
-            {{ medicion.bpm_promedio ?? '—' }} BPM ·
-            {{ medicion.spo2_promedio ?? '—' }} % SpO₂
-            <template v-if="medicion.calidad"> · señal {{ medicion.calidad }}</template>
-          </option>
-        </select>
-        <p v-if="!mediciones.length" class="me-aviso me-aviso-error">Primero guarda una medición con buena señal en tu cuenta.</p>
+        <SelectorMedicionEjercicio
+          v-model="medicionId"
+          :mediciones="mediciones"
+          :ejercicio="seleccion.ejercicio"
+          nombre="medicion-ejercicio"
+          :deshabilitado="ocupado"
+          @ir="hacerEjercicio(seleccion.ejercicio)"
+          @actualizar="actualizarMediciones"
+        />
         <p class="me-pista">
-          Se califica automáticamente. La medición debe ser posterior a la apertura de la evaluación y no tener señal mala.
+          Puedes entregar cualquier medición guardada, aunque no haya salido bien: se califica automáticamente y la corrección te dirá qué mejorar.
         </p>
       </section>
 
@@ -649,6 +741,20 @@ onUnmounted(() => {
 .me-fechas dt { color: var(--color-muted); }
 .me-fechas dd { margin: 0; font-weight: 600; }
 .me-cta { margin-top: auto; align-self: flex-start; }
+
+.me-cta-ej { align-self: flex-start; }
+
+/* Filtros del listado */
+.me-filtros { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+.me-filtro { border: 1.5px solid var(--color-border); background: var(--color-surface); border-radius: 999px; padding: 0.35rem 0.9rem; cursor: pointer;
+  font: inherit; font-size: 0.88rem; font-weight: 600; color: var(--color-muted); display: inline-flex; gap: 0.45rem; align-items: center; }
+.me-filtro:hover { border-color: #93c5fd; }
+.me-filtro.activo { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.me-contador { background: rgba(15, 23, 42, 0.08); border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem; }
+.me-filtro.activo .me-contador { background: rgba(255, 255, 255, 0.28); }
+.me-tarjeta { transition: box-shadow 0.15s, transform 0.15s; }
+.me-tarjeta:hover { box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) { .me-tarjeta, .me-tarjeta:hover { transition: none; transform: none; } }
 
 /* Tiempo para abrir o cerrar */
 .me-tiempo { margin: 0; padding: 0.35rem 0.7rem; border-radius: 8px; font-size: 0.88rem; font-weight: 600; display: inline-flex; gap: 0.4rem; align-self: flex-start;

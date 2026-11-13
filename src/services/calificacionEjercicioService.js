@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js'
 import { mensajeErrorCalificacion } from '../utils/calificacionEjercicio.js'
+import { faltaFuncionResultado, resultadoDesdeTablas } from '../utils/ejercicioEvaluacion.js'
 
 /**
  * RF107: calificación automática del ejercicio aplicado.
@@ -76,10 +77,56 @@ export async function obtenerResultadosEjercicio(evaluacionId) {
   return { success: true, data: data || [] }
 }
 
+/**
+ * Resultado de respaldo con lo que el estudiante puede leer por sí mismo (intento, respuestas y preguntas), para cuando la base
+ * aún no tiene la función `resultado_evaluacion`. Marca cada pregunta como correcta o incorrecta; no trae la respuesta
+ * correcta ni la explicación (ocultas hasta aplicar la migración).
+ */
+async function resultadoDeRespaldo(intentoId) {
+  const { data: intento } = await supabase.from('intentos_evaluacion').select('*').eq('id', intentoId).maybeSingle()
+  if (!intento) return null
+  const [{ data: evaluacion }, { data: preguntas }, { data: respuestas }] = await Promise.all([
+    supabase.from('evaluaciones').select('*').eq('id', intento.evaluacion_id).maybeSingle(),
+    supabase.from('evaluacion_preguntas').select('orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje)')
+      .eq('evaluacion_id', intento.evaluacion_id).order('orden'),
+    supabase.from('respuestas').select('pregunta_id, respuesta, es_correcta, puntaje').eq('intento_id', intentoId)
+  ])
+
+  let ejercicios = []
+  if (evaluacion?.tipo === 'ejercicio_aplicado') {
+    ejercicios = [{
+      orden: 1, ejercicio: evaluacion.ejercicio, calificado: Boolean(intento.medicion_id),
+      puntaje: Number(intento.puntaje || 0), puntaje_maximo: Number(intento.puntaje_maximo || 0), porcentaje: Number(intento.porcentaje || 0),
+      cumple: intento.criterio_cumplido ?? null, valor: intento.valor_obtenido ?? null,
+      motivo: intento.detalle?.motivo || null, criterio: evaluacion.criterio ? { ...evaluacion.criterio, referencia: undefined } : null
+    }]
+  } else if (evaluacion?.tipo === 'mixta') {
+    try {
+      const { data: filas } = await supabase.from('intento_ejercicios')
+        .select('puntaje, puntaje_maximo, porcentaje, criterio_cumplido, valor_obtenido, detalle, evaluacion_ejercicios(orden, ejercicio, criterio)')
+        .eq('intento_id', intentoId)
+      ejercicios = (filas || []).map((f) => ({
+        orden: f.evaluacion_ejercicios?.orden || 1, ejercicio: f.evaluacion_ejercicios?.ejercicio, calificado: true,
+        puntaje: Number(f.puntaje || 0), puntaje_maximo: Number(f.puntaje_maximo || 0), porcentaje: Number(f.porcentaje || 0),
+        cumple: f.criterio_cumplido, valor: f.valor_obtenido, motivo: f.detalle?.motivo || null, criterio: f.evaluacion_ejercicios?.criterio || null
+      })).sort((x, y) => x.orden - y.orden)
+    } catch (_) { /* tabla aún no creada: sin detalle de ejercicios */ }
+  }
+  return resultadoDesdeTablas({ intento, evaluacion, preguntas: preguntas || [], respuestas: respuestas || [], ejercicios })
+}
+
 /** El estudiante ve el resultado y las correcciones de su evaluación ya entregada (RPC resultado_evaluacion). */
 export async function obtenerResultadoEvaluacion(intentoId) {
   if (!intentoId) return { success: false, error: 'No se encontró tu intento.' }
   const { data, error } = await supabase.rpc('resultado_evaluacion', { p_intento: intentoId })
+  if (error && faltaFuncionResultado(error)) {
+    // La base no tiene la migración del resultado: se muestra lo que se puede leer y se avisa qué falta
+    try {
+      const respaldo = await resultadoDeRespaldo(intentoId)
+      if (respaldo) return { success: true, resultado: respaldo, respaldo: true }
+    } catch (_) { /* se informa el error original */ }
+    return { success: false, error: 'Tu base de datos aún no tiene la función del resultado de la evaluación. Falta aplicar la migración 20261113000300_rf107_resultado_evaluacion.sql en Supabase.' }
+  }
   if (error) return { success: false, error: error.message }
   return { success: true, resultado: data }
 }
