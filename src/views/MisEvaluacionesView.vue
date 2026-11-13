@@ -3,6 +3,8 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { supabase } from '../services/supabase.js'
 import { enviarRespuestasConResiliencia } from '../services/respuestasSimultaneasService.js'
 import { iniciarHeartbeatEstudiante, desconectarEstudiante } from '../services/panelEnVivoService.js'
+import { calificarEjercicioAplicado } from '../services/calificacionEjercicioService.js'
+import { ETIQUETA_NIVEL, resumenResultado } from '../utils/calificacionEjercicio.js'
 
 const evaluaciones = ref([])
 const seleccion = ref(null)
@@ -10,6 +12,7 @@ const intentoId = ref(null)
 const preguntas = ref([])
 const respuestas = ref({})
 const mediciones = ref([])
+const resultadosEjercicio = ref({}) // RF107: último resultado por evaluación
 const medicionId = ref('')
 const ocupado = ref(false)
 const error = ref('')
@@ -41,6 +44,29 @@ const cargar = async () => {
   const { data, error: fallo } = await supabase.rpc('mis_evaluaciones_rf109')
   if (fallo) throw fallo
   evaluaciones.value = data || []
+  await cargarResultadosEjercicio()
+}
+
+// RF107: resultado del ejercicio aplicado e intentos que quedan
+const cargarResultadosEjercicio = async () => {
+  const ejercicios = evaluaciones.value.filter(ev => ev.tipo === 'ejercicio_aplicado')
+  if (!ejercicios.length) { resultadosEjercicio.value = {}; return }
+  const ids = ejercicios.map(ev => ev.id)
+  const [{ data: intentos }, { data: configuracion }] = await Promise.all([
+    supabase.from('intentos_evaluacion')
+      .select('evaluacion_id, porcentaje, nivel, detalle, calificaciones').in('evaluacion_id', ids),
+    supabase.from('evaluaciones').select('id, max_reintentos').in('id', ids)
+  ])
+  const maximos = Object.fromEntries((configuracion || []).map(c => [c.id, c.max_reintentos || 1]))
+  const resultado = {}
+  for (const i of intentos || []) {
+    if (!i.calificaciones) continue
+    resultado[i.evaluacion_id] = {
+      ...(i.detalle || {}), nivel: i.nivel, porcentaje: i.porcentaje,
+      restantes: Math.max(0, (maximos[i.evaluacion_id] || 1) - i.calificaciones)
+    }
+  }
+  resultadosEjercicio.value = resultado
 }
 
 const abrir = (ev) => ejecutar(async () => {
@@ -69,8 +95,9 @@ const abrir = (ev) => ejecutar(async () => {
 
     const { data, error: falloMediciones } = await supabase
       .from('mediciones')
-      .select('id, inicio, bpm_promedio, spo2_promedio')
+      .select('id, inicio, bpm_promedio, spo2_promedio, calidad')
       .eq('usuario_id', usuario.user.id)
+      .neq('calidad', 'mala')
       .order('inicio', { ascending: false })
       .limit(50)
 
@@ -93,6 +120,7 @@ const entregar = () => ejecutar(async () => {
     heartbeatControl = null
   }
   const ev = seleccion.value
+  let resultadoReciente = null
   if (ev.tipo === 'preguntas') {
     // RF110: Envío optimizado resiliente a alta concurrencia simultánea
     const resultado = await enviarRespuestasConResiliencia({
@@ -104,15 +132,17 @@ const entregar = () => ejecutar(async () => {
       throw new Error(resultado.error || 'Error al guardar respuestas')
     }
   } else {
-    const { error: fallo } = await supabase.rpc('calificar_ejercicio', {
-      p_intento: intentoId.value,
-      p_medicion: medicionId.value
+    // RF107: el servidor califica y devuelve el resultado con su retroalimentación
+    const calificacion = await calificarEjercicioAplicado({
+      intentoId: intentoId.value,
+      medicionId: medicionId.value
     })
-    if (fallo) throw fallo
+    if (!calificacion.success) throw new Error(calificacion.error)
+    resultadoReciente = calificacion.resultado
   }
 
   seleccion.value = null
-  mensaje.value = 'Evaluación entregada.'
+  mensaje.value = resultadoReciente ? resumenResultado(resultadoReciente) : 'Evaluación entregada.'
   await cargar()
 })
 
@@ -161,17 +191,25 @@ onUnmounted(() => {
         <p v-if="ev.abre_en">Apertura {{ fechaLocal(ev.abre_en) }}</p>
         <p v-if="ev.cierra_en">Cierre {{ fechaLocal(ev.cierra_en) }}</p>
 
-        <p v-if="ev.disponibilidad === 'disponible' && ev.ejercicio === 'comparar_senales'">
-          La entrega de ejercicios de comparación de señales aún no está disponible aquí.
-        </p>
+        <!-- RF107: resultado del ejercicio aplicado -->
+        <div v-if="resultadosEjercicio[ev.id]" class="resultado-ejercicio" data-testid="resultado-ejercicio">
+          <p><strong>{{ ETIQUETA_NIVEL[resultadosEjercicio[ev.id].nivel] || 'Calificado' }}</strong>
+            · {{ resultadosEjercicio[ev.id].porcentaje }} %</p>
+          <p>{{ resultadosEjercicio[ev.id].motivo }}</p>
+          <p v-if="resultadosEjercicio[ev.id].restantes > 0">
+            Te quedan {{ resultadosEjercicio[ev.id].restantes }} intento(s).
+          </p>
+        </div>
         <button
-          v-else-if="ev.disponibilidad === 'disponible'"
+          v-if="ev.disponibilidad === 'disponible'
+            || (ev.disponibilidad === 'entregada' && ev.tipo === 'ejercicio_aplicado'
+                && resultadosEjercicio[ev.id]?.restantes > 0)"
           type="button"
           class="btn btn-primary"
           :disabled="ocupado"
           @click="abrir(ev)"
         >
-          Rendir evaluación
+          {{ ev.disponibilidad === 'entregada' ? 'Repetir medición' : 'Rendir evaluación' }}
         </button>
       </article>
     </template>
@@ -231,9 +269,13 @@ onUnmounted(() => {
             {{ fechaLocal(medicion.inicio) }} ·
             {{ medicion.bpm_promedio ?? '—' }} BPM ·
             {{ medicion.spo2_promedio ?? '—' }} % SpO₂
+            <template v-if="medicion.calidad"> · señal {{ medicion.calidad }}</template>
           </option>
         </select>
-        <p v-if="!mediciones.length">Primero guarda una medición en tu cuenta.</p>
+        <p v-if="!mediciones.length">Primero guarda una medición con buena señal en tu cuenta.</p>
+        <p class="ayuda-ejercicio">
+          Se califica automáticamente. La medición debe ser posterior a la apertura de la evaluación y no tener señal mala.
+        </p>
       </template>
 
       <button type="button" class="btn" :disabled="ocupado" @click="volver">

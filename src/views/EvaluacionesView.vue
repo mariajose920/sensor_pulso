@@ -129,7 +129,12 @@
             </div>
 
             <!-- TIPO DE EVALUACIÓN (RF106) -->
-            <TipoEvaluacionForm v-model="modelo" :mostrar-errores="intentado" />
+            <TipoEvaluacionForm
+              v-model="modelo"
+              :mostrar-errores="intentado"
+              :plantillas="opcionesReferencia.plantillas"
+              :mediciones-referencia="opcionesReferencia.mediciones"
+            />
             <!-- SECCIÓN DE PREGUNTAS (RF105 / RF108) -->
             <div class="seccion-preguntas">
               <div class="preguntas-header">
@@ -277,6 +282,15 @@
                   >
                     ⚡ Monitoreo en Vivo
                   </router-link>
+                  <button
+                    v-if="e.tipo === 'ejercicio_aplicado' && e.origen === 'supabase'"
+                    type="button"
+                    class="btn btn-secondary btn-sm"
+                    data-testid="ver-resultados"
+                    @click="alternarResultados(e)"
+                  >
+                    🎯 {{ resultadosAbiertos[e.id] ? 'Ocultar resultados' : 'Resultados del ejercicio' }}
+                  </button>
                   <button 
                     type="button" 
                     class="btn btn-secondary btn-sm"
@@ -285,6 +299,31 @@
                   >
                     📑 Duplicar
                   </button>
+                </div>
+                <!-- RF107: resultados del ejercicio aplicado y recalificación -->
+                <div v-if="resultadosAbiertos[e.id]" class="resultados" data-testid="resultados-ejercicio">
+                  <p v-if="resultadosError[e.id]" class="alert alert-error" role="alert">{{ resultadosError[e.id] }}</p>
+                  <p v-else-if="!(resultados[e.id] || []).length" class="header-desc">Todavía no hay entregas.</p>
+                  <table v-else class="resultados-tabla">
+                    <thead>
+                      <tr><th>Estudiante</th><th>Valor</th><th>Puntaje</th><th>Nivel</th><th>Motivo</th><th></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="r in resultados[e.id]" :key="r.id">
+                        <td>{{ r.perfiles?.nombre || 'Estudiante' }}</td>
+                        <td>{{ r.valor_obtenido ?? '—' }}</td>
+                        <td>{{ r.porcentaje }} %</td>
+                        <td>{{ ETIQUETA_NIVEL[r.nivel] || '—' }}</td>
+                        <td>{{ r.detalle?.motivo || '—' }}</td>
+                        <td>
+                          <button v-if="r.medicion_id" type="button" class="btn btn-secondary btn-sm"
+                                  :disabled="recalificando === r.id" @click="recalificar(e, r)">
+                            Recalificar
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </li>
             </ul>
@@ -308,9 +347,13 @@ import {
   crearEvaluacion, 
   obtenerEvaluacionesAula, 
   obtenerEvaluacionesPrecargadas, 
-  duplicarEvaluacion 
+  duplicarEvaluacion,
+  obtenerOpcionesReferencia,
+  obtenerResultadosEjercicio,
+  recalificarIntento
 } from '../services/evaluacionesService'
 import { modeloVacio, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { ETIQUETA_NIVEL } from '../utils/calificacionEjercicio.js'
 
 const { currentUserId, currentUserName, currentUserEmail, isAdmin, isProfesor, can } = useAuth()
 const puedeGestionar = computed(() => isAdmin.value || isProfesor.value || can('GESTIONAR_EVALUACIONES'))
@@ -325,6 +368,34 @@ const intentado = ref(false)
 const guardando = ref(false)
 const mensaje = ref('')
 const mensajeError = ref(false)
+
+// RF107: referencia para comparar señales y resultados del ejercicio aplicado
+const opcionesReferencia = ref({ plantillas: [], mediciones: [] })
+const resultados = ref({})
+const resultadosAbiertos = ref({})
+const resultadosError = ref({})
+const recalificando = ref('')
+
+async function cargarResultados(e) {
+  const res = await obtenerResultadosEjercicio(e.id)
+  resultadosError.value = { ...resultadosError.value, [e.id]: res.success ? '' : res.error }
+  resultados.value = { ...resultados.value, [e.id]: res.data }
+}
+
+async function alternarResultados(e) {
+  const abierto = !resultadosAbiertos.value[e.id]
+  resultadosAbiertos.value = { ...resultadosAbiertos.value, [e.id]: abierto }
+  if (abierto) await cargarResultados(e)
+}
+
+async function recalificar(e, r) {
+  recalificando.value = r.id
+  const res = await recalificarIntento(r.id)
+  recalificando.value = ''
+  mensajeError.value = !res.success
+  mensaje.value = res.success ? 'Intento recalificado con el criterio actual.' : res.error
+  if (res.success) await cargarResultados(e)
+}
 
 // RF105: Evaluaciones precargadas y modo
 const modoCreacion = ref('cero') // 'cero' | 'precargada'
@@ -438,7 +509,7 @@ async function cargarLista() {
 async function guardar() {
   intentado.value = true
   mensaje.value = ''
-  if (validarTipoEvaluacion(modelo.value).length) return
+  if (validarTipoEvaluacion(modelo.value, { exigirReferencia: !plantillaSeleccionadaId.value }).length) return
   if (!titulo.value.trim()) {
     mensaje.value = 'El título de la evaluación es obligatorio.'
     mensajeError.value = true
@@ -516,10 +587,16 @@ onMounted(async () => {
 
   // 3. Cargar Banco de Preguntas (RF108)
   await cargarBanco()
+
+  // 4. Opciones de referencia para comparar señales (RF107)
+  opcionesReferencia.value = await obtenerOpcionesReferencia(currentUserId.value)
 })
 </script>
 
 <style scoped>
+.resultados { margin-top: 0.75rem; overflow-x: auto; }
+.resultados-tabla { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.resultados-tabla th, .resultados-tabla td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--color-border); text-align: left; }
 .evaluaciones-container { max-width: 900px; margin: 0 auto; }
 .header-desc { color: var(--color-muted); font-size: 0.95rem; margin-bottom: 1.25rem; }
 

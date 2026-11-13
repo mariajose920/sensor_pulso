@@ -1,0 +1,109 @@
+// RF107 · Prueba de la calificación automática del ejercicio aplicado.
+// Uso: node scripts/test-rf107-calificacion.mjs
+import { readFileSync } from 'node:fs'
+import {
+  puntajeRango, puntajeSimilitud, similitudRasgos, calificarEjercicio, nivelPorPorcentaje,
+  resumenResultado, mensajeErrorCalificacion
+} from '../src/utils/calificacionEjercicio.js'
+import {
+  cambiarEjercicio, modeloVacio, validarTipoEvaluacion, camposTipoParaGuardar, modeloDesdeFila, describirCriterio
+} from '../src/utils/tiposEvaluacion.js'
+
+let fallos = 0
+const marcar = (ok, texto) => {
+  if (!ok) fallos++
+  console.log(`${ok ? '  OK ' : ' MAL '} ${texto}`)
+}
+const lanza = (fn) => { try { fn(); return false } catch (_) { return true } }
+
+// --- Puntaje por rango
+marcar(puntajeRango(80, 60, 100) === 100, 'Dentro del rango da 100')
+marcar(puntajeRango(60, 60, 100) === 100 && puntajeRango(100, 60, 100) === 100, 'Los bordes del rango cuentan como dentro')
+marcar(puntajeRango(120, 60, 100) === 50, 'BPM 120 con rango 60-100 (ancho 40) da 50')
+marcar(puntajeRango(50, 60, 100) === 75, 'BPM 50 con rango 60-100 da 75')
+marcar(puntajeRango(200, 60, 100) === 0, 'Muy lejos del rango da 0 (nunca negativo)')
+marcar(puntajeRango(90, 95, 100) === 0, 'SpO2 90 con rango 95-100 (ancho 5) da 0')
+marcar(puntajeRango(93, 95, 100) === 60, 'SpO2 93 con rango 95-100 da 60')
+
+// --- Puntaje por similitud
+marcar(puntajeSimilitud(80, 75) === 100, 'Similitud sobre el mínimo da 100')
+marcar(puntajeSimilitud(75, 75) === 100, 'Similitud igual al mínimo da 100')
+marcar(puntajeSimilitud(50, 80) === 62.5, 'Similitud 50 con mínimo 80 da 62,5')
+marcar(puntajeSimilitud(0, 80) === 0, 'Similitud 0 da 0')
+
+// --- Similitud por rasgos
+marcar(similitudRasgos({ bpm: 72 }, { bpm: 72 }) === 100, 'Mismo BPM: 100 %')
+marcar(similitudRasgos({ bpm: 72 }, { bpm: 90 }) === 60, 'BPM 72 vs 90: 60 %')
+marcar(similitudRasgos({ bpm: 60 }, { bpm: 120 }) === 0, 'Diferencia de 50 % o más en BPM: 0 %')
+marcar(similitudRasgos({ bpm: 72, ritmo: 'normal' }, { bpm: 72, ritmo: 'arritmia' }) === 80, 'Ritmo distinto resta 0,15 de 0,75')
+marcar(similitudRasgos({ bpm: 72, regularidad: 0.9 }, { bpm: 72, regularidad: 0.5 }) === 88.2, 'La regularidad pesa 0,25')
+marcar(similitudRasgos({ bpm: 72, regularidad: 0.9 }, { bpm: 72 }) === 100, 'Un rasgo que falta en una parte no cuenta')
+marcar(similitudRasgos({ bpm: null }, { bpm: 72 }) === null, 'Sin BPM no hay similitud')
+marcar(similitudRasgos({ bpm: 72 }, { bpm: 90 }) === similitudRasgos({ bpm: 90 }, { bpm: 72 }), 'La similitud es simétrica')
+
+// --- Calificación completa
+const pulso = { tipo: 'bpm_en_rango', min: 60, max: 100 }
+let r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 75 } })
+marcar(r.cumple && r.puntaje === 100 && /dentro del rango/.test(r.motivo), 'Pulso 75 cumple 60-100 y explica por qué')
+r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 120 } })
+marcar(!r.cumple && r.puntaje === 50 && /por encima/.test(r.motivo), 'Pulso 120 no cumple, puntaje parcial 50 y dice "por encima"')
+r = calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: 45 } })
+marcar(!r.cumple && /por debajo/.test(r.motivo), 'Pulso 45 dice "por debajo"')
+marcar(lanza(() => calificarEjercicio({ criterio: pulso, medicion: { bpm_promedio: null } })), 'Sin BPM en la medición se rechaza')
+const spo2 = { tipo: 'spo2_en_rango', min: 95, max: 100 }
+r = calificarEjercicio({ criterio: spo2, medicion: { spo2_promedio: 97 } })
+marcar(r.cumple && r.puntaje === 100, 'SpO2 97 cumple 95-100')
+marcar(lanza(() => calificarEjercicio({ criterio: spo2, medicion: { bpm_promedio: 70 } })), 'Sin SpO2 en la medición se rechaza')
+const simil = { tipo: 'similitud_minima', valor: 75 }
+const ref = { bpm: 72, nombre: 'PPG normal' }
+r = calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 74 }, referencia: ref })
+marcar(r.cumple && r.similitud > 90 && r.puntaje === 100, 'Medición parecida a la referencia cumple la similitud mínima')
+r = calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 100 }, referencia: ref })
+marcar(!r.cumple && r.puntaje > 0 && r.puntaje < 100 && /PPG normal/.test(r.motivo), 'Medición distinta no cumple y recibe puntaje parcial')
+marcar(lanza(() => calificarEjercicio({ criterio: simil, medicion: { bpm_promedio: 74 } })), 'Sin señal de referencia se rechaza')
+marcar(lanza(() => calificarEjercicio({ criterio: { tipo: 'otro' }, medicion: {} })), 'Un criterio desconocido se rechaza')
+
+// --- Niveles (RF112)
+marcar(nivelPorPorcentaje(100) === 'logrado' && nivelPorPorcentaje(70) === 'logrado', '70 % o más: logrado')
+marcar(nivelPorPorcentaje(69.9) === 'medianamente_logrado' && nivelPorPorcentaje(40) === 'medianamente_logrado', '40 a 69 %: medianamente logrado')
+marcar(nivelPorPorcentaje(39.9) === 'no_logrado', 'Menos de 40 %: no logrado')
+marcar(nivelPorPorcentaje(55, 80, 50) === 'medianamente_logrado', 'Respeta umbrales editables')
+marcar(/Nivel: Logrado/.test(resumenResultado({ motivo: 'ok', puntaje: 100, nivel: 'logrado', intentos_restantes: 0 })), 'El resumen muestra el nivel')
+marcar(/Te quedan 2/.test(resumenResultado({ motivo: 'ok', puntaje: 40, nivel: 'medianamente_logrado', intentos_restantes: 2 })), 'El resumen avisa los intentos que quedan')
+marcar(/medición nueva/.test(mensajeErrorCalificacion(new Error('La medición es anterior a la apertura de la evaluación'))), 'Mensaje claro para medición anterior a la apertura')
+marcar(/Repite la medición/.test(mensajeErrorCalificacion(new Error('La medición tiene calidad de señal mala'))), 'Mensaje claro para señal mala')
+
+// --- Tipos de evaluación con referencia y reintentos
+const comparar = cambiarEjercicio(modeloVacio(), 'comparar_senales')
+marcar(validarTipoEvaluacion(comparar).length === 0, 'Comparar sin referencia sigue válido si no se exige (precargadas)')
+marcar(validarTipoEvaluacion(comparar, { exigirReferencia: true }).length === 1, 'Al guardar se exige la señal de referencia')
+const conRef = { ...comparar, criterio: { ...comparar.criterio, referencia: { origen: 'plantilla', id: 'abc' } } }
+marcar(validarTipoEvaluacion(conRef, { exigirReferencia: true }).length === 0, 'Con referencia el modelo es válido')
+marcar(validarTipoEvaluacion({ ...conRef, criterio: { ...conRef.criterio, referencia: { origen: 'otro', id: 'x' } } }).length === 1, 'Un origen de referencia desconocido se rechaza')
+marcar(validarTipoEvaluacion({ ...conRef, reintentos: 9 }).length === 1, 'Más de 5 intentos se rechaza')
+marcar(validarTipoEvaluacion({ ...conRef, reintentos: 0 }).length === 1, 'Menos de 1 intento se rechaza')
+const guardado = camposTipoParaGuardar({ ...conRef, reintentos: 3 }, { exigirReferencia: true })
+marcar(guardado.criterio.referencia.origen === 'plantilla' && guardado.max_reintentos === 3, 'Se guarda la referencia y los intentos permitidos')
+marcar(!('max_reintentos' in camposTipoParaGuardar(cambiarEjercicio(modeloVacio(), 'medir_pulso'))), 'Sin reintentos indicados no se envía el campo')
+marcar(modeloDesdeFila({ tipo: 'ejercicio_aplicado', ejercicio: 'comparar_senales', criterio: conRef.criterio, max_reintentos: 2 }).reintentos === 2, 'El modelo recupera los intentos desde la fila')
+marcar(/falta elegir/.test(describirCriterio('comparar_senales', { tipo: 'similitud_minima', valor: 70 })), 'La descripción avisa si falta la referencia')
+const preguntas = camposTipoParaGuardar(modeloVacio())
+marcar(!preguntas.criterio && !('max_reintentos' in preguntas), 'Preguntas no guarda criterio ni intentos')
+
+// --- La migración SQL tiene las mismas reglas
+const sql = readFileSync(new URL('../supabase/migrations/20261113000100_rf107_calificacion_ejercicio.sql', import.meta.url), 'utf8')
+marcar(/create or replace function public\.calificar_ejercicio\(p_intento uuid, p_medicion uuid\)/.test(sql), 'calificar_ejercicio ya no recibe la similitud del cliente')
+marcar(/drop function if exists public\.calificar_ejercicio\(uuid, uuid, numeric\)/.test(sql), 'Se elimina la versión que aceptaba la similitud del cliente')
+marcar(/max_reintentos smallint not null default 1\s+check \(max_reintentos between 1 and 5\)/.test(sql), 'La base limita los intentos de 1 a 5')
+marcar(/calificaciones >= v_ev\.max_reintentos/.test(sql), 'La base aplica el máximo de intentos')
+marcar(/r\.usuario_id = v_ev\.creador_id/.test(sql), 'La medición de referencia debe ser del profesor creador')
+marcar(/v_m\.calidad = 'mala'/.test(sql), 'La base rechaza mediciones de calidad mala')
+marcar(/usuario_id = p_alumno/.test(sql), 'La base exige que la medición sea del estudiante')
+marcar(/profesor_de_evaluacion\(v_int\.evaluacion_id\)/.test(sql), 'Solo el profesor de la evaluación puede recalificar')
+marcar(/revoke all on function public\.evaluar_ejercicio[^;]*authenticated/.test(sql), 'El cálculo interno no se expone a los usuarios')
+marcar(/least\(1, 2 \* abs\(p_bpm_a - p_bpm_b\)/.test(sql) && /0\.60/.test(sql) && /0\.25/.test(sql) && /0\.15/.test(sql), 'Los pesos de la similitud coinciden con la versión JS')
+const completo = readFileSync(new URL('../supabase/sensor_pulso_base_de_datos_completa.sql', import.meta.url), 'utf8')
+marcar(completo.includes('RF107: calificación automática del ejercicio aplicado'), 'La base completa incluye la migración de RF107')
+
+console.log(fallos ? `\nRF107: ${fallos} prueba(s) fallaron` : '\nRF107: todas las pruebas pasaron')
+process.exit(fallos ? 1 : 0)

@@ -376,7 +376,9 @@ export async function crearEvaluacion({
   if (!aulaId) return { success: false, error: 'Elige el aula de la evaluación.' }
   if (!titulo || !titulo.trim()) return { success: false, error: 'El título es obligatorio.' }
   
-  const errores = validarTipoEvaluacion(modelo)
+  // RF107: salvo al duplicar una precargada (el profesor la completa después), la comparación exige referencia
+  const exigirReferencia = !precargadaBaseId && !precargada
+  const errores = validarTipoEvaluacion(modelo, { exigirReferencia })
   if (errores.length) return { success: false, error: errores[0] }
 
   const fila = {
@@ -385,7 +387,7 @@ export async function crearEvaluacion({
     titulo: titulo.trim(),
     descripcion: (descripcion || '').trim() || null,
     precargada: false,
-    ...camposTipoParaGuardar(modelo)
+    ...camposTipoParaGuardar(modelo, { exigirReferencia })
   }
 
   // 1. Guardar en Supabase si hay sesión real activa (sin ocultar errores reales)
@@ -538,13 +540,13 @@ export async function contarIntentos(evaluacionId) {
 /** Cambia el tipo, el ejercicio y el criterio, salvo que ya existan intentos */
 export async function actualizarTipoEvaluacion({ evaluacionId, modelo, puedeGestionar }) {
   if (!puedeGestionar) return { success: false, error: 'No tienes permiso para editar evaluaciones.' }
-  const errores = validarTipoEvaluacion(modelo)
+  const errores = validarTipoEvaluacion(modelo, { exigirReferencia: true })
   if (errores.length) return { success: false, error: errores[0] }
   if ((await contarIntentos(evaluacionId)) > 0) {
     return { success: false, error: 'La evaluación ya tiene intentos de estudiantes: no se puede cambiar el tipo.' }
   }
 
-  const campos = camposTipoParaGuardar(modelo)
+  const campos = camposTipoParaGuardar(modelo, { exigirReferencia: true })
   try {
     const { data, error } = await supabase.from('evaluaciones').update(campos).eq('id', evaluacionId).select().single()
     if (!error && data) return { success: true, origen: 'supabase', data }
@@ -704,3 +706,13 @@ export {
   iniciarHeartbeatEstudiante
 } from './panelEnVivoService.js'
 
+
+// ----------------------------------------------------------------------------
+// RF107: CALIFICACIÓN AUTOMÁTICA DEL EJERCICIO APLICADO
+// ----------------------------------------------------------------------------
+export {
+  obtenerOpcionesReferencia,
+  calificarEjercicioAplicado,
+  recalificarIntento,
+  obtenerResultadosEjercicio
+} from './calificacionEjercicioService.js'

@@ -71,19 +71,27 @@ export function criterioPorDefecto(ejercicio) {
 export function cambiarTipo(modelo, tipo) {
   if (!TIPOS_EVALUACION[tipo]) return { ...modelo }
   if (tipo === 'preguntas') return { tipo, ejercicio: null, criterio: null }
-  return { tipo, ejercicio: modelo.ejercicio, criterio: modelo.criterio }
+  return { ...modelo, tipo, ejercicio: modelo.ejercicio, criterio: modelo.criterio }
 }
 
 /** Cambia el ejercicio y deja el criterio por defecto de ese ejercicio. */
 export function cambiarEjercicio(modelo, ejercicio) {
   if (!EJERCICIOS[ejercicio]) return { ...modelo, ejercicio: null, criterio: null }
-  return { tipo: 'ejercicio_aplicado', ejercicio, criterio: criterioPorDefecto(ejercicio) }
+  const nuevo = { tipo: 'ejercicio_aplicado', ejercicio, criterio: criterioPorDefecto(ejercicio) }
+  if (modelo?.reintentos !== undefined) nuevo.reintentos = modelo.reintentos
+  return nuevo
 }
 
 const esNumero = (v) => v !== null && v !== '' && v !== undefined && Number.isFinite(Number(v))
 
-/** Devuelve la lista de errores (vacía si el modelo es válido). */
-export function validarTipoEvaluacion(modelo) {
+export const ORIGENES_REFERENCIA = ['plantilla', 'medicion']
+export const REINTENTOS = { min: 1, max: 5, porDefecto: 1 }
+
+/**
+ * Devuelve la lista de errores (vacía si el modelo es válido).
+ * RF107: con `exigirReferencia` la comparación de señales debe traer su señal de referencia.
+ */
+export function validarTipoEvaluacion(modelo, { exigirReferencia = false } = {}) {
   const errores = []
   if (!modelo || !TIPOS_EVALUACION[modelo.tipo]) {
     errores.push('Elige el tipo de evaluación.')
@@ -121,27 +129,48 @@ export function validarTipoEvaluacion(modelo) {
     }
     const valor = Number(c.valor)
     if (valor < lmin || valor > lmax) errores.push(`La similitud mínima debe estar entre ${lmin} y ${lmax} ${ej.unidad}.`)
+    const ref = c.referencia
+    if (ref) {
+      if (!ORIGENES_REFERENCIA.includes(ref.origen) || !ref.id) errores.push('La señal de referencia no es válida.')
+    } else if (exigirReferencia) {
+      errores.push('Elige la señal de referencia para comparar.')
+    }
+  }
+  if (modelo.reintentos !== undefined && modelo.reintentos !== null && modelo.reintentos !== '') {
+    const r = Number(modelo.reintentos)
+    if (!Number.isInteger(r) || r < REINTENTOS.min || r > REINTENTOS.max) {
+      errores.push(`Los intentos permitidos deben estar entre ${REINTENTOS.min} y ${REINTENTOS.max}.`)
+    }
   }
   return errores
 }
 
 /** Campos que se guardan en `evaluaciones` (números ya convertidos). Lanza si el modelo es inválido. */
-export function camposTipoParaGuardar(modelo) {
-  const errores = validarTipoEvaluacion(modelo)
+export function camposTipoParaGuardar(modelo, opciones = {}) {
+  const errores = validarTipoEvaluacion(modelo, opciones)
   if (errores.length) throw new Error(errores[0])
   if (modelo.tipo === 'preguntas') return { tipo: 'preguntas', ejercicio: null, criterio: null }
   const ej = EJERCICIOS[modelo.ejercicio]
   const criterio = ej.forma === 'rango'
     ? { tipo: ej.criterio, min: Number(modelo.criterio.min), max: Number(modelo.criterio.max) }
     : { tipo: ej.criterio, valor: Number(modelo.criterio.valor) }
-  return { tipo: 'ejercicio_aplicado', ejercicio: modelo.ejercicio, criterio }
+  if (ej.forma === 'minimo' && modelo.criterio.referencia) {
+    criterio.referencia = { origen: modelo.criterio.referencia.origen, id: modelo.criterio.referencia.id }
+  }
+  const campos = { tipo: 'ejercicio_aplicado', ejercicio: modelo.ejercicio, criterio }
+  if (modelo.reintentos !== undefined && modelo.reintentos !== null && modelo.reintentos !== '') {
+    campos.max_reintentos = Number(modelo.reintentos) // RF107
+  }
+  return campos
 }
 
 /** Modelo de formulario a partir de una fila de la base. */
 export function modeloDesdeFila(fila) {
   if (!fila || !TIPOS_EVALUACION[fila.tipo]) return modeloVacio()
   if (fila.tipo === 'preguntas') return modeloVacio()
-  return { tipo: fila.tipo, ejercicio: fila.ejercicio || null, criterio: fila.criterio ? { ...fila.criterio } : null }
+  const modelo = { tipo: fila.tipo, ejercicio: fila.ejercicio || null, criterio: fila.criterio ? { ...fila.criterio } : null }
+  if (fila.max_reintentos) modelo.reintentos = fila.max_reintentos
+  return modelo
 }
 
 /** Texto del criterio para mostrarlo, por ejemplo «BPM entre 60 y 100». */
@@ -152,7 +181,7 @@ export function describirCriterio(ejercicio, criterio) {
     const nombre = ejercicio === 'medir_spo2' ? 'SpO₂' : 'BPM'
     return `${nombre} entre ${criterio.min} y ${criterio.max}${ejercicio === 'medir_spo2' ? ' %' : ''}`
   }
-  return `Similitud de al menos ${criterio.valor} %`
+  return `Similitud de al menos ${criterio.valor} %${criterio.referencia ? '' : ' (falta elegir la señal de referencia)'}`
 }
 
 export function etiquetaTipo(tipo, ejercicio) {
