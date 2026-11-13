@@ -28,6 +28,7 @@
     "test:rf110": "node scripts/test-rf110-respuesta-simultanea.js",
     "test:rf107": "node scripts/test-rf107-calificacion.mjs",
     "test:aulas-masivo": "node scripts/test-aulas-masivo.mjs",
+    "test:invitaciones-lote": "node scripts/test-invitaciones-lote.mjs",
     "test:rf113": "node scripts/test-rf113-panel-en-vivo.js"
   },
   "dependencies": {

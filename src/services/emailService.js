@@ -77,3 +77,40 @@ export async function enviarCorreoInvitacion({ correo, codigo, aulaNombre, profe
     }
   }
 }
+
+/**
+ * RF100: envía las invitaciones de varios estudiantes en UNA sola petición a /api/invitaciones/enviar,
+ * que las manda todas juntas con el endpoint de lote de Resend.
+ * @returns {{ success: boolean, enviados: {correo:string,id:string|null}[], fallidos: {correo:string,error:string}[], error?: string }}
+ */
+export async function enviarCorreosInvitacion({ correos, codigo, aulaNombre, profesorNombre }) {
+  const lista = [...new Set((correos || []).map((c) => String(c || '').trim().toLowerCase()).filter(Boolean))]
+  if (!lista.length) return { success: false, enviados: [], fallidos: [], error: 'Agrega al menos un correo.' }
+  if (!codigo) return { success: false, enviados: [], fallidos: [], error: 'Código de acceso no proporcionado.' }
+
+  const fallarTodos = (error) => ({ success: false, enviados: [], fallidos: lista.map((correo) => ({ correo, error })), error })
+
+  try {
+    const respuesta = await fetch('/api/invitaciones/enviar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        correos: lista,
+        codigo: String(codigo).trim().toUpperCase(),
+        aulaNombre: aulaNombre || 'Aula Virtual',
+        profesorNombre: profesorNombre || 'Docente'
+      })
+    })
+    const data = await respuesta.json().catch(() => ({}))
+
+    if (Array.isArray(data.enviados) || Array.isArray(data.fallidos)) {
+      const enviados = data.enviados || []
+      const fallidos = data.fallidos || []
+      if (enviados.length) return { success: true, enviados, fallidos }
+      return { success: false, enviados: [], fallidos, error: data.error || fallidos[0]?.error || 'No se pudo enviar ninguna invitación.' }
+    }
+    return fallarTodos(data.error || `Error al enviar correo (HTTP ${respuesta.status})`)
+  } catch (errRed) {
+    return fallarTodos(`No se pudo conectar con el servicio de correo: ${errRed.message}`)
+  }
+}

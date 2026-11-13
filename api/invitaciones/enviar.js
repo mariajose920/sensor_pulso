@@ -1,105 +1,26 @@
 import { validarCorreoInstitucional } from '../../src/utils/validators.js'
+import { MAX_INVITACIONES_POR_ENVIO } from '../../src/utils/correosInvitacion.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 import { escaparHtml, aplicarCabecerasSeguridad, validarOrigenCsrf } from '../_lib/proteccionWeb.js'
 
-// Handler compatible con Vercel Serverless Functions y Vite Middleware
-export default async function handler(req, res) {
-  // Configuración de cabeceras CORS y de seguridad (RF68)
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
-  aplicarCabecerasSeguridad(res, 'api')
+// Remitente por defecto: el de pruebas de Resend. Solo entrega a la cuenta dueña de la API key;
+// para invitar a estudiantes de verdad hay que verificar un dominio en Resend y definir RESEND_FROM.
+const REMITENTE_POR_DEFECTO = 'Sensor Pulso UNACH <onboarding@resend.dev>'
 
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204
-    return res.end()
-  }
+function responder(res, estado, cuerpo) {
+  res.statusCode = estado
+  res.setHeader('Content-Type', 'application/json')
+  return res.end(JSON.stringify(cuerpo))
+}
 
-  if (req.method !== 'POST') {
-    res.statusCode = 405
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'Método no permitido. Solo se acepta POST.' }))
-  }
-
-  // RF68: Validación de protección contra CSRF para peticiones mutables
-  const verificacionCsrf = validarOrigenCsrf(req)
-  if (!verificacionCsrf.permitido) {
-    res.statusCode = verificacionCsrf.codigo || 403
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: verificacionCsrf.error || 'Petición rechazada por protección CSRF.' }))
-  }
-
-  // RF67: Límite de peticiones para envío de invitaciones (anti-spam)
-  const ipCliente = extraerIp(req)
-  const claveRateLimit = `api:invitaciones:${ipCliente}`
-  const permitido = await aplicarLimitePeticiones(req, res, {
-    clave: claveRateLimit,
-    maximo: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_MAXIMO,
-    segundos: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_SEGUNDOS
-  })
-  if (!permitido) return
-
-  // Parsear cuerpo de la petición
-  let datos = {}
-  try {
-    datos = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
-  } catch (_) {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'Formato de cuerpo JSON inválido.' }))
-  }
-
-  const { correo, codigo, aulaNombre, profesorNombre } = datos
-
-  // 1. Validar correo institucional de estudiante
-  if (!correo) {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'El correo del estudiante es obligatorio.' }))
-  }
-
-  const validacion = validarCorreoInstitucional(correo)
-  if (!validacion.valido || validacion.rol !== 'usuario') {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ 
-      ok: false, 
-      error: 'El correo debe ser institucional con dominio @alu.unach.cl (estudiante).' 
-    }))
-  }
-
-  // 2. Validar código y nombre del aula
-  if (!codigo || typeof codigo !== 'string' || !codigo.trim()) {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'El código de acceso del aula es obligatorio.' }))
-  }
-
-  const nombreAula = (aulaNombre || 'Aula Virtual').trim()
-  const nombreDocente = (profesorNombre || 'Tu Docente').trim()
-  const codigoLimpio = codigo.trim().toUpperCase()
-  const correoLimpio = correo.trim().toLowerCase()
-
-  // RF68: Escapar contenido proporcionado por el usuario para prevenir XSS en correos (CWE-79)
+/** Arma el asunto, el HTML y el texto del correo de un estudiante (todo el contenido del usuario va escapado, RF68). */
+function construirCorreo({ correo, codigo, nombreAula, nombreDocente }) {
   const nombreAulaEscapado = escaparHtml(nombreAula)
   const nombreDocenteEscapado = escaparHtml(nombreDocente)
-  const codigoEscapado = escaparHtml(codigoLimpio)
-  const correoEscapado = escaparHtml(correoLimpio)
+  const codigoEscapado = escaparHtml(codigo)
+  const correoEscapado = escaparHtml(correo)
 
-  // 3. Obtener API Key de Resend (secreto exclusivo del servidor, RF69)
-  const resendApiKey = process.env.RESEND_API_KEY
-
-  if (!resendApiKey) {
-    res.statusCode = 503
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ 
-      ok: false, 
-      error: 'Servicio de correo Resend no configurado. Falta la variable RESEND_API_KEY en el entorno.' 
-    }))
-  }
-
-  // 4. Construir plantilla HTML profesional del correo con variables sanitizadas
-  const htmlContenido = `
+  const html = `
     <!DOCTYPE html>
     <html lang="es">
     <head>
@@ -130,7 +51,7 @@ export default async function handler(req, res) {
         <div class="content">
           <p>Hola,</p>
           <p>El docente <strong>${nombreDocenteEscapado}</strong> te ha invitado a unirte al aula virtual <strong>${nombreAulaEscapado}</strong>.</p>
-          
+
           <div class="code-box">
             <div class="code-label">Tu Código de Acceso</div>
             <div class="code-value">${codigoEscapado}</div>
@@ -154,50 +75,172 @@ export default async function handler(req, res) {
     </html>
   `
 
-  // 5. Enviar a través de la API oficial de Resend
-  try {
-    const respuesta = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey.trim()}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Sensor Pulso UNACH <onboarding@resend.dev>',
-        to: [correoLimpio],
-        subject: `Invitación al Aula: ${nombreAula} (Código de Acceso: ${codigoLimpio})`,
-        html: htmlContenido,
-        text: `Invitación al Aula: ${nombreAula}\n\nDocente: ${nombreDocente}\nTu código de acceso es: ${codigoLimpio}\n\nIngresa a la plataforma con tu correo ${correoLimpio} y escribe el código en la sección de Aulas.`
-      })
-    })
+  return {
+    subject: `Invitación al Aula: ${nombreAula} (Código de Acceso: ${codigo})`,
+    html,
+    text: `Invitación al Aula: ${nombreAula}\n\nDocente: ${nombreDocente}\nTu código de acceso es: ${codigo}\n\nIngresa a la plataforma con tu correo ${correo} y escribe el código en la sección de Aulas.`
+  }
+}
 
+// Handler compatible con Vercel Serverless Functions y Vite Middleware
+export default async function handler(req, res) {
+  // Configuración de cabeceras CORS y de seguridad (RF68)
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+  aplicarCabecerasSeguridad(res, 'api')
+
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204
+    return res.end()
+  }
+
+  if (req.method !== 'POST') {
+    return responder(res, 405, { ok: false, error: 'Método no permitido. Solo se acepta POST.' })
+  }
+
+  // RF68: Validación de protección contra CSRF para peticiones mutables
+  const verificacionCsrf = validarOrigenCsrf(req)
+  if (!verificacionCsrf.permitido) {
+    return responder(res, verificacionCsrf.codigo || 403, {
+      ok: false,
+      error: verificacionCsrf.error || 'Petición rechazada por protección CSRF.'
+    })
+  }
+
+  // RF67: Límite de peticiones para envío de invitaciones (anti-spam)
+  const ipCliente = extraerIp(req)
+  const claveRateLimit = `api:invitaciones:${ipCliente}`
+  const permitido = await aplicarLimitePeticiones(req, res, {
+    clave: claveRateLimit,
+    maximo: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_MAXIMO,
+    segundos: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_SEGUNDOS
+  })
+  if (!permitido) return
+
+  // Parsear cuerpo de la petición
+  let datos = {}
+  try {
+    datos = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
+  } catch (_) {
+    return responder(res, 400, { ok: false, error: 'Formato de cuerpo JSON inválido.' })
+  }
+
+  const { correo, correos, codigo, aulaNombre, profesorNombre } = datos
+  // Una sola petición puede traer un correo (`correo`) o una lista (`correos`)
+  const esLote = Array.isArray(correos)
+  const candidatos = esLote ? correos : [correo]
+
+  // 1. Validar los correos institucionales de estudiante
+  const lista = [...new Set(candidatos.filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim().toLowerCase()))]
+  if (!lista.length) {
+    return responder(res, 400, {
+      ok: false,
+      error: esLote ? 'Agrega al menos un correo de estudiante.' : 'El correo del estudiante es obligatorio.'
+    })
+  }
+  if (lista.length > MAX_INVITACIONES_POR_ENVIO) {
+    return responder(res, 400, {
+      ok: false,
+      error: `Puedes invitar hasta ${MAX_INVITACIONES_POR_ENVIO} estudiantes por envío.`
+    })
+  }
+  const invalidos = lista.filter((c) => {
+    const v = validarCorreoInstitucional(c)
+    return !v.valido || v.rol !== 'usuario'
+  })
+  if (invalidos.length) {
+    return responder(res, 400, {
+      ok: false,
+      error: esLote
+        ? `Estos correos no son institucionales de estudiante (@alu.unach.cl): ${invalidos.join(', ')}.`
+        : 'El correo debe ser institucional con dominio @alu.unach.cl (estudiante).',
+      invalidos
+    })
+  }
+
+  // 2. Validar código y nombre del aula
+  if (!codigo || typeof codigo !== 'string' || !codigo.trim()) {
+    return responder(res, 400, { ok: false, error: 'El código de acceso del aula es obligatorio.' })
+  }
+
+  const nombreAula = (aulaNombre || 'Aula Virtual').trim()
+  const nombreDocente = (profesorNombre || 'Tu Docente').trim()
+  const codigoLimpio = codigo.trim().toUpperCase()
+
+  // 3. Obtener API Key de Resend (secreto exclusivo del servidor, RF69)
+  const resendApiKey = process.env.RESEND_API_KEY
+
+  if (!resendApiKey) {
+    return responder(res, 503, {
+      ok: false,
+      error: 'Servicio de correo Resend no configurado. Falta la variable RESEND_API_KEY en el entorno.'
+    })
+  }
+
+  const remitente = (process.env.RESEND_FROM || '').trim() || REMITENTE_POR_DEFECTO
+  const cabeceras = {
+    'Authorization': `Bearer ${resendApiKey.trim()}`,
+    'Content-Type': 'application/json'
+  }
+  const mensajes = lista.map((destino) => ({
+    from: remitente,
+    to: [destino],
+    ...construirCorreo({ correo: destino, codigo: codigoLimpio, nombreAula, nombreDocente })
+  }))
+
+  // 4. Enviar todo en UNA llamada al proveedor: el endpoint de lote de Resend manda todos los correos juntos.
+  //    «permissive» deja que salgan los válidos aunque alguno sea rechazado, y devuelve el error de ese.
+  try {
+    const respuesta = await fetch('https://api.resend.com/emails/batch', {
+      method: 'POST',
+      headers: { ...cabeceras, 'x-batch-validation': 'permissive' },
+      body: JSON.stringify(mensajes)
+    })
     const data = await respuesta.json().catch(() => ({}))
 
     if (!respuesta.ok) {
       const mensajeError = data.message || `Error del proveedor de correo (código ${respuesta.status})`
-      res.statusCode = respuesta.status >= 400 && respuesta.status < 600 ? respuesta.status : 500
-      res.setHeader('Content-Type', 'application/json')
-      return res.end(JSON.stringify({
+      return responder(res, respuesta.status >= 400 && respuesta.status < 600 ? respuesta.status : 500, {
         ok: false,
         error: mensajeError,
-        statusCode: respuesta.status
-      }))
+        statusCode: respuesta.status,
+        enviados: [],
+        fallidos: lista.map((c) => ({ correo: c, error: mensajeError }))
+      })
     }
 
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({
-      ok: true,
-      id: data.id,
+    // data.data = ids de los aceptados (en orden); data.errors = [{ index, message }] de los rechazados
+    const rechazados = new Map((Array.isArray(data.errors) ? data.errors : []).map((e) => [e.index, e.message]))
+    const ids = Array.isArray(data.data) ? data.data : []
+    let siguienteId = 0
+    const enviados = []
+    const fallidos = []
+    lista.forEach((destino, indice) => {
+      if (rechazados.has(indice)) {
+        fallidos.push({ correo: destino, error: rechazados.get(indice) || 'El proveedor rechazó este correo.' })
+      } else {
+        enviados.push({ correo: destino, id: ids[siguienteId]?.id || null })
+        siguienteId++
+      }
+    })
+
+    return responder(res, 200, {
+      ok: enviados.length > 0,
       provider: 'resend',
-      mensaje: `Correo enviado exitosamente a ${correoLimpio}`
-    }))
+      id: enviados[0]?.id || null,
+      enviados,
+      fallidos,
+      mensaje: enviados.length === 1 && !fallidos.length
+        ? `Correo enviado exitosamente a ${enviados[0].correo}`
+        : `Se enviaron ${enviados.length} de ${lista.length} invitaciones.`
+    })
   } catch (errorRed) {
-    res.statusCode = 502
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({
+    return responder(res, 502, {
       ok: false,
-      error: `Error de red al conectar con Resend: ${errorRed.message}`
-    }))
+      error: `Error de red al conectar con Resend: ${errorRed.message}`,
+      enviados: [],
+      fallidos: lista.map((c) => ({ correo: c, error: `Error de red al conectar con Resend: ${errorRed.message}` }))
+    })
   }
 }

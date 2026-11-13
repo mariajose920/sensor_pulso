@@ -32,7 +32,7 @@ let r = await enviarInvitacionesVarias({ aulaId: 'x', correos: [], profesorId: '
 marcar(!r.success && /al menos un correo/i.test(r.error), 'Sin correos no se envía nada')
 r = await enviarInvitacionesVarias({ aulaId: 'x', correos: Array.from({ length: MAX_INVITACIONES_POR_ENVIO + 1 }, (_, i) => `e${i}@alu.unach.cl`), profesorId: 'p' })
 marcar(!r.success && /hasta/.test(r.error), 'Más del máximo por envío se rechaza')
-r = await enviarInvitacionesVarias({ aulaId: 'aula-que-no-existe', correos: ['a@alu.unach.cl', 'b@alu.unach.cl', 'c@alu.unach.cl'], profesorId: 'p', pausaMs: 0 })
+r = await enviarInvitacionesVarias({ aulaId: 'aula-que-no-existe', correos: ['a@alu.unach.cl', 'b@alu.unach.cl', 'c@alu.unach.cl'], profesorId: 'p' })
 marcar(!r.success && r.enviados.length === 0 && r.fallidos.length === 3, 'Si el aula no existe, todos quedan como fallidos con su motivo')
 
 // --- Eliminar aula (modo local)

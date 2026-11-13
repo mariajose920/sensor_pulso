@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js'
 import { validarCorreoInstitucional } from '../utils/validators.js'
-import { enviarCorreoInvitacion } from './emailService.js'
+import { enviarCorreoInvitacion, enviarCorreosInvitacion } from './emailService.js'
 import { escaparHtml, sanitizarContenidoUsuario } from './proteccionWebService.js'
 import { MAX_INVITACIONES_POR_ENVIO } from '../utils/correosInvitacion.js'
 
@@ -971,51 +971,78 @@ export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
 // RF100 / RF102: INVITAR VARIOS A LA VEZ Y ELIMINAR EL AULA
 // ==========================================
 
-const dormir = (ms) => new Promise((resolver) => setTimeout(resolver, ms))
-
 /**
- * RF100: invita a varios estudiantes de una sola vez. Envía de a uno (el servicio de correo limita el ritmo)
- * y devuelve qué correos salieron y cuáles fallaron, con su motivo. Un fallo no detiene al resto.
+ * RF100: invita a varios estudiantes en UNA sola petición: el servidor los manda todos juntos (lote de Resend).
+ * Valida el aula, el permiso y el código una vez; después registra el resultado de cada correo.
+ * Un correo rechazado no impide que salgan los demás; el resultado dice cuáles fallaron y por qué.
  */
 export async function enviarInvitacionesVarias({
-  aulaId, correos, profesorId, profesorNombre, esAdmin, pausaMs = 400, alProgresar = null
+  aulaId, correos, profesorId, profesorNombre, esAdmin, alProgresar = null
 }) {
   const lista = [...new Set((correos || []).map((c) => String(c || '').trim().toLowerCase()).filter(Boolean))]
+  const sinEnvio = (error) => ({ success: false, error, enviados: [], fallidos: lista.map((correo) => ({ correo, error })) })
+
   if (!lista.length) return { success: false, error: 'Agrega al menos un correo.', enviados: [], fallidos: [] }
   if (lista.length > MAX_INVITACIONES_POR_ENVIO) {
-    return {
-      success: false,
-      error: `Puedes invitar hasta ${MAX_INVITACIONES_POR_ENVIO} estudiantes por envío.`,
-      enviados: [],
-      fallidos: []
-    }
+    return { success: false, error: `Puedes invitar hasta ${MAX_INVITACIONES_POR_ENVIO} estudiantes por envío.`, enviados: [], fallidos: [] }
   }
 
-  const enviados = []
-  const fallidos = []
-  for (let i = 0; i < lista.length; i++) {
-    const correo = lista[i]
-    const res = await enviarInvitacionCorreo({ aulaId, correoEstudiante: correo, profesorId, profesorNombre, esAdmin })
-    if (res.success) enviados.push(correo)
-    else fallidos.push({ correo, error: res.error })
-    if (typeof alProgresar === 'function') alProgresar({ hecho: i + 1, total: lista.length })
-    // Un error de permiso o del código desactivado se repetiría igual en todos: se corta de una vez
-    if (!res.success && /permiso|desactivado|no encontrada/i.test(res.error || '')) {
-      for (const restante of lista.slice(i + 1)) fallidos.push({ correo: restante, error: res.error })
-      break
-    }
-    if (i < lista.length - 1 && pausaMs > 0) await dormir(pausaMs)
+  const aula = aulasLocales.find((a) => a.id === aulaId)
+  if (!aula) return sinEnvio('Aula no encontrada.')
+  if (!esAdmin && aula.profesor_id !== profesorId) {
+    return sinEnvio('No tienes permiso para gestionar invitaciones en esta aula.')
+  }
+  if (!aula.codigo_activo) {
+    return sinEnvio('El código de acceso de esta aula se encuentra desactivado. Actívalo antes de enviar invitaciones.')
+  }
+  const noValidos = lista.filter((c) => {
+    const v = validarCorreoInstitucional(c)
+    return !v.valido || v.rol !== 'usuario'
+  })
+  if (noValidos.length) {
+    return sinEnvio(`Estos correos no son de estudiante institucional (@alu.unach.cl): ${noValidos.join(', ')}.`)
   }
 
-  const exito = enviados.length > 0
+  if (typeof alProgresar === 'function') alProgresar({ hecho: 0, total: lista.length })
+  const envio = await enviarCorreosInvitacion({
+    correos: lista,
+    codigo: aula.codigo,
+    aulaNombre: aula.nombre,
+    profesorNombre: profesorNombre || 'Docente'
+  })
+  if (typeof alProgresar === 'function') alProgresar({ hecho: lista.length, total: lista.length })
+
+  const enviados = (envio.enviados || []).map((e) => (typeof e === 'string' ? { correo: e, id: null } : e))
+  const fallidos = envio.fallidos || []
+  const ahora = new Date().toISOString()
+
+  // Registro de cada correo (enviado o fallido) para el historial del aula
+  const registros = [
+    ...enviados.map((e, i) => ({
+      id: `inv-${Date.now()}-${i}`, aula_id: aulaId, aula_nombre: aula.nombre, codigo_aula: aula.codigo,
+      correo: e.correo, servicio: 'Resend', estado: 'enviada', resend_id: e.id || null, enviada_en: ahora
+    })),
+    ...fallidos.map((f, i) => ({
+      id: `inv-err-${Date.now()}-${i}`, aula_id: aulaId, aula_nombre: aula.nombre, codigo_aula: aula.codigo,
+      correo: f.correo, servicio: 'Resend', estado: 'fallido', error_detalle: f.error, intentado_en: ahora
+    }))
+  ]
+  invitacionesLocales.unshift(...registros)
+  guardarEnStorage(STORAGE_INVITACIONES, invitacionesLocales)
+  if (enviados.length) {
+    try {
+      await supabase.from('invitaciones_aula').insert(enviados.map((e) => ({ aula_id: aulaId, correo: e.correo })))
+    } catch (_) {}
+  }
+
+  if (!envio.success) {
+    return { success: false, enviados: [], fallidos, error: envio.error || fallidos[0]?.error || 'No se pudo enviar ninguna invitación.' }
+  }
   return {
-    success: exito,
-    enviados,
+    success: true,
+    enviados: enviados.map((e) => e.correo),
     fallidos,
-    message: exito
-      ? `Se enviaron ${enviados.length} invitación(es)${fallidos.length ? ` y ${fallidos.length} fallaron` : ''}.`
-      : undefined,
-    error: exito ? undefined : (fallidos[0]?.error || 'No se pudo enviar ninguna invitación.')
+    message: `Se enviaron ${enviados.length} invitación(es) a la vez${fallidos.length ? ` y ${fallidos.length} fallaron` : ''}.`
   }
 }
 
