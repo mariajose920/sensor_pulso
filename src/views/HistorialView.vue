@@ -3,7 +3,7 @@
     <div class="card" style="margin-bottom: 1rem;">
       <h1 class="card-title" style="margin-bottom: 0.25rem;">Historial Clínico y Registro de Alertas</h1>
       <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 0;">
-        Registro cronológico de bioseñales y eventos fuera de rango (RF21). Información de salud
+        Registro cronológico de bioseñales y eventos fuera de rango. Información de salud
         sensible protegida por políticas de acceso seguro. Plataforma para docencia e investigación biomédica.
       </p>
     </div>
@@ -228,7 +228,7 @@
           <p style="margin: 0.5rem 0 0.25rem;"><strong>No hay alertas fuera de rango registradas.</strong></p>
           <p style="margin: 0; color: var(--color-muted); font-size: 0.88rem;">
             Las mediciones monitoreadas se mantuvieron dentro de los parámetros fisiológicos esperados.
-            Cuando un parámetro sobrepase el rango en Paso 4, el evento visual y sonoro se registrará aquí automáticamente (RF21).
+            Cuando un parámetro sobrepase el rango en Paso 4, el evento visual y sonoro se registrará aquí automáticamente.
           </p>
         </div>
 

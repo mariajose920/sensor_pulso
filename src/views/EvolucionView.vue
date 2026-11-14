@@ -7,7 +7,7 @@
         <h1>Panel de Evolución Personal</h1>
         <p class="evolucion-page-lead">
           Seguimiento diario de tu frecuencia cardíaca en reposo a partir de tu historial de mediciones,
-          comparado con el rango esperado según tu edad y actividad.
+          comparado con el rango esperado según tu edad y actividad, y su relación con el estrés y el sueño registrados.
         </p>
       </div>
 
