@@ -54,7 +54,7 @@ let rpcLlamado = ''
 res = resp()
 await E.crearHandler({ verificar: async () => ({ usuario: { id: 'u1' }, db: { rpc: async (n) => { rpcLlamado = n; return { data: crudo, error: null } } } }) })({ method: 'POST', headers: {} }, res)
 marcar(res.statusCode === 200 && rpcLlamado === 'exportar_mis_datos' && JSON.parse(res.cuerpo).exportacion.perfil.nombre === 'Ana', 'Con sesión exporta usando la función de la base que audita la descarga')
-marcar(/attachment/.test(res.headers['content-disposition']) && res.headers['cache-control'] === 'no-store', 'La descarga es un archivo y no se guarda en cachés')
+marcar(/attachment/.test(res.headers['content-disposition']) && /no-store/.test(String(res.headers['cache-control'] || '')), 'La descarga es un archivo y no se guarda en cachés')
 res = resp()
 await E.crearHandler({ verificar: async () => ({ usuario: { id: 'u1' }, db: { rpc: async () => ({ data: null, error: { message: 'detalle interno de la base' } }) } }) })({ method: 'POST', headers: {} }, res)
 marcar(res.statusCode === 500 && !res.cuerpo.includes('detalle interno'), 'Un error de la base no se filtra al usuario')
@@ -90,6 +90,149 @@ marcar(/brechas_un_registro_por_incidente/.test(mig) && /incidentes_auditoria/.t
 const rls = lee('../supabase/migrations/20261027000700_seguridad_cumplimiento.sql')
 marcar(/incidentes_admin[^;]*es_admin/s.test(rls) && /brechas_admin[^;]*es_admin/s.test(rls), 'La base ya restringe incidentes y brechas al administrador (RLS)')
 marcar(/derechos_propios_ver[^;]*usuario_id = \(select auth\.uid\(\)\) or/s.test(rls), 'La base ya limita cada solicitud a su titular o al administrador (RLS)')
+
+// ---------------------------------------------------------------- Flujo completo RF89: registro con fecha límite, próximas a vencer, vencidas y respuesta vista por el titular
+{
+  const fechaBase = new Date('2026-11-14T12:00:00Z')
+  const limiteCalculado = D.calcularFechaLimite(fechaBase, 30)
+  marcar(limiteCalculado === '2026-12-14T12:00:00.000Z', 'Calcula la fecha límite de 30 días exactamente')
+
+  const solVencida = { id: 's-vencida', estado: 'recibida', vence_en: '2026-11-10T12:00:00Z' }
+  const solProxima = { id: 's-proxima', estado: 'en_proceso', vence_en: '2026-11-17T12:00:00Z' }
+  const solEnPlazo = { id: 's-plazo', estado: 'recibida', vence_en: '2026-12-05T12:00:00Z' }
+  const solResuelta = { id: 's-resuelta', estado: 'resuelta', vence_en: '2026-11-01T12:00:00Z' }
+
+  marcar(D.estaSolicitudVencida(solVencida, fechaBase) === true, 'Una solicitud abierta con fecha límite pasada se marca como vencida')
+  marcar(D.esSolicitudProximaAVencer(solProxima, fechaBase) === true, 'Una solicitud abierta que vence en 5 días o menos se marca como próxima a vencer')
+  marcar(D.estaSolicitudVencida(solResuelta, fechaBase) === false, 'Una solicitud ya respondida nunca se marca como vencida')
+
+  const resumen = D.resumirSolicitudesAdmin([solVencida, solProxima, solEnPlazo, solResuelta], fechaBase)
+  marcar(
+    resumen.abiertas === 3 && resumen.vencidas === 1 && resumen.proximasAVencer === 1 && resumen.respondidas === 1,
+    'El resumen del administrador contabiliza abiertas, próximas a vencer, vencidas y respondidas'
+  )
+
+  // Flujo de principio a fin: el titular registra la solicitud -> queda con fecha límite -> el admin la pasa a en_proceso y la responde -> el titular ve la respuesta
+  const tablaSolicitudes = []
+  const eventosAuditoria = []
+
+  const supabaseDobleRf89 = {
+    auth: {
+      async getSession() {
+        return {
+          data: {
+            session: {
+              access_token: 'tok-rf89',
+              user: { id: 'usr-titular-1', email: 'javierarail@alu.unach.cl', user_metadata: { nombre: 'Javiera Rail' } }
+            }
+          }
+        }
+      }
+    },
+    from(tabla) {
+      if (tabla !== 'solicitudes_derechos') throw new Error(`Tabla no esperada: ${tabla}`)
+      return {
+        insert(fila) {
+          const nueva = {
+            id: `sol-${tablaSolicitudes.length + 1}`,
+            usuario_id: fila.usuario_id,
+            tipo: fila.tipo,
+            detalle: fila.detalle,
+            estado: 'recibida',
+            recibida_en: fila.recibida_en || fechaBase.toISOString(),
+            vence_en: fila.vence_en || D.calcularFechaLimite(fechaBase, 30),
+            resuelta_en: null,
+            respuesta: null,
+            perfil: { nombre: 'Javiera Rail', correo: 'javierarail@alu.unach.cl' }
+          }
+          tablaSolicitudes.push(nueva)
+          return Promise.resolve({ data: nueva, error: null })
+        },
+        select() {
+          let filtroUsuario = null
+          let filtroEstados = null
+          const builder = {
+            eq(col, val) {
+              if (col === 'usuario_id') filtroUsuario = val
+              return builder
+            },
+            in(col, vals) {
+              if (col === 'estado') filtroEstados = vals
+              return builder
+            },
+            order() { return builder },
+            limit() { return builder },
+            then(resolve, reject) {
+              let resFilas = [...tablaSolicitudes]
+              if (filtroUsuario) resFilas = resFilas.filter(r => r.usuario_id === filtroUsuario)
+              if (filtroEstados) resFilas = resFilas.filter(r => filtroEstados.includes(r.estado))
+              return Promise.resolve({ data: resFilas, error: null }).then(resolve, reject)
+            }
+          }
+          return builder
+        },
+        update(cambios) {
+          return {
+            async eq(col, val) {
+              const idx = tablaSolicitudes.findIndex(r => r[col] === val)
+              if (idx >= 0) {
+                tablaSolicitudes[idx] = {
+                  ...tablaSolicitudes[idx],
+                  ...cambios,
+                  resuelta_en: (cambios.estado === 'resuelta' || cambios.estado === 'rechazada')
+                    ? new Date('2026-11-15T10:00:00Z').toISOString()
+                    : tablaSolicitudes[idx].resuelta_en
+                }
+              }
+              return { error: null }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  D.derechosService.__probar({
+    supabase: supabaseDobleRf89,
+    registrarEventoAuditoria: async (ev) => { eventosAuditoria.push(ev); return { ok: true } }
+  })
+
+  const creacion = await D.derechosService.crearSolicitud({
+    tipo: 'acceso',
+    detalle: 'Solicito conocer el detalle de mis registros académicos y fisiológicos.',
+    ahora: fechaBase
+  })
+  marcar(creacion.ok === true && Boolean(creacion.venceEn), 'Una solicitud queda registrada con fecha límite al enviarse')
+
+  const listaAdmin = await D.derechosService.solicitudesAdmin({ soloAbiertas: true })
+  marcar(listaAdmin.length === 1 && listaAdmin[0].estado === 'recibida' && Boolean(listaAdmin[0].vence_en), 'El administrador ve la solicitud abierta con su fecha límite')
+
+  const pasoEnCurso = await D.derechosService.resolverSolicitud(listaAdmin[0].id, 'en_proceso', '')
+  marcar(pasoEnCurso.ok === true && tablaSolicitudes[0].estado === 'en_proceso', 'El administrador puede marcar la solicitud en curso')
+
+  const sinRespuesta = await D.derechosService.resolverSolicitud(listaAdmin[0].id, 'resuelta', '   ')
+  marcar(sinRespuesta.ok === false, 'No permite resolver una solicitud sin escribir respuesta para el titular')
+
+  const textoRespuestaAdmin = 'Se habilitó y verificó el informe completo de tus datos en la sección Mis datos.'
+  const resolucion = await D.derechosService.resolverSolicitud(listaAdmin[0].id, 'resuelta', textoRespuestaAdmin)
+  marcar(resolucion.ok === true, 'El administrador responde y resuelve la solicitud dentro del plazo legal')
+
+  const vistaTitular = await D.derechosService.misSolicitudes()
+  marcar(
+    vistaTitular.length === 1 &&
+      vistaTitular[0].estado === 'resuelta' &&
+      vistaTitular[0].respuesta === textoRespuestaAdmin &&
+      Boolean(vistaTitular[0].resuelta_en),
+    'El titular consulta sus solicitudes y ve el estado respondido, la fecha y la respuesta del administrador'
+  )
+
+  for (const testId of ['resumen-plazos-admin', 'kpi-proximas', 'kpi-vencidas', 'filtro-proximas', 'filtro-vencidas']) {
+    marcar(admin.includes(`data-testid="${testId}"`), `SeguridadAdminView incluye ${testId}`)
+  }
+
+  const templateAdmin = admin.match(/<template>([\s\S]*?)<\/template>/)?.[1] || ''
+  marcar(!/\bRF\d+\b/i.test(templateAdmin) && !/[\p{Extended_Pictographic}]/u.test(admin), 'SeguridadAdminView no muestra códigos RF ni emojis')
+}
 
 if (fallos) { console.error(`\n${fallos} prueba(s) fallaron`); process.exit(1) }
 console.log('\nRF89/RF92: todas las pruebas pasaron')
