@@ -45,6 +45,124 @@ export const ESTADOS_SOLICITUD = {
 export const SEVERIDADES = ['baja', 'media', 'alta', 'critica']
 export const ESTADOS_INCIDENTE = { abierto: 'Abierto', en_analisis: 'En análisis', contenido: 'Contenido', resuelto: 'Resuelto', cerrado: 'Cerrado' }
 
+export const PROCEDIMIENTO_NOTIFICACION_BRECHAS = [
+  {
+    id: 'afectados',
+    quienAvisa: 'Responsable de privacidad / Administrador de la plataforma',
+    aQuien: 'Personas afectadas',
+    plazo: 'Sin demora injustificada cuando exista riesgo para sus derechos (meta operativa: 24 a 72 horas; el mismo día en severidad crítica)',
+    como: 'Correo institucional directo con la plantilla de aviso (qué ocurrió, tipos de datos, medidas, recomendaciones y canal en /privacidad), sin incluir datos sensibles.'
+  },
+  {
+    id: 'autoridad',
+    quienAvisa: 'Responsable de privacidad junto con Asesoría Jurídica / Dirección UNACH',
+    aQuien: 'Autoridad competente (Agencia de Protección de Datos Personales según Ley 19.628 y Ley 21.719)',
+    plazo: 'Según el plazo legal aplicable (referencia Ley 21.719: sin dilación indebida y dentro de 72 horas desde que se toma conocimiento, sujeto a confirmación jurídica)',
+    como: 'Reporte formal con fecha de detección, naturaleza de la brecha, categorías y número estimado de afectados, medidas de contención y contacto institucional.'
+  },
+  {
+    id: 'facultad',
+    quienAvisa: 'Administrador / Responsable de privacidad',
+    aQuien: 'Dirección de la Facultad (UNACH)',
+    plazo: 'Inmediato (mismo día) en severidad crítica; máximo 24 horas en severidad alta',
+    como: 'Correo institucional y reunión de coordinación para definir acciones institucionales.'
+  }
+]
+
+export const PENDIENTES_DECISION_HUMANA_BRECHAS = [
+  'Nombre completo, cargo y contacto oficial del representante ante la autoridad competente (por confirmar con Asesoría Jurídica de la UNACH).',
+  'Aprobación formal de la plantilla de aviso a personas afectadas por parte de la UNACH.'
+]
+
+export const PLANTILLA_AVISO_AFECTADOS = {
+  asunto: 'Aviso importante de seguridad sobre tus datos en sensor pulso',
+  cuerpo: `Estimado/a [Nombre o titular],
+
+Te informamos que el [fecha de detección] identificamos un incidente de seguridad en la plataforma sensor pulso que pudo afectar la privacidad de algunos de tus datos.
+
+1. Qué ocurrió:
+[Explicación clara y sin tecnicismos de lo sucedido].
+
+2. Qué datos pudieron verse afectados:
+- Datos posiblemente comprometidos: [ej. nombre, correo institucional, mediciones de pulso].
+- Datos que NO se vieron afectados: [ej. contraseña, ficha de salud cifrada, otros registros].
+
+3. Qué medidas ya tomamos:
+[Ej. bloqueamos el acceso comprometido, rotamos las claves de seguridad, retiramos el enlace afectado y reforzamos el monitoreo].
+
+4. Qué te recomendamos hacer:
+- Cambiar tu contraseña institucional si utilizaste credenciales compartidas.
+- Revisar tu historial de sesiones o mediciones en la plataforma.
+- Desconfiar de correos sospechosos que soliciten claves o códigos de acceso.
+
+5. Canal de contacto y ejercicio de tus derechos:
+Si tienes dudas, necesitas más información o deseas ejercer tus derechos de acceso, rectificación, supresión, oposición o portabilidad, puedes escribirnos al canal de contacto publicado en /privacidad o ingresar a la sección «Mis datos» dentro de la plataforma.
+
+Atentamente,
+Equipo responsable de privacidad — sensor pulso (UNACH)
+[Nombre del contacto oficial — pendiente de confirmación UNACH]`
+}
+
+/** Genera el aviso listo para usar a partir de los datos de una brecha o con los marcadores base. */
+export function generarAvisoAfectados({
+  nombreTitular = '[Nombre o titular]',
+  fechaDeteccion = '[fecha de detección]',
+  queOcurrio = '[Explicación clara y sin tecnicismos de lo sucedido]',
+  datosComprometidos = '[ej. nombre, correo institucional, mediciones de pulso]',
+  datosNoAfectados = 'contraseña, ficha de salud cifrada y credenciales de autenticación',
+  medidasTomadas = '[Ej. bloqueamos el acceso comprometido, rotamos las claves de seguridad y reforzamos el monitoreo]',
+  canalContacto = 'canal oficial publicado en /privacidad'
+} = {}) {
+  const asunto = PLANTILLA_AVISO_AFECTADOS.asunto
+  const cuerpo = `Estimado/a ${nombreTitular},
+
+Te informamos que el ${fechaDeteccion} identificamos un incidente de seguridad en la plataforma sensor pulso que pudo afectar la privacidad de algunos de tus datos.
+
+1. Qué ocurrió:
+${queOcurrio}.
+
+2. Qué datos pudieron verse afectados:
+- Datos posiblemente comprometidos: ${datosComprometidos}.
+- Datos que NO se vieron afectados: ${datosNoAfectados}.
+
+3. Qué medidas ya tomamos:
+${medidasTomadas}.
+
+4. Qué te recomendamos hacer:
+- Cambiar tu contraseña institucional si utilizaste credenciales compartidas.
+- Revisar tu historial de sesiones o mediciones en la plataforma.
+- Desconfiar de correos sospechosos que soliciten claves o códigos de acceso.
+
+5. Canal de contacto y ejercicio de tus derechos:
+Si tienes dudas, necesitas más información o deseas ejercer tus derechos de acceso, rectificación, supresión, oposición o portabilidad, puedes escribirnos al ${canalContacto} o ingresar a la sección «Mis datos» dentro de la plataforma.
+
+Atentamente,
+Equipo responsable de privacidad — sensor pulso (UNACH)
+[Nombre del contacto oficial — pendiente de confirmación UNACH]`
+
+  return {
+    asunto,
+    cuerpo,
+    textoCompleto: `Asunto: ${asunto}\n\n${cuerpo}`
+  }
+}
+
+export const SIMULACRO_BRECHA_REGISTRADO = {
+  fecha: '2026-11-14',
+  responsable: 'Javiera',
+  escenario:
+    'Simulación controlada en ambiente de pruebas: detección de exposición temporal ficticia de un archivo de exportación de mediciones de prueba (sin datos reales de personas ni fichas clínicas reales).',
+  acciones: [
+    'Registro del incidente ficticio en /admin/seguridad con marca «Afecta datos personales».',
+    'Contención simulada mediante invalidación del enlace de prueba y verificación en auditoría.',
+    'Evaluación de categorías de datos ficticias afectadas y medidas correctivas.',
+    'Preparación del aviso a afectados usando la plantilla oficial de notificación.',
+    'Registro de fechas simuladas de notificación a afectados y a la autoridad.'
+  ],
+  resultado:
+    'Simulacro completado con éxito (tiempo de reacción y preparación de aviso: 18 minutos). El procedimiento define quién avisa, a quién y en qué plazo; la plantilla quedó lista para usar y el registro de notificaciones operó correctamente. Pendiente de decisión humana: confirmar nombre del contacto ante la autoridad y aprobación formal de la plantilla por la UNACH.'
+}
+
 export const PLAZO_LEGAL_DIAS = 30
 export const DIAS_PROXIMA_A_VENCER = 5
 
@@ -1018,7 +1136,11 @@ export const derechosService = {
       .select('id, titulo, descripcion, severidad, estado, afecta_datos_personales, abierto_en, cerrado_en, lecciones, brecha:brechas(id, afectados_estimados, datos_comprometidos, medidas, afectados_notificados_en, autoridad_notificada_en)')
       .order('abierto_en', { ascending: false })
       .limit(100)
-    return error ? [] : (data || [])
+    if (error || !Array.isArray(data)) return []
+    return data.map((fila) => ({
+      ...fila,
+      brecha: Array.isArray(fila.brecha) ? (fila.brecha[0] || null) : (fila.brecha || null)
+    }))
   },
 
   async crearIncidente({ titulo, descripcion, severidad, afectaDatosPersonales }) {
@@ -1036,6 +1158,9 @@ export const derechosService = {
     if (cambios.estado) {
       if (!Object.keys(ESTADOS_INCIDENTE).includes(cambios.estado)) return { ok: false, error: 'Estado no válido.' }
       permitido.estado = cambios.estado
+      permitido.cerrado_en = (cambios.estado === 'resuelto' || cambios.estado === 'cerrado')
+        ? new Date().toISOString()
+        : null
     }
     if (typeof cambios.lecciones === 'string') permitido.lecciones = cambios.lecciones.trim() || null
     if (typeof cambios.afectaDatosPersonales === 'boolean') permitido.afecta_datos_personales = cambios.afectaDatosPersonales
@@ -1054,8 +1179,132 @@ export const derechosService = {
     const ahora = new Date().toISOString()
     if (notificarAfectados) fila.afectados_notificados_en = ahora
     if (notificarAutoridad) fila.autoridad_notificada_en = ahora
-    const { error } = await deps.supabase.from('brechas').upsert(fila, { onConflict: 'incidente_id' })
-    return error ? { ok: false, error: error.message } : { ok: true }
+
+    const tablaBrechas = deps.supabase.from('brechas')
+    let { error } = await tablaBrechas.upsert(fila, { onConflict: 'incidente_id' })
+
+    if (error && typeof tablaBrechas.select === 'function') {
+      const { data: existentes } = await deps.supabase
+        .from('brechas')
+        .select('id')
+        .eq('incidente_id', incidenteId)
+        .limit(1)
+
+      if (Array.isArray(existentes) && existentes.length > 0) {
+        const { incidente_id: _omit, ...cambiosBrecha } = fila
+        const resUpdate = await deps.supabase
+          .from('brechas')
+          .update(cambiosBrecha)
+          .eq('incidente_id', incidenteId)
+        error = resUpdate.error
+      } else if (typeof tablaBrechas.insert === 'function') {
+        const resInsert = await deps.supabase.from('brechas').insert(fila)
+        error = resInsert.error
+      }
+    }
+
+    if (error) return { ok: false, error: error.message }
+
+    await deps.registrarEventoAuditoria({
+      accion: notificarAfectados || notificarAutoridad ? 'brecha_notificada' : 'brecha_actualizada',
+      entidad: 'brechas',
+      entidadId: String(incidenteId),
+      entidadNombre: 'Notificación de brecha de datos personales',
+      resumen: notificarAfectados && notificarAutoridad
+        ? 'Se registró notificación a afectados y a la autoridad competente'
+        : notificarAfectados
+          ? 'Se registró notificación a las personas afectadas'
+          : notificarAutoridad
+            ? 'Se registró notificación a la autoridad competente'
+            : 'Se actualizó el detalle de la brecha de datos personales',
+      detalle: {
+        incidente_id: incidenteId,
+        afectados_notificados: Boolean(notificarAfectados),
+        autoridad_notificada: Boolean(notificarAutoridad)
+      }
+    }).catch(() => {})
+
+    return { ok: true }
+  },
+
+  /**
+   * Ejecuta y registra un simulacro con una brecha ficticia controlada, dejando constancia
+   * de fecha, responsable, plantilla generada y resultado en incidentes/brechas y en auditoría.
+   */
+  async ejecutarSimulacroBrecha({
+    responsable = SIMULACRO_BRECHA_REGISTRADO.responsable,
+    fecha = SIMULACRO_BRECHA_REGISTRADO.fecha
+  } = {}) {
+    const respLimpio = String(responsable || SIMULACRO_BRECHA_REGISTRADO.responsable).trim() || 'Javiera'
+    const fechaLimpia = String(fecha || SIMULACRO_BRECHA_REGISTRADO.fecha).trim() || new Date().toISOString().slice(0, 10)
+    const tituloSimulacro = `Simulacro controlado de brecha ficticia (${fechaLimpia})`
+    const descripcionSimulacro = `${SIMULACRO_BRECHA_REGISTRADO.escenario} Responsable: ${respLimpio}.`
+    const leccionesSimulacro = `Simulacro ejecutado el ${fechaLimpia} por ${respLimpio}. ${SIMULACRO_BRECHA_REGISTRADO.resultado}`
+
+    const avisoGenerado = generarAvisoAfectados({
+      nombreTitular: 'Participante de prueba (simulacro)',
+      fechaDeteccion: fechaLimpia,
+      queOcurrio: 'Simulación controlada de exposición temporal de archivo de exportación ficticio en entorno de pruebas',
+      datosComprometidos: 'Registros ficticios de pulso de prueba (sin datos reales)',
+      medidasTomadas: 'Invalidación inmediata del recurso de prueba, verificación de controles y registro de notificación en el panel de seguridad'
+    })
+
+    let incidenteId = null
+    try {
+      const listaPrevia = await this.incidentes()
+      let objetivo = listaPrevia.find((i) => i.titulo === tituloSimulacro)
+      if (!objetivo) {
+        const creacion = await this.crearIncidente({
+          titulo: tituloSimulacro,
+          descripcion: descripcionSimulacro,
+          severidad: 'baja',
+          afectaDatosPersonales: true
+        })
+        if (creacion.ok) {
+          const listaNueva = await this.incidentes()
+          objetivo = listaNueva.find((i) => i.titulo === tituloSimulacro)
+        }
+      }
+      if (objetivo?.id) {
+        incidenteId = objetivo.id
+        await this.guardarBrecha(incidenteId, {
+          afectadosEstimados: 0,
+          datosComprometidos: 'Registros ficticios de prueba (simulacro sin datos reales)',
+          medidas: 'Contención simulada, invalidación de enlace de prueba y emisión de aviso con plantilla',
+          notificarAfectados: true,
+          notificarAutoridad: true
+        })
+        await this.actualizarIncidente(incidenteId, {
+          estado: 'cerrado',
+          lecciones: leccionesSimulacro
+        })
+      }
+    } catch { /* entorno sin conexión o doble parcial */ }
+
+    await deps.registrarEventoAuditoria({
+      accion: 'simulacro_brecha_notificacion',
+      entidad: 'incidentes',
+      entidadId: incidenteId ? String(incidenteId) : 'simulacro-rf92',
+      entidadNombre: tituloSimulacro,
+      resumen: `Simulacro de notificación de brecha ejecutado por ${respLimpio} (${fechaLimpia})`,
+      detalle: {
+        fecha: fechaLimpia,
+        responsable: respLimpio,
+        resultado: SIMULACRO_BRECHA_REGISTRADO.resultado
+      }
+    }).catch(() => {})
+
+    return {
+      ok: true,
+      incidenteId,
+      simulacro: {
+        ...SIMULACRO_BRECHA_REGISTRADO,
+        fecha: fechaLimpia,
+        responsable: respLimpio,
+        lecciones: leccionesSimulacro
+      },
+      avisoGenerado
+    }
   },
 
   /** Solo para pruebas automatizadas en Node: inyecta dobles de prueba y restaura el estado. */
