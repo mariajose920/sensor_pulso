@@ -132,7 +132,10 @@ const manejarCerrarOtrasSesiones = async () => {
 const enlaces = computed(() => {
   // Medición es visible en la barra para mostrar el aviso institucional de inicio de sesión y acceso al simulador
   const lista = enlacesBase.filter(e => e.to === '/medicion' || !ENLACES_SOLO_CON_SESION.includes(e.to) || isAuthenticated.value)
-  if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
+  if (isAuthenticated.value) {
+    lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
+    lista.push({ to: '/evolucion', texto: 'Evolución', corto: 'Evolución', icono: 'medicion' })
+  }
   if (isAdmin.value || isProfesor.value) lista.push({ to: '/evaluaciones', texto: 'Evaluaciones', corto: 'Evaluar', icono: 'aulas' })   // RF106
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })
   if (isAdmin.value) lista.push({ to: '/admin/seguridad', texto: 'Seguridad', corto: 'Seguridad', icono: 'usuario' }) // RF88/RF92

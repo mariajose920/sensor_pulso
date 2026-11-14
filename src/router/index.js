@@ -19,6 +19,7 @@ import PrivacidadView from '../views/PrivacidadView.vue'
 import MisDatosView from '../views/MisDatosView.vue'
 import SeguridadAdminView from '../views/SeguridadAdminView.vue'
 import EvaluacionesView from '../views/EvaluacionesView.vue'
+import EvolucionView from '../views/EvolucionView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 import { motivoDeRuta } from '../utils/accesoSinSesion'
@@ -71,6 +72,12 @@ const routes = [
     path: '/historial',
     name: 'Historial',
     component: HistorialView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/evolucion',
+    name: 'Evolucion',
+    component: EvolucionView,
     meta: { requiresAuth: true }
   },
   {
