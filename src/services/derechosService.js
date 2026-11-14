@@ -42,6 +42,9 @@ export const ESTADOS_SOLICITUD = {
 export const SEVERIDADES = ['baja', 'media', 'alta', 'critica']
 export const ESTADOS_INCIDENTE = { abierto: 'Abierto', en_analisis: 'En análisis', contenido: 'Contenido', resuelto: 'Resuelto', cerrado: 'Cerrado' }
 
+export const PLAZO_LEGAL_DIAS = 30
+export const DIAS_PROXIMA_A_VENCER = 5
+
 const LARGO_DETALLE = 1000
 
 // Dependencias inyectables únicamente para pruebas unitarias e integrales en Node
@@ -57,10 +60,72 @@ let deps = {
   }
 }
 
+/** Calcula la fecha límite legal de respuesta a partir de una fecha inicial. */
+export function calcularFechaLimite(desde = new Date(), diasPlazo = PLAZO_LEGAL_DIAS) {
+  const baseMs = new Date(desde).getTime()
+  const ms = Number.isNaN(baseMs) ? Date.now() : baseMs
+  return new Date(ms + diasPlazo * 86400000).toISOString()
+}
+
+/** Indica si una solicitud sigue abierta y pendiente de resolución final. */
+export function esSolicitudAbierta(estado) {
+  return estado === 'recibida' || estado === 'en_proceso'
+}
+
 /** Días que faltan para el plazo de respuesta (negativo si ya venció). */
 export function diasParaVencer(venceEn, ahora = new Date()) {
   const ms = new Date(venceEn).getTime() - ahora.getTime()
   return Number.isNaN(ms) ? null : Math.ceil(ms / 86400000)
+}
+
+/** Indica si una solicitud abierta ya superó su fecha límite legal. */
+export function estaSolicitudVencida(solicitud, ahora = new Date()) {
+  if (!solicitud || !esSolicitudAbierta(solicitud.estado)) return false
+  const d = diasParaVencer(solicitud.vence_en, ahora)
+  return d !== null && d < 0
+}
+
+/** Indica si una solicitud abierta está próxima a vencer (entre 0 y DIAS_PROXIMA_A_VENCER días). */
+export function esSolicitudProximaAVencer(solicitud, ahora = new Date(), umbralDias = DIAS_PROXIMA_A_VENCER) {
+  if (!solicitud || !esSolicitudAbierta(solicitud.estado)) return false
+  const d = diasParaVencer(solicitud.vence_en, ahora)
+  return d !== null && d >= 0 && d <= umbralDias
+}
+
+/** Clasifica el estado temporal de una solicitud: 'respondida' | 'vencida' | 'proxima' | 'en_plazo'. */
+export function clasificarPlazoSolicitud(solicitud, ahora = new Date()) {
+  if (!solicitud) return 'en_plazo'
+  if (solicitud.estado === 'resuelta' || solicitud.estado === 'rechazada') return 'respondida'
+  if (estaSolicitudVencida(solicitud, ahora)) return 'vencida'
+  if (esSolicitudProximaAVencer(solicitud, ahora)) return 'proxima'
+  return 'en_plazo'
+}
+
+/** Calcula los contadores de resumen para el panel del administrador. */
+export function resumirSolicitudesAdmin(lista = [], ahora = new Date()) {
+  const filas = Array.isArray(lista) ? lista : []
+  let abiertas = 0
+  let proximasAVencer = 0
+  let vencidas = 0
+  let respondidas = 0
+
+  for (const s of filas) {
+    if (s.estado === 'resuelta' || s.estado === 'rechazada') {
+      respondidas += 1
+    } else if (esSolicitudAbierta(s.estado)) {
+      abiertas += 1
+      if (estaSolicitudVencida(s, ahora)) vencidas += 1
+      else if (esSolicitudProximaAVencer(s, ahora)) proximasAVencer += 1
+    }
+  }
+
+  return {
+    total: filas.length,
+    abiertas,
+    proximasAVencer,
+    vencidas,
+    respondidas
+  }
 }
 
 /** Texto de plazo para mostrar: «Vence en 12 días», «Vence hoy» o «Vencida hace 3 días». */
@@ -316,23 +381,31 @@ export const derechosService = {
     }
   },
 
-  async crearSolicitud({ tipo, detalle }) {
+  async crearSolicitud({ tipo, detalle, ahora = new Date() }) {
     const error = validarSolicitud({ tipo, detalle })
     if (error) return { ok: false, error }
     const u = await usuarioActual()
     if (!u) return { ok: false, error: 'Inicia sesión para enviar una solicitud.' }
+    const recibidaEn = new Date(ahora).toISOString()
+    const venceEn = calcularFechaLimite(recibidaEn, PLAZO_LEGAL_DIAS)
     const { error: e } = await deps.supabase.from('solicitudes_derechos')
-      .insert({ usuario_id: u.id, tipo, detalle: String(detalle || '').trim() || null })
+      .insert({
+        usuario_id: u.id,
+        tipo,
+        detalle: String(detalle || '').trim() || null,
+        recibida_en: recibidaEn,
+        vence_en: venceEn
+      })
     if (e) return { ok: false, error: e.message || 'No se pudo enviar la solicitud.' }
     await deps.registrarEventoAuditoria({
       accion: 'solicitud_derecho',
       entidad: 'solicitudes_derechos',
       entidadId: u.id,
       entidadNombre: `Solicitud de derecho (${tipo})`,
-      resumen: `Solicitud de ${tipo} registrada por el titular`,
-      detalle: { tipo }
+      resumen: `Solicitud de ${tipo} registrada por el titular con fecha límite`,
+      detalle: { tipo, recibida_en: recibidaEn, vence_en: venceEn }
     }).catch(() => {})
-    return { ok: true }
+    return { ok: true, recibidaEn, venceEn }
   },
 
   async misSolicitudes() {
@@ -866,9 +939,9 @@ export const derechosService = {
   },
 
   // ---------------------------------------------------------------- Administración (la RLS exige es_admin)
-  async solicitudesAdmin({ soloAbiertas = true } = {}) {
+  async solicitudesAdmin({ soloAbiertas = false } = {}) {
     let q = deps.supabase.from('solicitudes_derechos')
-      .select('id, tipo, estado, detalle, recibida_en, vence_en, respuesta, perfil:perfiles!usuario_id(nombre, correo)')
+      .select('id, tipo, estado, detalle, recibida_en, vence_en, resuelta_en, respuesta, perfil:perfiles!usuario_id(nombre, correo)')
       .order('vence_en', { ascending: true })
       .limit(200)
     if (soloAbiertas) q = q.in('estado', ['recibida', 'en_proceso'])
@@ -878,11 +951,25 @@ export const derechosService = {
 
   async resolverSolicitud(id, estado, respuesta) {
     if (!Object.keys(ESTADOS_SOLICITUD).includes(estado)) return { ok: false, error: 'Estado no válido.' }
-    if ((estado === 'resuelta' || estado === 'rechazada') && !String(respuesta || '').trim()) {
+    const respuestaLimpia = String(respuesta || '').trim()
+    if ((estado === 'resuelta' || estado === 'rechazada') && !respuestaLimpia) {
       return { ok: false, error: 'Escribe la respuesta para la persona.' }
     }
-    const { error } = await deps.supabase.from('solicitudes_derechos').update({ estado, respuesta: String(respuesta || '').trim() || null }).eq('id', id)
-    return error ? { ok: false, error: error.message } : { ok: true }
+    const cambios = {
+      estado,
+      respuesta: respuestaLimpia || null
+    }
+    const { error } = await deps.supabase.from('solicitudes_derechos').update(cambios).eq('id', id)
+    if (error) return { ok: false, error: error.message }
+    await deps.registrarEventoAuditoria({
+      accion: `solicitud_derechos_${estado}`,
+      entidad: 'solicitudes_derechos',
+      entidadId: String(id),
+      entidadNombre: `Atención de solicitud (${ESTADOS_SOLICITUD[estado]})`,
+      resumen: `Solicitud actualizada a estado ${ESTADOS_SOLICITUD[estado]}`,
+      detalle: { estado }
+    }).catch(() => {})
+    return { ok: true }
   },
 
   async incidentes() {

@@ -355,12 +355,36 @@
       <h2>Mis solicitudes y acciones registradas</h2>
       <p v-if="!solicitudes.length" class="vacio">Aún no has enviado solicitudes.</p>
       <ul v-else class="lista">
-        <li v-for="s in solicitudes" :key="s.id" :data-testid="'solicitud-' + s.id">
-          <strong>{{ etiquetaTipo(s.tipo) }}</strong>
-          <span class="estado" :class="s.estado">{{ ESTADOS_SOLICITUD[s.estado] }}</span>
-          <small>Recibida el {{ fecha(s.recibida_en) }}<template v-if="plazo(s)"> · {{ plazo(s) }}</template></small>
+        <li
+          v-for="s in solicitudes"
+          :key="s.id"
+          class="item-solicitud-titular"
+          :class="clasePlazoTitular(s)"
+          :data-testid="'solicitud-' + s.id"
+        >
+          <div class="fila-cabecera-solicitud">
+            <strong>{{ etiquetaTipo(s.tipo) }}</strong>
+            <span class="estado" :class="s.estado">{{ ESTADOS_SOLICITUD[s.estado] }}</span>
+            <span v-if="estaSolicitudVencida(s)" class="insignia-plazo vencida" data-testid="solicitud-vencida-titular">
+              Solicitud vencida · {{ plazo(s) }}
+            </span>
+            <span v-else-if="esSolicitudProximaAVencer(s)" class="insignia-plazo proxima">
+              Próxima a vencer · {{ plazo(s) }}
+            </span>
+            <span v-else-if="plazo(s)" class="insignia-plazo en-plazo">
+              {{ plazo(s) }}
+            </span>
+          </div>
+          <small class="fechas-solicitud">
+            Recibida el {{ fecha(s.recibida_en) }}
+            <template v-if="s.vence_en"> · <strong>Fecha límite:</strong> {{ fecha(s.vence_en) }}</template>
+            <template v-if="s.resuelta_en"> · Respondida el {{ fecha(s.resuelta_en) }}</template>
+          </small>
           <p v-if="s.detalle" class="detalle-solicitud"><strong>Detalle enviado:</strong> {{ s.detalle }}</p>
-          <p v-if="s.respuesta" class="respuesta"><strong>Respuesta:</strong> {{ s.respuesta }}</p>
+          <div v-if="s.respuesta" class="respuesta-box" data-testid="respuesta-titular">
+            <strong>Respuesta del administrador:</strong>
+            <p class="respuesta">{{ s.respuesta }}</p>
+          </div>
         </li>
       </ul>
     </section>
@@ -432,7 +456,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { useAuth } from '../composables/useAuth.js'
 import { eliminarFactorMfa, listarFactoresTotp } from '../services/mfaService.js'
-import { derechosService, ESTADOS_SOLICITUD, TIPOS_DERECHO, textoPlazo } from '../services/derechosService.js'
+import {
+  derechosService,
+  ESTADOS_SOLICITUD,
+  TIPOS_DERECHO,
+  textoPlazo,
+  estaSolicitudVencida,
+  esSolicitudProximaAVencer,
+  clasificarPlazoSolicitud
+} from '../services/derechosService.js'
 import { NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA } from '../services/pacienteService.js'
 import { PLAZO_RESPUESTA_DIAS } from '../data/politicaPrivacidad.js'
 
@@ -483,6 +515,7 @@ const etiquetaTipo = (v) =>
   (v === 'revocar_consentimiento' ? 'Retiro del consentimiento' : v)
 const fecha = (iso) => new Date(iso).toLocaleDateString('es-CL')
 const plazo = (s) => textoPlazo(s.vence_en, s.estado)
+const clasePlazoTitular = (s) => `plazo-${clasificarPlazoSolicitud(s)}`
 const decir = (texto, tipoAviso = 'ok') => { aviso.value = { texto, tipo: tipoAviso } }
 
 function etiquetaRol(rol) {
@@ -1029,5 +1062,71 @@ h2 {
 .btn-modal-aceptar {
   width: 100%;
   min-height: 44px;
+}
+
+.item-solicitud-titular {
+  border-left: 4px solid #cbd5e1;
+}
+
+.item-solicitud-titular.plazo-vencida {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
+
+.item-solicitud-titular.plazo-proxima {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+
+.item-solicitud-titular.plazo-respondida {
+  border-left-color: #16a34a;
+}
+
+.fila-cabecera-solicitud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.insignia-plazo {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.insignia-plazo.vencida {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.insignia-plazo.proxima {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.insignia-plazo.en-plazo {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.fechas-solicitud {
+  color: #475569;
+  font-size: 0.84rem;
+}
+
+.respuesta-box {
+  margin-top: 0.35rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #14532d;
+  font-size: 0.9rem;
+}
+
+.respuesta-box .respuesta {
+  margin: 0.25rem 0 0;
 }
 </style>
