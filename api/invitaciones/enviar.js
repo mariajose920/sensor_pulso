@@ -1,94 +1,49 @@
 import { validarCorreoInstitucional } from '../../src/utils/validators.js'
+import { MAX_INVITACIONES_POR_ENVIO } from '../../src/utils/correosInvitacion.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
+import { escaparHtml, aplicarCabecerasSeguridad, validarOrigenCsrf } from '../_lib/proteccionWeb.js'
+import { enviarMensajes, leerConfiguracionCorreo } from '../_lib/correo.js'
 
-// Handler compatible con Vercel Serverless Functions y Vite Middleware
-export default async function handler(req, res) {
-  // Configuración de cabeceras CORS
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+/**
+ * Dirección de la web que llevan los botones del correo. Orden: APP_URL (producción) → el origen de la petición si es
+ * localhost (pruebas en local) → la web publicada. Nunca se toma un origen externo de la petición, para que nadie
+ * pueda usar este endpoint y poner enlaces a otro sitio dentro de un correo institucional.
+ */
+function urlBase(req) {
+  const configurada = (process.env.APP_URL || process.env.PUBLIC_APP_URL || '').trim().replace(/\/+$/, '')
+  if (/^https?:\/\/[^\s]+$/i.test(configurada)) return configurada
+  const origen = String((req.headers && req.headers.origin) || '')
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origen)) return origen
+  return 'https://sensorpulso.vercel.app'
+}
 
-  if (req.method === 'OPTIONS') {
-    res.statusCode = 204
-    return res.end()
-  }
+// Para direcciones dentro de href: solo se escapa lo que podría cerrar el atributo o abrir una etiqueta
+// (las barras se dejan tal cual para que el enlace sea legible y los clientes de correo no lo alteren).
+function escaparAtributo(valor) {
+  return String(valor).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
-  if (req.method !== 'POST') {
-    res.statusCode = 405
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'Método no permitido. Solo se acepta POST.' }))
-  }
+function responder(res, estado, cuerpo) {
+  res.statusCode = estado
+  res.setHeader('Content-Type', 'application/json')
+  return res.end(JSON.stringify(cuerpo))
+}
 
-  // RF67: Límite de peticiones para envío de invitaciones (anti-spam)
-  const ipCliente = extraerIp(req)
-  const claveRateLimit = `api:invitaciones:${ipCliente}`
-  const permitido = await aplicarLimitePeticiones(req, res, {
-    clave: claveRateLimit,
-    maximo: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_MAXIMO,
-    segundos: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_SEGUNDOS
-  })
-  if (!permitido) return
+/** Arma el asunto, el HTML y el texto del correo de un estudiante (todo el contenido del usuario va escapado, RF68). */
+function construirCorreo({ correo, codigo, nombreAula, nombreDocente, urlUnirse, urlSitio }) {
+  const urlUnirseEscapada = escaparAtributo(urlUnirse)
+  const urlSitioEscapada = escaparAtributo(urlSitio)
+  const nombreAulaEscapado = escaparHtml(nombreAula)
+  const nombreDocenteEscapado = escaparHtml(nombreDocente)
+  const codigoEscapado = escaparHtml(codigo)
+  const correoEscapado = escaparHtml(correo)
 
-  // Parsear cuerpo de la petición
-  let datos = {}
-  try {
-    datos = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
-  } catch (_) {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'Formato de cuerpo JSON inválido.' }))
-  }
-
-  const { correo, codigo, aulaNombre, profesorNombre } = datos
-
-  // 1. Validar correo institucional de estudiante
-  if (!correo) {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'El correo del estudiante es obligatorio.' }))
-  }
-
-  const validacion = validarCorreoInstitucional(correo)
-  if (!validacion.valido || validacion.rol !== 'usuario') {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ 
-      ok: false, 
-      error: 'El correo debe ser institucional con dominio @alu.unach.cl (estudiante).' 
-    }))
-  }
-
-  // 2. Validar código y nombre del aula
-  if (!codigo || typeof codigo !== 'string' || !codigo.trim()) {
-    res.statusCode = 400
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ ok: false, error: 'El código de acceso del aula es obligatorio.' }))
-  }
-
-  const nombreAula = (aulaNombre || 'Aula Virtual').trim()
-  const nombreDocente = (profesorNombre || 'Tu Docente').trim()
-  const codigoLimpio = codigo.trim().toUpperCase()
-  const correoLimpio = correo.trim().toLowerCase()
-
-  // 3. Obtener API Key de Resend
-  const resendApiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
-
-  if (!resendApiKey) {
-    res.statusCode = 503
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({ 
-      ok: false, 
-      error: 'Servicio de correo Resend no configurado. Falta la variable RESEND_API_KEY en el entorno.' 
-    }))
-  }
-
-  // 4. Construir plantilla HTML profesional del correo
-  const htmlContenido = `
+  const html = `
     <!DOCTYPE html>
     <html lang="es">
     <head>
       <meta charset="utf-8">
-      <title>Invitación al Aula: ${nombreAula}</title>
+      <title>Invitación al Aula: ${nombreAulaEscapado}</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px; color: #0f172a; }
         .card { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; }
@@ -113,20 +68,26 @@ export default async function handler(req, res) {
         </div>
         <div class="content">
           <p>Hola,</p>
-          <p>El docente <strong>${nombreDocente}</strong> te ha invitado a unirte al aula virtual <strong>${nombreAula}</strong>.</p>
-          
+          <p>El docente <strong>${nombreDocenteEscapado}</strong> te ha invitado a unirte al aula virtual <strong>${nombreAulaEscapado}</strong>.</p>
+
           <div class="code-box">
             <div class="code-label">Tu Código de Acceso</div>
-            <div class="code-value">${codigoLimpio}</div>
+            <div class="code-value">${codigoEscapado}</div>
           </div>
 
+          <p style="text-align: center; margin: 28px 0 12px;">
+            <a href="${urlUnirseEscapada}" style="display: inline-block; background: #1e40af; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 16px; padding: 14px 32px; border-radius: 8px;">Unirme al aula</a>
+          </p>
+          <p style="text-align: center; font-size: 14px; margin: 0 0 8px;">
+            <a href="${urlSitioEscapada}" style="color: #1e40af;">Ver la sala en el sitio web</a>
+          </p>
+
           <div class="steps">
-            <strong>Instrucciones para unirte:</strong>
+            <strong>Si el botón no funciona:</strong>
             <ol>
-              <li>Inicia sesión en la plataforma con tu correo institucional <code>${correoLimpio}</code>.</li>
-              <li>Ingresa a la sección <strong>Aulas y Cursos</strong>.</li>
-              <li>En el campo <em>"Unirse a un Aula Virtual"</em>, ingresa el código <strong>${codigoLimpio}</strong>.</li>
-              <li>Haz clic en <strong>Unirme al Aula</strong>.</li>
+              <li>Entra a <a href="${urlSitioEscapada}" style="color: #1e40af;">${urlSitioEscapada}</a> e inicia sesión con tu correo institucional <code>${correoEscapado}</code>.</li>
+              <li>Ve a la sección <strong>Aulas y Cursos</strong>.</li>
+              <li>En <em>"Unirse a un Aula Virtual"</em>, escribe el código <strong>${codigoEscapado}</strong> y pulsa <strong>Unirme al Aula</strong>.</li>
             </ol>
           </div>
         </div>
@@ -138,50 +99,140 @@ export default async function handler(req, res) {
     </html>
   `
 
-  // 5. Enviar a través de la API oficial de Resend
-  try {
-    const respuesta = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey.trim()}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Sensor Pulso UNACH <onboarding@resend.dev>',
-        to: [correoLimpio],
-        subject: `Invitación al Aula: ${nombreAula} (Código de Acceso: ${codigoLimpio})`,
-        html: htmlContenido,
-        text: `Invitación al Aula: ${nombreAula}\n\nDocente: ${nombreDocente}\nTu código de acceso es: ${codigoLimpio}\n\nIngresa a la plataforma con tu correo ${correoLimpio} y escribe el código en la sección de Aulas.`
-      })
-    })
+  return {
+    subject: `Invitación al Aula: ${nombreAula} (Código de Acceso: ${codigo})`,
+    html,
+    text: `Invitación al Aula: ${nombreAula}\n\nDocente: ${nombreDocente}\nTu código de acceso es: ${codigo}\n\nUnirme al aula: ${urlUnirse}\nVer la sala en el sitio web: ${urlSitio}\n\nInicia sesión con tu correo institucional ${correo}; si el enlace no funciona, escribe el código en la sección Aulas y Cursos.`
+  }
+}
 
-    const data = await respuesta.json().catch(() => ({}))
+// Handler compatible con Vercel Serverless Functions y Vite Middleware
+export default async function handler(req, res) {
+  // Configuración de cabeceras CORS y de seguridad (RF68)
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+  aplicarCabecerasSeguridad(res, 'api')
 
-    if (!respuesta.ok) {
-      const mensajeError = data.message || `Error del proveedor de correo (código ${respuesta.status})`
-      res.statusCode = respuesta.status >= 400 && respuesta.status < 600 ? respuesta.status : 500
-      res.setHeader('Content-Type', 'application/json')
-      return res.end(JSON.stringify({
-        ok: false,
-        error: mensajeError,
-        statusCode: respuesta.status
-      }))
-    }
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204
+    return res.end()
+  }
 
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({
-      ok: true,
-      id: data.id,
-      provider: 'resend',
-      mensaje: `Correo enviado exitosamente a ${correoLimpio}`
-    }))
-  } catch (errorRed) {
-    res.statusCode = 502
-    res.setHeader('Content-Type', 'application/json')
-    return res.end(JSON.stringify({
+  if (req.method !== 'POST') {
+    return responder(res, 405, { ok: false, error: 'Método no permitido. Solo se acepta POST.' })
+  }
+
+  // RF68: Validación de protección contra CSRF para peticiones mutables
+  const verificacionCsrf = validarOrigenCsrf(req)
+  if (!verificacionCsrf.permitido) {
+    return responder(res, verificacionCsrf.codigo || 403, {
       ok: false,
-      error: `Error de red al conectar con Resend: ${errorRed.message}`
-    }))
+      error: verificacionCsrf.error || 'Petición rechazada por protección CSRF.'
+    })
+  }
+
+  // RF67: Límite de peticiones para envío de invitaciones (anti-spam)
+  const ipCliente = extraerIp(req)
+  const claveRateLimit = `api:invitaciones:${ipCliente}`
+  const permitido = await aplicarLimitePeticiones(req, res, {
+    clave: claveRateLimit,
+    maximo: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_MAXIMO,
+    segundos: LIMITES_PETICIONES_CONFIG.API_INVITACIONES_SEGUNDOS
+  })
+  if (!permitido) return
+
+  // Parsear cuerpo de la petición
+  let datos = {}
+  try {
+    datos = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {})
+  } catch (_) {
+    return responder(res, 400, { ok: false, error: 'Formato de cuerpo JSON inválido.' })
+  }
+
+  const { correo, correos, codigo, aulaNombre, profesorNombre } = datos
+  // Una sola petición puede traer un correo (`correo`) o una lista (`correos`)
+  const esLote = Array.isArray(correos)
+  const candidatos = esLote ? correos : [correo]
+
+  // 1. Validar los correos institucionales de estudiante
+  const lista = [...new Set(candidatos.filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim().toLowerCase()))]
+  if (!lista.length) {
+    return responder(res, 400, {
+      ok: false,
+      error: esLote ? 'Agrega al menos un correo de estudiante.' : 'El correo del estudiante es obligatorio.'
+    })
+  }
+  if (lista.length > MAX_INVITACIONES_POR_ENVIO) {
+    return responder(res, 400, {
+      ok: false,
+      error: `Puedes invitar hasta ${MAX_INVITACIONES_POR_ENVIO} estudiantes por envío.`
+    })
+  }
+  const invalidos = lista.filter((c) => {
+    const v = validarCorreoInstitucional(c)
+    return !v.valido || v.rol !== 'usuario'
+  })
+  if (invalidos.length) {
+    return responder(res, 400, {
+      ok: false,
+      error: esLote
+        ? `Estos correos no son institucionales de estudiante (@alu.unach.cl): ${invalidos.join(', ')}.`
+        : 'El correo debe ser institucional con dominio @alu.unach.cl (estudiante).',
+      invalidos
+    })
+  }
+
+  // 2. Validar código y nombre del aula
+  if (!codigo || typeof codigo !== 'string' || !codigo.trim()) {
+    return responder(res, 400, { ok: false, error: 'El código de acceso del aula es obligatorio.' })
+  }
+
+  const nombreAula = (aulaNombre || 'Aula Virtual').trim()
+  const nombreDocente = (profesorNombre || 'Tu Docente').trim()
+  const codigoLimpio = codigo.trim().toUpperCase()
+
+  // 3. Cuenta de Gmail que envía (secretos exclusivos del servidor, RF69)
+  if (!leerConfiguracionCorreo().configurado) {
+    return responder(res, 503, {
+      ok: false,
+      error: 'Servicio de correo no configurado. Faltan las variables GMAIL_USER y GMAIL_APP_PASSWORD en el entorno.'
+    })
+  }
+
+  const sitio = urlBase(req)
+  const urlUnirse = `${sitio}/aulas?unirse=${encodeURIComponent(codigoLimpio)}`
+  const urlSitio = `${sitio}/aulas`
+  const mensajes = lista.map((destino) => ({
+    to: destino,
+    ...construirCorreo({ correo: destino, codigo: codigoLimpio, nombreAula, nombreDocente, urlUnirse, urlSitio })
+  }))
+
+  // 4. Enviar todos a la vez desde la cuenta de Gmail, un correo por estudiante.
+  //    Un correo rechazado no impide que salgan los demás; el resultado dice cuál falló y por qué.
+  try {
+    const resultados = await enviarMensajes(mensajes)
+    const enviados = resultados.filter((r) => r.ok).map((r) => ({ correo: r.correo, id: r.id || null }))
+    const fallidos = resultados.filter((r) => !r.ok).map((r) => ({ correo: r.correo, error: r.error }))
+
+    return responder(res, 200, {
+      ok: enviados.length > 0,
+      provider: 'gmail',
+      id: enviados[0]?.id || null,
+      enviados,
+      fallidos,
+      error: enviados.length ? undefined : (fallidos[0]?.error || 'No se pudo enviar ninguna invitación.'),
+      mensaje: enviados.length === 1 && !fallidos.length
+        ? `Correo enviado exitosamente a ${enviados[0].correo}`
+        : `Se enviaron ${enviados.length} de ${lista.length} invitaciones.`
+    })
+  } catch (errorEnvio) {
+    const mensajeError = `No se pudo enviar desde Gmail: ${errorEnvio.message}`
+    return responder(res, 502, {
+      ok: false,
+      error: mensajeError,
+      enviados: [],
+      fallidos: lista.map((c) => ({ correo: c, error: mensajeError }))
+    })
   }
 }

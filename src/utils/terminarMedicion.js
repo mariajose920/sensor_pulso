@@ -45,6 +45,7 @@ export const MENSAJES_TERMINAR = {
   publicar_sin_sesion: 'La medición se guardó, pero para publicar necesitas iniciar sesión.',
   publicar_conexion: 'La medición se guardó, pero no se pudo publicar: no hay conexión. Inténtalo más tarde.',
   publicar_no_sensor: 'La medición se guardó, pero solo se publican las mediciones hechas con el sensor.',
+  publicar_falta_confirmacion: 'La medición se guardó en privado, pero ninguna medición se publica sin una confirmación adicional y explícita del titular.',
   publicar_generico: 'La medición se guardó, pero no se pudo publicar. Intenta de nuevo más tarde.'
 }
 
@@ -100,6 +101,16 @@ export function puedePublicarPorCuenta({
       : { puede: false, codigo: 'sin_permiso' }
   }
   return { puede: true, codigo: 'ok' } // usuario/estudiante con sesión (RF31)
+}
+
+/**
+ * Regla por cuenta: ¿esta persona puede conectar el sensor y realizar mediciones? (RF31 + RF98)
+ * Reutiliza el control de sesión y el permiso docente `publicar_galeria`.
+ */
+export function puedeMedirConSensorPorCuenta({
+  haySesion, sesionReal = null, esAdmin = false, rol = 'usuario', permisos = null, permisoConsultado = true
+} = {}) {
+  return puedePublicarPorCuenta({ haySesion, sesionReal, esAdmin, rol, permisos, permisoConsultado })
 }
 
 /**
@@ -286,6 +297,31 @@ export function rangoDeEdad(edad) {
   return '50+'
 }
 
+/** Formatea la etiqueta de actividad para la tarjeta de vista previa pública. */
+export function formatearActividadVistaPrevia(actividad) {
+  const mapa = {
+    reposo: 'Reposo',
+    caminata: 'Caminata ligera',
+    ejercicio_moderado: 'Ejercicio moderado',
+    ejercicio_intenso: 'Ejercicio intenso',
+    post_ejercicio: 'Post-ejercicio'
+  }
+  const clave = String(actividad || 'reposo').trim().toLowerCase()
+  return mapa[clave] || String(actividad || 'Reposo')
+}
+
+/** Formatea la calidad de señal para la tarjeta de vista previa pública. */
+export function formatearCalidadVistaPrevia(calidad) {
+  const mapa = {
+    buena: 'Buena',
+    regular: 'Regular',
+    mala: 'Mala',
+    optima: 'Óptima'
+  }
+  const clave = String(calidad || 'buena').trim().toLowerCase()
+  return mapa[clave] || String(calidad || 'Buena')
+}
+
 /**
  * Vista previa de lo que verá cualquier persona al publicar (RF57): solo valores no identificativos.
  * No incluye nombre, ficha, fecha de nacimiento, edad exacta ni la cuenta.
@@ -298,15 +334,187 @@ export function vistaPreviaPublica(registro) {
   if (r.spo2) campos.push({ etiqueta: 'SpO₂', valor: `${r.spo2} %` })
   if (r.ritmo) campos.push({ etiqueta: 'Ritmo', valor: ETIQUETAS_RITMO[r.ritmo] || r.ritmo })
   if (r.calidad) campos.push({ etiqueta: 'Calidad de la señal', valor: r.calidad })
-  campos.push({ etiqueta: 'Rango de edad', valor: rangoDeEdad(d.edad) })
-  return { campos, excluidos: ['nombre', 'ficha del paciente', 'edad exacta', 'cuenta de quien midió'] }
+  const rango = rangoDeEdad(d.edad)
+  campos.push({ etiqueta: 'Rango de edad', valor: rango })
+
+  const ritmoEtiqueta = r.ritmo ? (ETIQUETAS_RITMO[r.ritmo] || r.ritmo) : 'Sinusal normal'
+  const tarjeta = {
+    insignia: 'Pública · Anónima',
+    autor: 'Participante UNACH (Anónimo)',
+    rangoEdad: `${rango} años`,
+    actividad: formatearActividadVistaPrevia(d.actividad || r.actividad),
+    calidad: formatearCalidadVistaPrevia(r.calidad || d.calidad),
+    bpmValor: r.bpm ? Math.round(r.bpm) : null,
+    bpmTexto: r.bpm ? `${Math.round(r.bpm)} BPM` : '— BPM',
+    spo2Texto: r.spo2 ? `${r.spo2} %` : '— %',
+    ritmoTexto: ritmoEtiqueta
+  }
+
+  return {
+    campos,
+    excluidos: ['nombre', 'ficha del paciente', 'edad exacta', 'cuenta de quien midió'],
+    tarjeta
+  }
+}
+
+/**
+ * Construye las filas de transformación de privacidad (antes vs después de anonimizar)
+ * para mostrar al usuario cómo se protegen sus datos identificativos antes de confirmar.
+ */
+export function construirTransformacionPrivacidad({
+  nombre = '',
+  correo = '',
+  edad = null,
+  declaracionId = null
+} = {}) {
+  const nombreOriginal = String(nombre || '').trim() || 'Titular de la medición'
+  const correoOriginal = String(correo || '').trim() || 'Cuenta institucional UNACH'
+  const tieneEdad = Number.isFinite(Number(edad)) && Number(edad) > 0
+  const edadOriginal = tieneEdad ? `${Number(edad)} años` : 'Registrada en ficha'
+  const rangoCalculado = `${rangoDeEdad(tieneEdad ? Number(edad) : null)} años`
+  const fichaTexto = declaracionId
+    ? `ID / Ficha clínica privada (${String(declaracionId).slice(0, 8)})`
+    : 'ID / Ficha clínica privada'
+
+  return [
+    {
+      clave: 'nombre',
+      etiquetaOriginal: `Nombre: ${nombreOriginal}`,
+      estadoBadge: 'Eliminado',
+      tipoBadge: 'danger',
+      valorPublico: 'Participante UNACH (Anónimo)'
+    },
+    {
+      clave: 'correo',
+      etiquetaOriginal: `Correo: ${correoOriginal}`,
+      estadoBadge: 'Oculto (No se envía)',
+      tipoBadge: 'danger',
+      valorPublico: null
+    },
+    {
+      clave: 'edad',
+      etiquetaOriginal: `Edad exacta: ${edadOriginal}`,
+      estadoBadge: `Agrupado en Rango: ${rangoCalculado}`,
+      tipoBadge: 'warning',
+      valorPublico: null
+    },
+    {
+      clave: 'ficha',
+      etiquetaOriginal: fichaTexto,
+      estadoBadge: 'Desvinculado permanentemente',
+      tipoBadge: 'danger',
+      valorPublico: null
+    }
+  ]
+}
+
+/**
+ * Genera un trazado SVG fotopletismográfico (PPG) representativo a partir del BPM medido
+ * para la tarjeta de vista previa pública.
+ */
+export function generarCurvaPpgVistaPrevia(bpm = 74) {
+  const ancho = 360
+  const alto = 54
+  const base = 42
+  const fc = Math.min(160, Math.max(45, Number(bpm) || 74))
+  const ciclos = Math.max(4, Math.min(8, Math.round((fc / 72) * 5)))
+  const pasoCiclo = ancho / ciclos
+  const puntos = []
+
+  for (let x = 0; x <= ancho; x += 2) {
+    const pos = (x % pasoCiclo) / pasoCiclo
+    const sistolico = Math.exp(-Math.pow((pos - 0.24) / 0.075, 2)) * 28
+    const dicrotico = Math.exp(-Math.pow((pos - 0.46) / 0.09, 2)) * 10
+    const y = Math.max(6, Math.min(alto - 4, base - sistolico - dicrotico))
+    puntos.push(`${x},${y.toFixed(1)}`)
+  }
+
+  const linea = `M ${puntos.join(' L ')}`
+  const area = `${linea} L ${ancho},${alto} L 0,${alto} Z`
+  return { linea, area, ancho, alto }
 }
 
 /** Comprobación de seguridad: ningún valor de la vista previa contiene el nombre del paciente. */
 export function vistaPreviaSinDatosIdentificables(vista, nombre) {
   const n = String(nombre || '').trim().toLowerCase()
   if (!n) return true
-  return !vista.campos.some(c => `${c.etiqueta} ${c.valor}`.toLowerCase().includes(n))
+  const enCampos = (vista?.campos || []).some(c => `${c.etiqueta} ${c.valor}`.toLowerCase().includes(n))
+  const t = vista?.tarjeta
+  const enTarjeta = t
+    ? `${t.autor || ''} ${t.rangoEdad || ''} ${t.bpmTexto || ''} ${t.spo2Texto || ''} ${t.ritmoTexto || ''}`.toLowerCase().includes(n)
+    : false
+  return !enCampos && !enTarjeta
+}
+
+// ───────────────────────────── Confirmación Explícita del Titular (RF91) ─────────────────────────────
+
+/** Formatea la fecha y hora exacta en que el titular otorgó su confirmación explícita. */
+export function formatearFechaConfirmacionTitular(fecha = new Date()) {
+  const d = fecha instanceof Date ? fecha : new Date(fecha)
+  if (Number.isNaN(d.getTime())) return ''
+  const dia = String(d.getDate()).padStart(2, '0')
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const anio = d.getFullYear()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${dia}/${mes}/${anio}, ${hh}:${mm} hrs`
+}
+
+/**
+ * Valida que el titular haya otorgado una confirmación adicional y explícita (`confirmado === true`)
+ * antes de permitir cualquier publicación comunitaria. Por defecto toda medición es privada.
+ */
+export function validarConfirmacionExplicitaTitular({
+  confirmado = false,
+  titularNombre = '',
+  titularCorreo = '',
+  fechaConfirmacion = null
+} = {}) {
+  const esConfirmacionValida = confirmado === true
+  const identidadTitular = String(titularCorreo || titularNombre || 'Cuenta autenticada UNACH').trim()
+
+  if (!esConfirmacionValida) {
+    return {
+      autorizado: false,
+      puedePublicar: false,
+      confirmado: false,
+      titular: identidadTitular,
+      codigo: 'falta_confirmacion',
+      mensaje: MENSAJES_TERMINAR.publicar_falta_confirmacion,
+      estadoEtiqueta: 'Protección del Titular · Privada por Defecto',
+      textoDeclaracion:
+        'Confirmo de forma explícita y voluntaria como titular de esta medición que autorizo su publicación anónima en la Galería Pública UNACH. Comprendo que puedo retirar esta publicación en cualquier momento.',
+      mensajeEstado:
+        'Requisito obligatorio: Ninguna medición se publica automáticamente. Debes marcar la casilla de confirmación explícita del titular para habilitar el botón de publicación.',
+      textoBotonPublicar: 'Confirmar y Publicar de Forma Anónima (Bloqueado)',
+      fechaIso: null,
+      fechaTexto: null,
+      confirmadaEnIso: null,
+      confirmadaEnTexto: null
+    }
+  }
+
+  const instante = fechaConfirmacion ? new Date(fechaConfirmacion) : new Date()
+  const iso = instante.toISOString()
+  const textoFecha = formatearFechaConfirmacionTitular(instante)
+  return {
+    autorizado: true,
+    puedePublicar: true,
+    confirmado: true,
+    titular: identidadTitular,
+    codigo: 'confirmacion_verificada',
+    mensaje: null,
+    estadoEtiqueta: 'Confirmación Registrada',
+    textoDeclaracion:
+      'Confirmo de forma explícita y voluntaria como titular de esta medición que autorizo su publicación anónima en la Galería Pública UNACH. Comprendo que puedo retirar esta publicación en cualquier momento.',
+    mensajeEstado:
+      `Confirmación explícita verificada · Titular: ${identidadTitular} · Se registrará fecha y hora exacta de confirmación`,
+    textoBotonPublicar: 'Confirmar y Publicar de Forma Anónima',
+    fechaIso: iso,
+    fechaTexto: textoFecha,
+    confirmadaEnIso: iso,
+    confirmadaEnTexto: textoFecha
+  }
 }
 
 // ───────────────────────────── Mensajes de resultado y errores ─────────────────────────────
@@ -367,6 +575,7 @@ export function clasificarErrorPublicacion(error) {
   if (!error) return 'generico'
   const texto = `${error.message || ''} ${error.details || ''}`.toLowerCase()
   const codigo = String(error.code || '')
+  if (texto.includes('confirmaci') && (texto.includes('titular') || texto.includes('explicita') || texto.includes('explícita'))) return 'falta_confirmacion'
   if (texto.includes('requiere sesi')) return 'sin_sesion'
   if (texto.includes('no tiene permiso')) return 'sin_permiso'
   if (texto.includes('consentimiento')) return 'consentimiento'
@@ -385,6 +594,7 @@ const CAUSAS_HISTORIAL = {
   sin_sesion: 'necesitas iniciar sesión.',
   sin_permiso: 'tu cuenta no tiene el permiso de publicar (lo da el administrador).',
   consentimiento: 'no tienes un consentimiento informado vigente.',
+  falta_confirmacion: 'ninguna medición se publica sin una confirmación adicional y explícita del titular.',
   no_sensor: 'solo se publican las mediciones hechas con el sensor y ya terminadas.',
   conexion: 'no hay conexión. Inténtalo más tarde.',
   sin_id: 'no se obtuvo el identificador de la medición.'

@@ -97,6 +97,7 @@ const enlacesBase = [
   { to: '/medicion', texto: 'Medición', corto: 'Medición', icono: 'medicion' },
   { to: '/dispositivos', texto: 'Dispositivos', corto: 'Equipos', icono: 'medicion' },
   { to: '/comparacion', texto: 'Comparación', corto: 'Comparar', icono: 'comparacion' },
+  { to: '/galeria', texto: 'Galería', corto: 'Galería', icono: 'comparacion' },
   { to: '/aulas', texto: 'Aulas', corto: 'Aulas', icono: 'aulas' },
   { to: '/aprendizaje', texto: 'Aprendizaje', corto: 'Aprender', icono: 'aprendizaje' }
 ]
@@ -113,7 +114,7 @@ const { isAuthenticated, currentUserName, roleLabel, isAdmin, isProfesor, logout
 // Si se cierra la sesión estando en una pantalla que la exige (por ejemplo Medición), se vuelve al login
 const rutaActual = useRoute()
 watch(isAuthenticated, (conSesion) => {
-  if (!conSesion && rutaActual.meta?.requiresAuth) {
+  if (!conSesion && rutaActual.meta?.requiresAuth && rutaActual.name !== 'Medicion') {
     router.push({ name: 'Login', query: { motivo: motivoDeRuta(rutaActual.name) } })
   }
 })
@@ -129,8 +130,8 @@ const manejarCerrarOtrasSesiones = async () => {
 // RF97: el enlace Admin solo lo ven los administradores; RF19: Rangos, los profesores
 // RF30: el historial de mediciones solo lo ve quien tiene sesión
 const enlaces = computed(() => {
-  // Sin sesión no hay sensor: Medición, Dispositivos y Aulas solo las ve quien inició sesión
-  const lista = enlacesBase.filter(e => !ENLACES_SOLO_CON_SESION.includes(e.to) || isAuthenticated.value)
+  // Medición es visible en la barra para mostrar el aviso institucional de inicio de sesión y acceso al simulador
+  const lista = enlacesBase.filter(e => e.to === '/medicion' || !ENLACES_SOLO_CON_SESION.includes(e.to) || isAuthenticated.value)
   if (isAuthenticated.value) lista.push({ to: '/historial', texto: 'Historial', corto: 'Historial', icono: 'comparacion' })
   if (isAdmin.value || isProfesor.value) lista.push({ to: '/evaluaciones', texto: 'Evaluaciones', corto: 'Evaluar', icono: 'aulas' })   // RF106
   if (isAdmin.value) lista.push({ to: '/admin', texto: 'Admin', corto: 'Admin', icono: 'usuario' })

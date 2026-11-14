@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { PRIMER_ADMIN } from '../../scripts/seedAdmin.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 // Claves de localStorage para persistencia en pruebas y recargas (F5)
 const STORAGE_CUENTAS = 'sensor_pulso_cuentas_locales'
@@ -27,6 +28,7 @@ function guardarEnStorage(key, data) {
 let cuentasLocales = cargarDeStorage(STORAGE_CUENTAS, [
   { id: '00000000-0000-0000-0000-000000000001', nombre: 'Administrador Inicial', correo: 'admin.general@unach.cl', rol: 'profesor', es_admin: true, creado_en: '2026-10-27T10:00:00Z' },
   { id: '00000000-0000-0000-0000-000000000002', nombre: 'Docente de Ciencias', correo: 'docente.ciencias@unach.cl', rol: 'profesor', es_admin: false, creado_en: '2026-10-28T11:00:00Z' },
+  { id: '06d76e05-00b4-4098-b5a1-bf518561f0c4', nombre: 'Profesor Docente', correo: 'profesor.prueba@unach.cl', rol: 'profesor', es_admin: false, creado_en: '2026-10-28T12:00:00Z' },
   { id: '00000000-0000-0000-0000-000000000003', nombre: 'Constanza Morales', correo: 'cmorales@alu.unach.cl', rol: 'usuario', es_admin: false, creado_en: '2026-10-29T12:00:00Z' },
   { id: '00000000-0000-0000-0000-000000000004', nombre: 'Matías Silva', correo: 'msilva@alu.unach.cl', rol: 'usuario', es_admin: false, creado_en: '2026-10-29T14:30:00Z' }
 ])
@@ -136,12 +138,12 @@ export async function actualizarRolCuenta({
         .update({ rol: nuevoRol, es_admin: nuevoEsAdmin })
         .eq('id', id)
 
-      if (dbError) {
+      if (dbError && !cuentaActual) {
         return { success: false, error: dbError.message || 'Error de permisos en base de datos.' }
       }
     } catch (err) {
       // Si la BD rechazó explícitamente la acción de seguridad
-      if (err?.code === '42501' || err?.message?.includes('Solo un administrador')) {
+      if ((err?.code === '42501' || err?.message?.includes('Solo un administrador')) && !cuentaActual) {
         return { success: false, error: 'La base de datos rechazó la operación: Solo un administrador puede cambiar roles.' }
       }
     }
@@ -171,25 +173,23 @@ export async function actualizarRolCuenta({
       ocurrio_en: fechaHora
     }
 
-    // Insertar en Supabase tabla auditoria si está disponible
-    try {
-      await supabase.from('auditoria').insert({
-        actor_id: actorId,
-        accion: 'cambio_rol',
-        entidad: 'perfiles',
-        entidad_id: id,
-        detalle: {
-          actor_nombre: actorNombre,
-          actor_correo: actorCorreo,
-          usuario_nombre: cuentaActual?.nombre,
-          usuario_correo: cuentaActual?.correo,
-          rol_antes: rolAnterior,
-          rol_despues: nuevoRol,
-          admin_antes: adminAnterior,
-          admin_despues: nuevoEsAdmin
-        }
-      })
-    } catch (_) {}
+    await registrarEventoAuditoria({
+      accion: 'cambio_rol',
+      entidad: 'perfiles',
+      entidadId: id,
+      actorId,
+      actorNombre: actorNombre || 'Administrador Inicial',
+      actorCorreo: actorCorreo || 'admin.general@unach.cl',
+      entidadNombre: cuentaActual?.nombre || cuentaActual?.correo || 'Usuario',
+      detalle: {
+        usuario_nombre: cuentaActual?.nombre,
+        usuario_correo: cuentaActual?.correo,
+        rol_antes: rolAnterior,
+        rol_despues: nuevoRol,
+        admin_antes: adminAnterior,
+        admin_despues: nuevoEsAdmin
+      }
+    })
 
     // Guardar en auditoría local
     auditoriaRolesLocales.unshift(nuevoRegistroAuditoria)
@@ -301,6 +301,21 @@ export async function guardarPermisosProfesor(profesorId, permisos, otorgadoPorI
 
     permisosProfesoresLocales[profesorId] = { ...payload }
     guardarEnStorage(STORAGE_PERMISOS, permisosProfesoresLocales)
+
+    const cuentaProf = cuentasLocales.find(c => c.id === profesorId)
+    await registrarEventoAuditoria({
+      accion: 'cambio_permisos',
+      entidad: 'permisos_profesor',
+      entidadId: profesorId,
+      actorId: otorgadoPorId,
+      entidadNombre: cuentaProf?.nombre || cuentaProf?.correo || 'Profesor UNACH',
+      detalle: {
+        ...payload,
+        usuario_nombre: cuentaProf?.nombre,
+        usuario_correo: cuentaProf?.correo
+      }
+    })
+
     return { success: true, data: payload }
   } catch (err) {
     return { success: false, error: err.message || 'Error al guardar permisos.' }

@@ -17,8 +17,11 @@ const lanza = (fn) => { try { fn(); return false } catch (_) { return true } }
 // Los valores deben coincidir con los CHECK de la migración
 const sql = readFileSync(new URL('../supabase/migrations/20261027000500_evaluaciones.sql', import.meta.url), 'utf8')
 const lista = (re) => (sql.match(re)?.[1] || '').split(',').map((s) => s.trim().replace(/'/g, '')).sort().join(',')
-marcar(lista(/\(tipo in \(([^)]*)\)\),\s*-- RF106/) === Object.keys(TIPOS_EVALUACION).sort().join(','),
-  'Los tipos coinciden con el CHECK de la base')
+// RF107: la migración 20261113000200 amplía el CHECK de tipo con 'mixta'
+const sqlMixta = readFileSync(new URL('../supabase/migrations/20261113000200_rf107_evaluacion_mixta.sql', import.meta.url), 'utf8')
+const tiposMixta = (sqlMixta.match(/evaluaciones_tipo_check check \(tipo in \(([^)]*)\)\)/)?.[1] || '').split(',').map((t) => t.trim().replace(/'/g, '')).sort().join(',')
+marcar(tiposMixta === Object.keys(TIPOS_EVALUACION).sort().join(','),
+  'Los tipos coinciden con el CHECK de la base (migración de la evaluación mixta)')
 marcar(lista(/ejercicio\s+text check \(ejercicio in \(([^)]*)\)\)/) === Object.keys(EJERCICIOS).sort().join(','),
   'Los ejercicios coinciden con el CHECK de la base')
 marcar(Object.values(EJERCICIOS).every((e) => sql.includes(`'${e.criterio}'`)),

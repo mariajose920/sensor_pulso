@@ -9,7 +9,7 @@
  * - Control de bloqueo previo a la captura del sensor (RF04).
  */
 import { ref } from 'vue'
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
 
 const LOCAL_CONSENT_KEY = 'sensor_consentimiento_aceptado_rf04'
 const LOCAL_HISTORIAL_KEY = 'sensor_consentimiento_historial_rf59'

@@ -10,6 +10,7 @@
  * Valores orientativos de uso educativo; no son criterios clínicos.
  */
 import { supabase } from './supabase'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 export const LIMITES = {
   edadMin: 0,
@@ -104,11 +105,22 @@ export async function listarRangos({ incluirInactivos = false } = {}) {
 export async function crearRango(rango, usuarioId) {
   const errores = validarRango(rango)
   if (errores.length) return { success: false, error: errores.join(' ') }
+  const norm = normalizar(rango)
   const { data, error } = await supabase
     .from('rangos')
-    .insert({ ...normalizar(rango), actualizado_por: usuarioId })
+    .insert({ ...norm, actualizado_por: usuarioId })
     .select()
     .single()
+
+  await registrarEventoAuditoria({
+    accion: 'cambio_rangos',
+    entidad: 'rangos',
+    entidadId: data?.id || `rango-${norm.actividad_id}-${norm.edad_min}-${norm.edad_max}`,
+    actorId: usuarioId,
+    entidadNombre: `Rango (${norm.edad_min}-${norm.edad_max} años)`,
+    detalle: { operacion: 'INSERT', despues: norm }
+  })
+
   if (error) return fallo(error, 'No se pudo crear el rango.')
   return { success: true, data }
 }
@@ -117,12 +129,23 @@ export async function crearRango(rango, usuarioId) {
 export async function actualizarRango(id, rango, usuarioId) {
   const errores = validarRango(rango)
   if (errores.length) return { success: false, error: errores.join(' ') }
+  const norm = normalizar(rango)
   const { data, error } = await supabase
     .from('rangos')
-    .update({ ...normalizar(rango), actualizado_por: usuarioId, actualizado_en: new Date().toISOString() })
+    .update({ ...norm, actualizado_por: usuarioId, actualizado_en: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()
+
+  await registrarEventoAuditoria({
+    accion: 'cambio_rangos',
+    entidad: 'rangos',
+    entidadId: id,
+    actorId: usuarioId,
+    entidadNombre: `Rango (${norm.edad_min}-${norm.edad_max} años)`,
+    detalle: { operacion: 'UPDATE', despues: norm }
+  })
+
   if (error) return fallo(error, 'No se pudo actualizar el rango.')
   return { success: true, data }
 }
@@ -133,6 +156,17 @@ export async function cambiarVigencia(id, vigente, usuarioId) {
     .from('rangos')
     .update({ vigente, actualizado_por: usuarioId, actualizado_en: new Date().toISOString() })
     .eq('id', id)
+
+  await registrarEventoAuditoria({
+    accion: 'cambio_rangos',
+    entidad: 'rangos',
+    entidadId: id,
+    actorId: usuarioId,
+    entidadNombre: `Rango #${String(id).slice(0, 8)}`,
+    resumen: `Cambio de vigencia de rango fisiológico: ${vigente ? 'Activado' : 'Desactivado'}`,
+    detalle: { operacion: 'VIGENCIA', vigente }
+  })
+
   if (error) return fallo(error, 'No se pudo cambiar el estado del rango.')
   return { success: true }
 }
@@ -153,7 +187,8 @@ export async function listarRangosPersonales(profesorId) {
 export async function guardarRangoPersonal(profesorId, rango, id = null) {
   const errores = validarRango(rango)
   if (errores.length) return { success: false, error: errores.join(' ') }
-  const payload = { ...normalizar(rango), profesor_id: profesorId }
+  const norm = normalizar(rango)
+  const payload = { ...norm, profesor_id: profesorId }
   const q = id
     ? supabase.from('rangos_personales').update(payload).eq('id', id)
     : supabase.from('rangos_personales').insert(payload)
@@ -161,6 +196,14 @@ export async function guardarRangoPersonal(profesorId, rango, id = null) {
   if (error?.code === '23505') {
     return { success: false, error: 'Ya tienes un rango personal para esa actividad y ese tramo de edad.' }
   }
+  await registrarEventoAuditoria({
+    accion: 'cambio_rangos',
+    entidad: 'rangos_personales',
+    entidadId: data?.id || id || `personal-${norm.edad_min}-${norm.edad_max}`,
+    actorId: profesorId,
+    entidadNombre: `Rango Personal (${norm.edad_min}-${norm.edad_max} años)`,
+    detalle: { operacion: id ? 'UPDATE' : 'INSERT', despues: norm }
+  })
   if (error) return fallo(error, 'No se pudo guardar el rango.')
   return { success: true, data }
 }
@@ -168,6 +211,13 @@ export async function guardarRangoPersonal(profesorId, rango, id = null) {
 /** Profesor: vuelve al rango global quitando su rango personal. */
 export async function eliminarRangoPersonal(id) {
   const { error } = await supabase.from('rangos_personales').delete().eq('id', id)
+  await registrarEventoAuditoria({
+    accion: 'cambio_rangos',
+    entidad: 'rangos_personales',
+    entidadId: id,
+    entidadNombre: `Rango Personal #${String(id).slice(0, 8)}`,
+    resumen: 'Restauración a rango global (eliminación de rango personal)'
+  })
   if (error) return fallo(error, 'No se pudo quitar el rango personal.')
   return { success: true }
 }

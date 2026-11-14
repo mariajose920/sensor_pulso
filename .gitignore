@@ -2,7 +2,6 @@ node_modules/
 dist/
 .env
 .env.*
-!.env.example
 .DS_Store
 *.log
 .vercel/
@@ -11,6 +10,20 @@ dist/
 supabase/.temp/
 supabase/.branches/
 supabase/seed.sql
+
+# Secretos, claves privadas y certificados (RF69)
+*.pem
+*.key
+*.p12
+*.pkcs12
+*.crt
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+credentials.json
+service-account*.json
+client_secret*.json
 
 # Capturas de las pruebas responsivas (RNF01)
 pruebas-responsivas/

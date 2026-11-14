@@ -334,7 +334,12 @@
                 <div class="eval-card-badge-row">
                   <span class="eval-status-pill" :class="ev.activa ? 'status-activa' : 'status-borrador'">
                     <span class="status-dot"></span>
-                    {{ ev.activa ? 'Activa' : 'Borrador' }}
+                    {{ {
+                      borrador: 'Borrador',
+                      programada: 'Programada',
+                      en_curso: 'En curso',
+                      cerrada: 'Cerrada'
+                    }[ev.estado] }}
                   </span>
                   
                   <!-- Badge del Alcance RF104 -->
@@ -342,8 +347,12 @@
                     🎯 {{ obtenerTextoAsignacion(ev) }}
                   </span>
 
-                  <span class="eval-tag-tipo">{{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico' }}</span>
+                  <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
+                <p v-if="ev.modo === 'en_vivo' && ev.abre_en && ev.estado === 'programada'" class="eval-inicio-auto" data-testid="inicio-automatico-aviso">
+                  ⏱ Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
+                  (no hace falta iniciarla en vivo)
+                </p>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
                 <p class="eval-card-desc">{{ ev.descripcion || 'Sin instrucciones adicionales especificadas.' }}</p>
               </div>
@@ -370,6 +379,18 @@
               </div>
 
               <div class="eval-card-footer" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <!-- Botón Docente 0: Monitoreo en Vivo (RF113) -->
+                <button 
+                  v-if="isAdmin || isProfesor"
+                  @click="abrirPanelEnVivo(ev)" 
+                  class="btn-eval-accion"
+                  style="flex: 2; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-weight: 700;"
+                  title="Ver respuestas y estudiantes conectados en tiempo real (RF113)"
+                  data-testid="btn-abrir-panel-en-vivo"
+                >
+                  <span>⚡ Monitoreo en Vivo</span>
+                </button>
+
                 <!-- Botón Docente 1: Ver Desempeño (RF117) -->
                 <button 
                   v-if="isAdmin || isProfesor"
@@ -394,14 +415,38 @@
                   <span>🎯 Asignar</span>
                 </button>
 
-                <!-- Botón Estudiante: Rendir Evaluación -->
-                <button 
-                  v-if="!isAdmin && !isProfesor"
-                  class="btn-eval-accion"
-                  style="background: #10b981;"
-                  @click="mostrarFeedback(true, 'Iniciando evaluación asignada para tu perfil...')"
+                <!-- Botón Docente: eliminar la evaluación (con sus asignaciones y resultados) -->
+                <button
+                  v-if="isAdmin || isProfesor"
+                  type="button"
+                  class="btn-eval-accion btn-secundario-eval"
+                  data-testid="eliminar-evaluacion-aula"
+                  style="flex: 1; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca;"
+                  :disabled="eliminandoEvaluacionId === ev.id"
+                  title="Eliminar esta evaluación y sus asignaciones"
+                  @click="confirmarEliminarEvaluacionAsignada(ev)"
                 >
-                  <span>📝 Rendir Evaluación</span>
+                  <span>🗑️ Eliminar</span>
+                </button>
+
+                <button
+                  v-if="(isProfesor || isAdmin) && ev.modo === 'en_vivo' && ev.estado === 'programada'"
+                  type="button"
+                  class="btn-eval-accion"
+                  :disabled="Boolean(controlandoEvaluacionId)"
+                  @click="controlarEnVivo(ev, 'iniciar')"
+                >
+                  {{ ev.abre_en ? 'Iniciar ahora (adelantar)' : 'Iniciar en vivo' }}
+                </button>
+
+                <button
+                  v-if="(isProfesor || isAdmin) && ev.modo === 'en_vivo' && ev.estado === 'en_curso'"
+                  type="button"
+                  class="btn-eval-accion"
+                  :disabled="Boolean(controlandoEvaluacionId)"
+                  @click="controlarEnVivo(ev, 'cerrar')"
+                >
+                  Cerrar en vivo
                 </button>
               </div>
             </div>
@@ -443,6 +488,17 @@
               </div>
             </div>
           </div>
+
+          <!-- PANEL DE AVANCE EN VIVO (RF113: Contador de respuestas y estudiantes conectados) -->
+          <PanelAvanceEnVivo
+            v-if="mostrarPanelEnVivo || evaluacionSeleccionada?.modo === 'en_vivo'"
+            :evaluacion-id="evaluacionSeleccionada.id"
+            :aula-id="aula.id"
+            :es-profesor-o-admin="isAdmin || isProfesor"
+            :permite-cerrar="evaluacionSeleccionada?.modo !== 'en_vivo'"
+            @cerrar="mostrarPanelEnVivo = false"
+            @actualizado="alActualizarEnVivo"
+          />
 
           <!-- Métricas Agregadas del Aula (KPI Cards) -->
           <div v-if="estadisticasEval" class="kpi-metricas-grid mb-4">
@@ -934,7 +990,7 @@
     <!-- MODAL INVITAR ESTUDIANTE POR CORREO (RF100) -->
     <div v-if="modalInvitarAbierto" class="modal-backdrop" @click.self="modalInvitarAbierto = false">
       <div class="modal-card">
-        <h3 class="modal-title">Invitar Estudiante al Aula</h3>
+        <h3 class="modal-title">Invitar Estudiantes al Aula</h3>
         <p class="modal-subtitle">
           Aula: <strong>{{ aula?.nombre }}</strong> (Código: <code>{{ aula?.codigo }}</code>)
         </p>
@@ -943,28 +999,15 @@
           <strong>Error de envío:</strong> {{ errorInvitacionModal }}
         </div>
 
-        <form @submit.prevent="enviarInvitacion">
-          <div class="form-group">
-            <label class="form-label">Correo Institucional del Estudiante (@alu.unach.cl) *</label>
-            <input 
-              v-model="correoInvitacion" 
-              type="email" 
-              class="form-input" 
-              placeholder="estudiante@alu.unach.cl" 
-              required 
-              :disabled="enviandoInvitacion"
-            />
-            <small class="help-text">El código de acceso será enviado a través de Resend a la casilla del estudiante.</small>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="modalInvitarAbierto = false" class="btn btn-secondary" :disabled="enviandoInvitacion">Cancelar</button>
-            <button type="submit" class="btn btn-primary" :disabled="enviandoInvitacion">
-              <span v-if="enviandoInvitacion">Enviando con Resend...</span>
-              <span v-else>Enviar Invitación</span>
-            </button>
-          </div>
-        </form>
+        <InvitacionMasivaForm
+          ref="formInvitacion"
+          :aula-id="aula?.id || ''"
+          :profesor-id="currentUserId || ''"
+          :profesor-nombre="currentUserName || ''"
+          :es-admin="!!isAdmin"
+          @resultado="alEnviarInvitaciones"
+          @cerrar="modalInvitarAbierto = false"
+        />
 
         <!-- Historial de invitaciones -->
         <div class="invitaciones-historial mt-4" style="margin-top: 1.5rem; border-top: 1px solid var(--color-border); padding-top: 1rem;">
@@ -1116,12 +1159,65 @@
           <!-- 1. Selección de Evaluación -->
           <div class="form-group mb-3">
             <label class="form-label">Evaluación a Asignar *</label>
-            <select v-model="evaluacionParaAsignarId" class="form-select" required>
+            <select v-model="evaluacionParaAsignarId" class="form-select" required @change="cargarConfiguracionAsignacion">
               <option disabled value="">-- Selecciona una evaluación --</option>
               <option v-for="ev in evaluaciones" :key="ev.id" :value="ev.id">
-                {{ ev.titulo }} ({{ ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica' }})
+                {{ ev.titulo }} ({{ ev.tipo === 'mixta' ? 'Mixta' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica' : 'Teórica') }})
               </option>
             </select>
+          </div>
+
+          <div class="form-group mb-3">
+            <label class="form-label" for="rf109-modo">Modo de aplicación</label>
+            <select id="rf109-modo" v-model="modoAplicacion" class="form-select" required>
+              <option value="ventana">Ventana de fechas</option>
+              <option value="en_vivo">En vivo</option>
+            </select>
+          </div>
+
+          <div v-if="modoAplicacion === 'ventana'" class="form-group mb-3">
+            <label class="form-label" for="rf109-apertura">Fecha y hora de apertura</label>
+            <input
+              id="rf109-apertura"
+              v-model="abreEnAplicacion"
+              type="datetime-local"
+              class="form-input"
+              required
+            />
+
+            <label class="form-label" for="rf109-cierre">Fecha y hora de cierre</label>
+            <input
+              id="rf109-cierre"
+              v-model="cierraEnAplicacion"
+              type="datetime-local"
+              class="form-input"
+              required
+            />
+          </div>
+          <div v-else class="form-group mb-3">
+            <label class="form-label" for="rf109-inicio-auto">Inicio automático (opcional)</label>
+            <input
+              id="rf109-inicio-auto"
+              v-model="abreEnAplicacion"
+              type="datetime-local"
+              class="form-input"
+              data-testid="inicio-automatico"
+            />
+            <small class="help-text">
+              Si indicas fecha y hora, la evaluación en vivo se inicia sola y no tendrás que entrar a pulsar «Iniciar en vivo».
+              Déjalo vacío para iniciarla tú a mano.
+            </small>
+
+            <label class="form-label" for="rf109-duracion" style="margin-top: 0.75rem;">Tiempo límite en minutos</label>
+            <input
+              id="rf109-duracion"
+              v-model.number="duracionAplicacionMin"
+              type="number"
+              min="1"
+              step="1"
+              class="form-input"
+              required
+            />
           </div>
 
           <!-- 2. Selección de Alcance (Las 3 modalidades del RF104) -->
@@ -1221,10 +1317,17 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import PanelAvanceEnVivo from '../components/PanelAvanceEnVivo.vue'
+import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
-import { asignarEvaluacion } from '../services/evaluacionesService'
+import {
+  eliminarEvaluacion,
+  contarIntentos,
+  asignarEvaluacion,
+  controlarEvaluacionEnVivo
+} from '../services/evaluacionesService'
 import {
   obtenerAulaPorId,
   obtenerEstudiantesAula,
@@ -1234,7 +1337,6 @@ import {
   obtenerEstadisticasEvaluacionAula,
   alternarEstadoCodigoAula,
   regenerarCodigoAulaDocente,
-  enviarInvitacionCorreo,
   obtenerInvitacionesAula,
   crearCurso,
   renombrarCurso,
@@ -1263,8 +1365,7 @@ const feedbackExito = ref(true)
 
 // Modales
 const modalInvitarAbierto = ref(false)
-const correoInvitacion = ref('')
-const enviandoInvitacion = ref(false)
+const formInvitacion = ref(null)
 const errorInvitacionModal = ref('')
 const listaInvitaciones = ref([])
 const cargandoInvitaciones = ref(false)
@@ -1281,11 +1382,25 @@ const guardandoAsignacion = ref(false)
 
 // RF117: Visibilidad del profesor sobre evaluaciones asignadas
 const evaluacionSeleccionada = ref(null)
+const mostrarPanelEnVivo = ref(true)
 const intentosEvaluacion = ref([])
 const estadisticasEval = ref(null)
 const cargandoDesempeno = ref(false)
 const intentoVerRespuestas = ref(null)
 const intentoVerMedicion = ref(null)
+
+const abrirPanelEnVivo = (ev) => {
+  mostrarPanelEnVivo.value = true
+  seleccionarEvaluacionParaVer(ev)
+}
+
+const alActualizarEnVivo = (datos) => {
+  if (datos && datos.evaluacion_id === evaluacionSeleccionada.value?.id) {
+    if (datos.estado && evaluacionSeleccionada.value) {
+      evaluacionSeleccionada.value.estado = datos.estado
+    }
+  }
+}
 
 const seleccionarEvaluacionParaVer = async (ev) => {
   evaluacionSeleccionada.value = ev
@@ -1397,6 +1512,7 @@ const cargarDatos = async () => {
     estudiantes.value = resEst.data || []
     cursos.value = resCur.data || []
     evaluaciones.value = resEv.data || []
+    if (!resEv.success) mostrarFeedback(false, resEv.error)
   } catch (err) {
     console.error('Error cargando pestañas del aula:', err)
   } finally {
@@ -1468,39 +1584,25 @@ const cargarHistorialInvitaciones = async () => {
 }
 
 const abrirModalInvitar = async () => {
-  correoInvitacion.value = ''
   errorInvitacionModal.value = ''
   modalInvitarAbierto.value = true
+  formInvitacion.value?.limpiar?.()
   await cargarHistorialInvitaciones()
 }
 
-const enviarInvitacion = async () => {
-  if (!correoInvitacion.value) return
-  enviandoInvitacion.value = true
-  errorInvitacionModal.value = ''
-
-  const res = await enviarInvitacionCorreo({
-    aulaId: aula.value.id,
-    correoEstudiante: correoInvitacion.value,
-    profesorId: currentUserId.value,
-    profesorNombre: currentUserName.value,
-    esAdmin: isAdmin.value
-  })
-
-  enviandoInvitacion.value = false
-
+// El formulario de invitaciones avisa cuando termina un envío (uno o varios correos)
+const alEnviarInvitaciones = async (res) => {
   if (res.success) {
     mostrarFeedback(true, res.message)
     errorInvitacionModal.value = ''
-    correoInvitacion.value = ''
-    modalInvitarAbierto.value = false
+    if (res.todoEnviado) modalInvitarAbierto.value = false
     // Recargar estudiantes
     const resEst = await obtenerEstudiantesAula(aulaId)
     estudiantes.value = resEst.data || []
   } else {
     errorInvitacionModal.value = res.error
-    await cargarHistorialInvitaciones()
   }
+  await cargarHistorialInvitaciones()
 }
 
 // RF101: Gestión de Cursos
@@ -1674,29 +1776,90 @@ const alcanceSeleccionado = ref('aula') // 'aula' | 'curso' | 'estudiante'
 const cursoAsignacionId = ref('')
 const estudiantesAsignacionIds = ref([])
 const guardandoAsignacionEval = ref(false)
+const modoAplicacion = ref('ventana')
+const abreEnAplicacion = ref('')
+const cierraEnAplicacion = ref('')
+const duracionAplicacionMin = ref(30)
+const controlandoEvaluacionId = ref('')
+
+const fechaParaInput = (valor) => {
+  if (!valor) return ''
+  const fecha = new Date(valor)
+  const local = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+const cargarConfiguracionAsignacion = () => {
+  const ev = evaluaciones.value.find(item => item.id === evaluacionParaAsignarId.value)
+  const asignaciones = ev?.asignaciones || []
+  const primera = asignaciones[0]
+
+  alcanceSeleccionado.value = primera?.alcance || 'aula'
+  cursoAsignacionId.value = primera?.curso_id || ''
+  estudiantesAsignacionIds.value = asignaciones.map(item => item.usuario_id).filter(Boolean)
+
+  modoAplicacion.value = ev?.modo || 'ventana'
+  abreEnAplicacion.value = fechaParaInput(ev?.abre_en)
+  cierraEnAplicacion.value = fechaParaInput(ev?.cierra_en)
+  duracionAplicacionMin.value = ev?.tiempo_limite_s
+    ? ev.tiempo_limite_s / 60
+    : 30
+}
+
+const controlarEnVivo = async (ev, accion) => {
+  if (controlandoEvaluacionId.value) return
+  controlandoEvaluacionId.value = ev.id
+
+  try {
+    const res = await controlarEvaluacionEnVivo(ev.id, accion)
+    if (!res.success) {
+      mostrarFeedback(false, res.error)
+      return
+    }
+
+    await recargarEvaluacionesRF109()
+    mostrarFeedback(true, accion === 'iniciar' ? 'Evaluación iniciada.' : 'Evaluación cerrada.')
+  } catch (error) {
+    mostrarFeedback(false, error.message)
+  } finally {
+    controlandoEvaluacionId.value = ''
+  }
+}
+
+const recargarEvaluacionesRF109 = async () => {
+  const res = await obtenerEvaluacionesAula(aulaId)
+  if (!res.success) throw new Error(res.error)
+  evaluaciones.value = res.data
+}
+
+// Eliminar una evaluación asignada (pide confirmación y avisa si ya hay intentos de estudiantes)
+const eliminandoEvaluacionId = ref('')
+
+const confirmarEliminarEvaluacionAsignada = async (ev) => {
+  const intentos = await contarIntentos(ev.id)
+  const aviso = intentos > 0
+    ? `«${ev.titulo}» ya tiene ${intentos} intento(s) de estudiantes: se borrarán también sus respuestas y notas.`
+    : `Se eliminará «${ev.titulo}» y su asignación.`
+  if (!window.confirm(`${aviso}\n\nEsta acción no se puede deshacer. ¿Eliminar la evaluación?`)) return
+  eliminandoEvaluacionId.value = ev.id
+  try {
+    const res = await eliminarEvaluacion({ evaluacionId: ev.id, puedeGestionar: isProfesor.value || isAdmin.value })
+    if (!res.success) {
+      mostrarFeedback(false, res.error)
+      return
+    }
+    await recargarEvaluacionesRF109()
+    mostrarFeedback(true, `Evaluación «${ev.titulo}» eliminada.`)
+  } catch (error) {
+    mostrarFeedback(false, error.message)
+  } finally {
+    eliminandoEvaluacionId.value = ''
+  }
+}
 
 const abrirModalAsignar = (ev = null) => {
-  if (ev) {
-    evaluacionParaAsignarId.value = ev.id
-    if (ev.asignaciones && ev.asignaciones.length > 0) {
-      const primera = ev.asignaciones[0]
-      alcanceSeleccionado.value = primera.alcance
-      if (primera.alcance === 'curso') {
-        cursoAsignacionId.value = primera.curso_id || ''
-      } else if (primera.alcance === 'estudiante') {
-        estudiantesAsignacionIds.value = ev.asignaciones.map(a => a.usuario_id).filter(Boolean)
-      }
-    } else {
-      alcanceSeleccionado.value = 'aula'
-      cursoAsignacionId.value = ''
-      estudiantesAsignacionIds.value = []
-    }
-  } else {
-    evaluacionParaAsignarId.value = evaluaciones.value[0]?.id || ''
-    alcanceSeleccionado.value = 'aula'
-    cursoAsignacionId.value = ''
-    estudiantesAsignacionIds.value = []
-  }
+  evaluacionParaAsignarId.value = ev?.id || evaluaciones.value[0]?.id || ''
+  cargarConfiguracionAsignacion()
   modalAsignarEvaluacionAbierto.value = true
 }
 
@@ -1709,42 +1872,44 @@ const alternarTodosEstudiantesAsignacion = () => {
 }
 
 const guardarAsignacionEvaluacion = async () => {
-  if (!evaluacionParaAsignarId.value) {
-    mostrarFeedback(false, 'Selecciona una evaluación para asignar.')
-    return
-  }
-  if (alcanceSeleccionado.value === 'curso' && !cursoAsignacionId.value) {
-    mostrarFeedback(false, 'Debes seleccionar un curso o sección.')
-    return
-  }
-  if (alcanceSeleccionado.value === 'estudiante' && estudiantesAsignacionIds.value.length === 0) {
-    mostrarFeedback(false, 'Debes seleccionar al menos un estudiante.')
-    return
-  }
-
+  if (guardandoAsignacionEval.value) return
   guardandoAsignacionEval.value = true
-  const res = await asignarEvaluacion({
-    evaluacionId: evaluacionParaAsignarId.value,
-    aulaId,
-    alcance: alcanceSeleccionado.value,
-    cursoId: cursoAsignacionId.value || null,
-    estudiantesIds: estudiantesAsignacionIds.value,
-    puedeGestionar: isAdmin.value || isProfesor.value
-  })
-  guardandoAsignacionEval.value = false
 
-  if (res.success) {
+  try {
+    const esVentana = modoAplicacion.value === 'ventana'
+    // En vivo, la fecha es el inicio automático (opcional); con fechas es la apertura
+    const abre = (esVentana || abreEnAplicacion.value) ? new Date(abreEnAplicacion.value) : null
+    const cierra = esVentana ? new Date(cierraEnAplicacion.value) : null
+
+    if (esVentana && !(abre < cierra)) {
+      mostrarFeedback(false, 'El cierre debe ser posterior a la apertura.')
+      return
+    }
+
+    const res = await asignarEvaluacion({
+      evaluacionId: evaluacionParaAsignarId.value,
+      modo: modoAplicacion.value,
+      alcance: alcanceSeleccionado.value,
+      abreEn: abre?.toISOString() ?? null,
+      cierraEn: cierra?.toISOString() ?? null,
+      tiempoLimiteS: esVentana ? null : duracionAplicacionMin.value * 60,
+      cursoId: cursoAsignacionId.value || null,
+      estudiantesIds: estudiantesAsignacionIds.value,
+      puedeGestionar: isProfesor.value || isAdmin.value
+    })
+
+    if (!res.success) {
+      mostrarFeedback(false, res.error)
+      return
+    }
+
     modalAsignarEvaluacionAbierto.value = false
-    const textoAlcance = alcanceSeleccionado.value === 'aula' 
-      ? 'a toda el aula'
-      : (alcanceSeleccionado.value === 'curso' ? 'a la sección seleccionada' : `a ${estudiantesAsignacionIds.value.length} estudiante(s)`)
-    mostrarFeedback(true, `¡Éxito! Evaluación asignada ${textoAlcance}.`)
-    
-    // Recargar evaluaciones del aula para actualizar inmediatamente los badges
-    const resEv = await obtenerEvaluacionesAula(aulaId)
-    evaluaciones.value = resEv.data || []
-  } else {
-    mostrarFeedback(false, res.error || 'Error al guardar asignación.')
+    await recargarEvaluacionesRF109()
+    mostrarFeedback(true, 'Evaluación asignada.')
+  } catch (error) {
+    mostrarFeedback(false, error.message)
+  } finally {
+    guardandoAsignacionEval.value = false
   }
 }
 
@@ -3324,4 +3489,5 @@ const evaluacionesVisibles = computed(() => {
   color: #b91c1c;
   border: 1px solid #fecaca;
 }
+.eval-inicio-auto { margin: 0.4rem 0 0; padding: 0.3rem 0.6rem; border-radius: 8px; background: #dbeafe; color: #1e40af; font-size: 0.82rem; font-weight: 600; display: inline-block; }
 </style>

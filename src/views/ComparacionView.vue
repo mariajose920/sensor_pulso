@@ -1,5 +1,7 @@
 <template>
   <div>
+    <!-- RF107: si el estudiante llegó desde un ejercicio de una evaluación, puede volver a ella -->
+    <VolverAEvaluacionBanner que="comparación" />
     <!-- Encabezado de la Sección Comparación -->
     <div class="card" style="margin-bottom: 1rem;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem;">
@@ -90,6 +92,40 @@
 
     <AvisoEducativo />
 
+    <!-- Sincronización Temporal de Bioseñales Comparadas -->
+    <SincronizacionSenalesPanel
+      v-if="pestañaActiva !== 'senales'"
+      :bpmActual="selectedBpm"
+      :bpmReferencia="72"
+      :amplitudActual="selectedAmplitude"
+      :nombreMedicion="selectedMeasurementName"
+      nombreReferencia="Señal de Referencia"
+    />
+
+    <!-- Análisis Automático de la Comparación y Explicación de Diferencias -->
+    <AnalisisAutomaticoComparacionPanel
+      v-if="pestañaActiva !== 'senales'"
+      :bpmActual="medicionElegida ? selectedBpm : null"
+      :bpmReferencia="BPM_PLANTILLA_REPOSO"
+      :senalActual="senalMedicion"
+      :senalReferencia="senalReferencia"
+      :frecuenciaHz="frecuenciaSenal"
+      :nombreMedicion="selectedMeasurementName"
+      nombreReferencia="Señal de Referencia"
+    />
+
+    <!-- ===================================================================== -->
+    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS (se muestra directo arriba)     -->
+    <!-- ===================================================================== -->
+    <template v-if="pestañaActiva === 'guardadas'">
+      <ComparadorMedicionesCard
+        :currentBpm="selectedBpm"
+        :lastIntervalMs="currentIntervalMs"
+        :amplitude="selectedAmplitude"
+        :measurementName="selectedMeasurementName"
+      />
+    </template>
+
     <!-- 1. Cargar o Ingresar Medición Tomada con el Sensor (Compartido) -->
     <MeasurementSelector
       v-model:bpm="selectedBpm"
@@ -146,18 +182,6 @@
     </template>
 
     <!-- ===================================================================== -->
-    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS                                 -->
-    <!-- ===================================================================== -->
-    <template v-else-if="pestañaActiva === 'guardadas'">
-      <ComparadorMedicionesCard
-        :currentBpm="selectedBpm"
-        :lastIntervalMs="currentIntervalMs"
-        :amplitude="selectedAmplitude"
-        :measurementName="selectedMeasurementName"
-      />
-    </template>
-
-    <!-- ===================================================================== -->
     <!-- MODO 4: CONTRASTE CON DATASETS PÚBLICOS INTERNACIONALES (RF47)       -->
     <!-- ===================================================================== -->
     <template v-else-if="pestañaActiva === 'datasets'">
@@ -182,10 +206,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { generarSenalPpgConDesfase } from '../utils/sincronizacionSenales.js'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import VolverAEvaluacionBanner from '../components/VolverAEvaluacionBanner.vue'
+import SincronizacionSenalesPanel from '../components/SincronizacionSenalesPanel.vue'
+import AnalisisAutomaticoComparacionPanel from '../components/AnalisisAutomaticoComparacionPanel.vue'
 
 import AvisoGirar from '../components/AvisoGirar.vue'
 import MeasurementSelector from '../components/MeasurementSelector.vue'
@@ -230,6 +258,32 @@ onMounted(() => {
 const selectedBpm = ref(78)
 const selectedAmplitude = ref(100)
 const selectedMeasurementName = ref('Medición Tomada')
+// El análisis automático (RF29) solo se hace con una medición realmente elegida o cargada,
+// y la similitud sale de la forma de la señal, no de valores supuestos.
+const BPM_PLANTILLA_REPOSO = 72
+const medicionElegida = ref(false)
+const senalMedicion = ref(null)
+const frecuenciaSenal = ref(100)
+
+watch(selectedBpm, () => { medicionElegida.value = true })
+
+const senalReferencia = computed(() => {
+  if (!senalMedicion.value) return null
+  return generarSenalPpgConDesfase({
+    bpm: BPM_PLANTILLA_REPOSO,
+    duracionSegundos: 5,
+    frecuenciaHz: frecuenciaSenal.value,
+    amplitud: 100,
+    desfaseInicialMs: 0
+  })
+})
+
+function guardarSenalElegida(datos) {
+  medicionElegida.value = true
+  const muestras = Array.isArray(datos?.muestrasIr) && datos.muestrasIr.length ? datos.muestrasIr : null
+  senalMedicion.value = muestras
+  frecuenciaSenal.value = Number(datos?.frecuenciaHz) > 0 ? Number(datos.frecuenciaHz) : 100
+}
 
 // Intervalo exacto de la medición calculada: T = 60000 / BPM (en ms)
 const currentIntervalMs = computed(() => {
@@ -240,6 +294,7 @@ function onSenalSeleccionada(datos) {
   selectedBpm.value = datos.bpm
   selectedAmplitude.value = datos.amplitude || 100
   selectedMeasurementName.value = datos.nombre || 'Señal Cargada (RF27)'
+  guardarSenalElegida(datos)
   pestañaActiva.value = 'reposo'
 }
 
@@ -247,6 +302,7 @@ function onUsarMedicionExterna(datos) {
   selectedBpm.value = datos.bpm
   selectedAmplitude.value = datos.amplitude || 100
   selectedMeasurementName.value = datos.nombre || 'Señal Externa (RF27)'
+  guardarSenalElegida(datos)
 }
 </script>
 

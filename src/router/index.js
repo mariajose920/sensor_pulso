@@ -22,6 +22,7 @@ import EvaluacionesView from '../views/EvaluacionesView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 import { motivoDeRuta } from '../utils/accesoSinSesion'
+import { consultarEstadoMfa } from '../services/mfaService.js'
 
 const routes = [
   {
@@ -78,6 +79,18 @@ const routes = [
     component: ComparacionView
   },
   {
+    // RF34: galería de mediciones públicas anonimizadas, abierta con o sin sesión
+    path: '/galeria',
+    name: 'Galeria',
+    component: () => import('../views/GaleriaView.vue')
+  },
+  {
+    // RF35: una medición pública compartida por enlace, abierta con o sin sesión
+    path: '/publica/:token',
+    name: 'Publica',
+    component: () => import('../views/PublicaView.vue')
+  },
+  {
     path: '/aulas',
     name: 'Aulas',
     component: AulasView,
@@ -98,6 +111,12 @@ const routes = [
     meta: { requiresAuth: true, roles: [ROLES.PROFESOR, ROLES.ADMIN] }
   },
   {
+    path: '/mis-evaluaciones',
+    name: 'MisEvaluaciones',
+    component: () => import('../views/MisEvaluacionesView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/aprendizaje',
     name: 'Aprendizaje',
     component: AprendizajeView
@@ -107,6 +126,12 @@ const routes = [
     path: '/aprendizaje/simulador',
     name: 'Simulador',
     component: SimuladorView
+  },
+  {
+    // RF33: biblioteca de casos precargados; va antes de la lección para que no se tome como slug
+    path: '/aprendizaje/casos',
+    name: 'Casos',
+    component: () => import('../views/CasosView.vue')
   },
   {
     // Práctica para las evaluaciones: abierta con o sin sesión (va antes de la lección para que no se tome como slug)
@@ -128,6 +153,12 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: LoginView
+  },
+  {
+    path: '/mfa',
+    name: 'Mfa',
+    component: () => import('../views/MfaView.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/admin',
@@ -179,13 +210,32 @@ router.beforeEach(async (to, _from, next) => {
     })
   }
 
-  // Si la ruta requiere autenticación
-  if (to.meta.requiresAuth && !isAuthenticated.value) {
+  // Si la ruta requiere autenticación (Medición muestra su propio bloqueo institucional dentro de la vista)
+  if (to.meta.requiresAuth && !isAuthenticated.value && to.name !== 'Medicion') {
     // Se avisa en el login por qué hace falta la sesión y se vuelve a la pantalla pedida al entrar
     const query = { redirect: to.fullPath }
     const motivo = motivoDeRuta(to.name)
     if (motivo) query.motivo = motivo
     return next({ name: 'Login', query })
+  }
+
+  if (isAuthenticated.value && to.meta.requiresAuth && to.name !== 'Mfa') {
+    try {
+      const { nivelActual, nivelSiguiente } = await consultarEstadoMfa()
+      const requiereMfa = isAdmin.value || isProfesor.value || nivelSiguiente === 'aal2'
+
+      if (requiereMfa && nivelActual !== 'aal2') {
+        return next({
+          name: 'Mfa',
+          query: { redirect: to.fullPath }
+        })
+      }
+    } catch {
+      return next({
+        name: 'Mfa',
+        query: { redirect: to.fullPath }
+      })
+    }
   }
 
   // Si la ruta está restringida a ciertos roles

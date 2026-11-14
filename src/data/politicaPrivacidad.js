@@ -92,6 +92,7 @@ export const SECCIONES = [
       'Supabase aloja la base de datos y la autenticación, en la región us-east-1 (Estados Unidos), es decir, fuera de Chile.',
       'Vercel sirve la aplicación web.',
       'Resend envía los correos de confirmación de la cuenta.',
+      'Google (Gmail) envía, desde la cuenta de la plataforma, las invitaciones a las aulas: el correo institucional del estudiante, el nombre del aula y del profesor.',
       'Son encargados que tratan los datos por cuenta de la universidad y solo para operar la plataforma. Al estar fuera de Chile, se trata de una transferencia internacional de datos.'
     ]
   },

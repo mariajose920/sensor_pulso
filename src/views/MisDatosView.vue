@@ -8,7 +8,14 @@
     </p>
 
     <p v-if="aviso.texto" class="alerta" :class="aviso.tipo" role="status" data-testid="mis-datos-aviso">{{ aviso.texto }}</p>
-
+    <section class="card">
+      <h2>Autenticación de dos factores</h2>
+      <p>Si tienes una cuenta de usuario, puedes activar esta protección cuando quieras. Si la activas, en tus próximos inicios de sesión se te pedirá un código de tu aplicación autenticadora.</p>
+      <router-link v-if="mfaCargado && !factoresMfa.length" :to="{ name: 'Mfa', query: { redirect: '/mis-datos' } }" class="btn btn-secondary">Configurar autenticador</router-link>
+      <p v-if="mfaCargado && factoresMfa.length">Autenticador activo.</p>
+      <button v-if="mfaCargado && puedeDesactivarMfa && factoresMfa.length" type="button" class="btn btn-secondary" :disabled="actualizandoMfa" @click="desactivarMfa">Desactivar autenticador</button>
+      <p v-if="mensajeMfa" role="status">{{ mensajeMfa }}</p>
+    </section>
     <section class="card" data-testid="descargar-datos">
       <h2>Descargar mis datos</h2>
       <p>Obtén un archivo con tu perfil, tus mediciones, tu ficha de salud declarada y tu actividad. No incluye datos de otras personas.</p>
@@ -72,6 +79,8 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useAuth } from '../composables/useAuth.js'
+import { eliminarFactorMfa, listarFactoresTotp } from '../services/mfaService.js'
 import { derechosService, ESTADOS_SOLICITUD, TIPOS_DERECHO, textoPlazo } from '../services/derechosService.js'
 import { PLAZO_RESPUESTA_DIAS } from '../data/politicaPrivacidad.js'
 
@@ -93,6 +102,43 @@ const decir = (texto, tipoAviso = 'ok') => { aviso.value = { texto, tipo: tipoAv
 
 async function cargar() { solicitudes.value = await derechosService.misSolicitudes() }
 onMounted(cargar)
+
+const { isAdmin, isProfesor, loading } = useAuth()
+const puedeDesactivarMfa = computed(() => !loading.value && !isAdmin.value && !isProfesor.value)
+const factoresMfa = ref([])
+const mfaCargado = ref(false)
+const actualizandoMfa = ref(false)
+const mensajeMfa = ref('')
+
+const desactivarMfa = async () => {
+  if (!puedeDesactivarMfa.value || actualizandoMfa.value) return
+  if (!window.confirm('¿Quieres desvincular los autenticadores de esta cuenta?')) return
+
+  actualizandoMfa.value = true
+  mensajeMfa.value = ''
+
+  try {
+    for (const factor of factoresMfa.value) {
+      await eliminarFactorMfa(factor.id)
+      factoresMfa.value = factoresMfa.value.filter(item => item.id !== factor.id)
+    }
+
+    mensajeMfa.value = 'Autenticador desactivado.'
+  } catch (error) {
+    mensajeMfa.value = error.message || 'No se pudo desactivar el autenticador.'
+  } finally {
+    actualizandoMfa.value = false
+  }
+}
+
+onMounted(async () => {
+  try {
+    factoresMfa.value = await listarFactoresTotp()
+    mfaCargado.value = true
+  } catch {
+    mensajeMfa.value = 'No se pudo consultar el estado del autenticador. Recarga para reintentar.'
+  }
+})
 
 async function descargar() {
   descargando.value = true

@@ -3,13 +3,13 @@
     <div class="card">
       <div class="admin-header">
         <div>
-          <h1 class="card-title">⚙️ Panel de Administración</h1>
+          <h1 class="card-title">Panel de Administración</h1>
           <p class="header-desc">
             Gestión global del sistema, cuentas de usuario y asignación de roles.
           </p>
         </div>
         <button @click="recargarTodo" class="btn btn-secondary btn-sm" :disabled="cargandoLista || cargandoAuditoria">
-          {{ cargandoLista ? 'Actualizando...' : '🔄 Recargar Todo' }}
+          {{ cargandoLista ? 'Actualizando...' : 'Recargar Todo' }}
         </button>
       </div>
 
@@ -63,14 +63,14 @@
                   </span>
                 </td>
                 <td style="text-align: right; white-space: nowrap;">
-                  <!-- RF98: Botón de Permisos solo visible para cuentas con rol de profesor -->
+                  <!-- Botón de Permisos solo visible para cuentas con rol de profesor -->
                   <button 
                     v-if="cuenta.rol === 'profesor'"
                     @click="abrirModalPermisos(cuenta)" 
                     class="btn btn-secondary btn-sm"
                     style="margin-right: 0.5rem;"
                   >
-                    🔑 Permisos
+                    Permisos
                   </button>
                   <button 
                     @click="abrirModalCambio(cuenta)" 
@@ -85,17 +85,20 @@
         </div>
       </div>
 
-      <!-- SECCIÓN: Registro de Auditoría de Cambios de Rol (RF53) -->
+      <!-- SECCIÓN: Registro General de Auditoría del Sistema -->
+      <RegistroAuditoriaPanel ref="panelAuditoriaGeneral" class="mt-4" />
+
+      <!-- SECCIÓN: Registro de Auditoría de Cambios de Rol -->
       <div class="admin-section mt-4">
         <div class="section-top">
           <div>
-            <h2 class="section-title">📋 Registro de Auditoría de Cambios de Rol</h2>
+            <h2 class="section-title">Registro de Auditoría de Cambios de Rol</h2>
             <p class="section-desc">
-              Trazabilidad inmutable de asignaciones y modificaciones de roles y administradores (RF53).
+              Trazabilidad inmutable de asignaciones y modificaciones de roles y administradores.
             </p>
           </div>
           <button @click="cargarAuditoria" class="btn btn-secondary btn-sm" :disabled="cargandoAuditoria">
-            {{ cargandoAuditoria ? 'Cargando...' : '🔄 Actualizar Registro' }}
+            {{ cargandoAuditoria ? 'Cargando...' : 'Actualizar Registro' }}
           </button>
         </div>
 
@@ -133,15 +136,15 @@
                 </td>
                 <td>
                   <span class="badge" :class="claseBadgeRol(item.rol_antes)">{{ etiquetaRol(item.rol_antes) }}</span>
-                  <span class="flecha-transicion"> ➔ </span>
+                  <span class="flecha-transicion"> → </span>
                   <span class="badge" :class="claseBadgeRol(item.rol_despues)">{{ etiquetaRol(item.rol_despues) }}</span>
                 </td>
                 <td>
                   <span v-if="item.admin_antes !== item.admin_despues" class="badge" :class="item.admin_despues ? 'badge-admin-alta' : 'badge-admin-baja'">
-                    {{ item.admin_despues ? '⭐ Otorgado Admin' : '❌ Revocado Admin' }}
+                    {{ item.admin_despues ? 'Otorgado Admin' : 'Revocado Admin' }}
                   </span>
                   <span v-else class="text-sin-cambio">
-                    {{ item.admin_despues ? '✓ Se mantuvo Admin' : '— Sin privilegio admin' }}
+                    {{ item.admin_despues ? 'Se mantuvo Admin' : '— Sin privilegio admin' }}
                   </span>
                 </td>
               </tr>
@@ -150,10 +153,10 @@
         </div>
       </div>
 
-      <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad (RF19) -->
+      <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad -->
       <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
 
-      <!-- SECCIÓN: Método de sincronización, contenidos y propuestas de profesores (RF46) -->
+      <!-- SECCIÓN: Método de sincronización, contenidos y propuestas de profesores -->
       <MetodoSincronizacionPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
       <ContenidosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
       <PropuestasPanel class="mt-4" modo="admin" />
@@ -180,7 +183,7 @@
       </div>
     </div>
 
-    <!-- MODAL DE CONFIRMACIÓN DE CAMBIO DE ROL (RF45 / RF53) -->
+    <!-- MODAL DE CONFIRMACIÓN DE CAMBIO DE ROL -->
     <div v-if="modalAbierto" class="modal-backdrop" @click.self="cerrarModal">
       <div class="modal-card">
         <h3 class="modal-title">Confirmar Cambio de Rol</h3>
@@ -217,7 +220,7 @@
 
           <!-- Alerta de seguridad si intenta revocar al único administrador -->
           <div v-if="advertenciaUnicoAdmin" class="alert alert-error mt-4" style="margin-bottom: 0;">
-            ⚠️ <strong>Acción no permitida:</strong> No se puede retirar el rol de administrador porque es el único administrador activo del sistema.
+            <strong>Acción no permitida:</strong> No se puede retirar el rol de administrador porque es el único administrador activo del sistema.
           </div>
 
           <div class="modal-actions">
@@ -236,7 +239,7 @@
       </div>
     </div>
 
-    <!-- MODAL DE PERMISOS GRANULARES DE PROFESOR (RF98) -->
+    <!-- MODAL DE PERMISOS GRANULARES DE PROFESOR -->
     <div v-if="modalPermisosAbierto" class="modal-backdrop" @click.self="cerrarModalPermisos">
       <div class="modal-card">
         <h3 class="modal-title">Permisos Granulares de Profesor</h3>
@@ -261,8 +264,8 @@
             <label class="permiso-item">
               <input type="checkbox" v-model="permisosForm.publicar_galeria" />
               <div>
-                <strong>Publicar señales en galería docente</strong>
-                <p>Permite compartir registros PPG para uso didáctico general.</p>
+                <strong>Operar sensor y publicar en galería</strong>
+                <p>Permite medir con el sensor de pulso y compartir registros fotopletismográficos anonimizados para uso didáctico.</p>
               </div>
             </label>
 
@@ -308,6 +311,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import RegistroAuditoriaPanel from '../components/RegistroAuditoriaPanel.vue'
 import RangosPanel from '../components/RangosPanel.vue'
 import MetodoSincronizacionPanel from '../components/MetodoSincronizacionPanel.vue'
 import ContenidosPanel from '../components/ContenidosPanel.vue'
@@ -339,9 +343,10 @@ const formRol = ref('usuario')
 const formEsAdmin = ref(false)
 const guardandoRol = ref(false)
 
-// Auditoría de cambios de rol (RF53)
+// Auditoría de cambios de rol (RF53) y referencia al panel general (RF62)
 const historialAuditoria = ref([])
 const cargandoAuditoria = ref(false)
+const panelAuditoriaGeneral = ref(null)
 
 // Modal de edición de permisos de profesor (RF98)
 const modalPermisosAbierto = ref(false)
@@ -431,7 +436,11 @@ const cargarAuditoria = async () => {
 }
 
 const recargarTodo = async () => {
-  await Promise.all([cargarUsuarios(), cargarAuditoria()])
+  await Promise.all([
+    cargarUsuarios(),
+    cargarAuditoria(),
+    panelAuditoriaGeneral.value?.cargarEventos?.()
+  ])
 }
 
 const abrirModalCambio = (cuenta) => {
@@ -536,7 +545,7 @@ onMounted(() => {
 
 <style scoped>
 .admin-container {
-  max-width: 950px;
+  max-width: 1160px;
   margin: 0 auto;
 }
 

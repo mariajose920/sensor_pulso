@@ -283,12 +283,51 @@ export async function obtenerMedicionesPropias() {
 }
 
 /**
- * Carga las mediciones públicas docentes de referencia.
- * @returns {Promise<Array>} Lista de casos públicos validados
+ * Carga las mediciones públicas publicadas en Supabase (anonimizadas) junto con los casos docentes de referencia.
+ * Visible para todos, con o sin sesión (RF31 y RF57).
+ * @returns {Promise<Array>} Lista de casos públicos validados y anónimos
  */
 export async function obtenerMedicionesPublicas() {
-  // Retorna el catálogo canónico validado para docencia UNACH
-  return [...MEDICIONES_PUBLICAS_PRECARGADAS]
+  const publicasBd = []
+
+  try {
+    const modulo = await import('../services/medicionesService.js').catch(() => null)
+    if (modulo && typeof modulo.listarPublicacionesPublicas === 'function') {
+      const lista = await modulo.listarPublicacionesPublicas()
+      if (Array.isArray(lista) && lista.length > 0) {
+        lista.forEach(item => {
+          const fechaStr = item.creadaEn
+            ? new Date(item.creadaEn).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : 'Publicada recientemente'
+          publicasBd.push({
+            id: item.id,
+            titulo: item.titulo || `Medición Pública (${item.rangoEdad || '18-24'} años)`,
+            origen: 'publica',
+            categoria: normalizarCategoriaActividad(item.actividadNombre),
+            categoriaTexto: item.actividadNombre || 'Reposo Basal',
+            rangoEdad: item.rangoEdad || '18-24',
+            actividad: item.actividadNombre || 'Reposo Basal',
+            bpm: Number(item.bpm),
+            spo2: Number(item.spo2) || 98.0,
+            calidad: item.calidad || 'buena',
+            calidadTexto: item.calidad === 'buena' ? 'Excelente' : (item.calidad === 'regular' ? 'Aceptable' : 'Baja'),
+            ritmo: item.ritmo || 'normal',
+            dentroDeRango: typeof item.dentroDeRango === 'boolean' ? item.dentroDeRango : undefined,
+            ritmoTexto: item.ritmo === 'normal' ? 'Sinusal Regular' : (item.ritmo || 'Evaluado'),
+            autorAnonimo: 'Participante UNACH (Anónimo)',
+            institucion: 'Comunidad Universitaria UNACH',
+            fechaTexto: fechaStr,
+            descripcion: `Registro fisiológico publicado de forma anónima (Rango etario: ${item.rangoEdad || '18-24'} años).`,
+            interpretacionClinica: `Medición pública anonimizada con ${item.bpm} BPM y ${item.spo2 || 98}% SpO2.`
+          })
+        })
+      }
+    }
+  } catch {
+    // Respaldo silencioso si no hay conexión a BD
+  }
+
+  return [...publicasBd, ...MEDICIONES_PUBLICAS_PRECARGADAS]
 }
 
 /**

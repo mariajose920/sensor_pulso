@@ -25,6 +25,19 @@ jobs:
         env:
           RAMA: ${{ github.head_ref || github.ref_name }}
 
+  escaner-secretos:
+    name: Escáner de secretos (RF69)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verificar que no hay secretos en el código ni en el historial nuevo
+        run: node scripts/revisar-secretos.mjs --todo
+
   compilacion:
     name: Compilación
     runs-on: ubuntu-latest

@@ -145,14 +145,23 @@
             class="source-badge"
             :class="med.origen === 'propia' ? 'badge-propia' : 'badge-publica'"
           >
-            {{ med.origen === 'propia' ? 'Propia' : 'Pública' }}
+            {{ med.origen === 'propia' ? 'Propia' : 'Pública · Anónima' }}
           </span>
         </div>
 
         <div class="med-meta-text">
-          <span>{{ med.fechaTexto }}</span>
-          <span class="meta-dot">·</span>
-          <span>{{ med.actividad }}</span>
+          <template v-if="med.origen === 'publica'">
+            <span>{{ med.autorAnonimo || 'Participante UNACH (Anónimo)' }}</span>
+            <span v-if="med.rangoEdad" class="meta-dot">·</span>
+            <span v-if="med.rangoEdad">Rango: {{ med.rangoEdad }} años</span>
+            <span class="meta-dot">·</span>
+            <span>{{ med.actividad }}</span>
+          </template>
+          <template v-else>
+            <span>{{ med.fechaTexto }}</span>
+            <span class="meta-dot">·</span>
+            <span>{{ med.actividad }}</span>
+          </template>
         </div>
 
         <div class="med-metrics-row">
@@ -463,6 +472,9 @@ const listaPublicas = ref([])
 const medicionSeleccionadaId = ref('')
 
 onMounted(async () => {
+  if (typeof window !== 'undefined' && window.location.search.includes('modo=publicas')) {
+    origenSeleccionado.value = 'publicas'
+  }
   await recargarListas()
 })
 
@@ -483,9 +495,11 @@ async function recargarListas() {
     listaPropias.value = isAuthenticated.value ? propias : []
     listaPublicas.value = publicas
 
-    // Seleccionar por defecto la primera disponible
+    // Seleccionar por defecto la primera disponible según la pestaña activa
     if (!medicionSeleccionadaId.value) {
-      if (listaPropias.value.length > 0) {
+      if (origenSeleccionado.value === 'publicas' && publicas.length > 0) {
+        medicionSeleccionadaId.value = publicas[0].id
+      } else if (listaPropias.value.length > 0) {
         medicionSeleccionadaId.value = listaPropias.value[0].id
       } else if (publicas.length > 0) {
         medicionSeleccionadaId.value = publicas[0].id

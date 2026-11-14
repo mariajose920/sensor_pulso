@@ -2251,3 +2251,1605 @@ create policy rangos_personales_editar on public.rangos_personales for update to
   with check (profesor_id = (select auth.uid()) and (select public.tiene_permiso('editar_rangos')));
 create policy rangos_personales_borrar on public.rangos_personales for delete to authenticated
   using (profesor_id = (select auth.uid()));
+
+-- ########## 20261111000300_rf63_registros_inmutables.sql ##########
+-- sensor_pulso · Migración RF63: Registros Inmutables y Sello de Tiempo del Servidor
+-- Requerimiento RF63: "Los registros no se editan ni se borran, y llevan sello de tiempo."
+
+create or replace function public.auditoria_inmutable()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  raise exception 'La auditoría no se puede modificar ni borrar (RF63)'
+    using errcode = '42501';
+end;
+$$;
+
+drop trigger if exists auditoria_no_update on public.auditoria;
+create trigger auditoria_no_update
+  before update or delete on public.auditoria
+  for each row execute function public.auditoria_inmutable();
+
+drop trigger if exists auditoria_no_truncate on public.auditoria;
+create trigger auditoria_no_truncate
+  before truncate on public.auditoria
+  for each statement execute function public.auditoria_inmutable();
+
+create or replace function public.auditoria_forzar_sello_servidor()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.ocurrio_en := clock_timestamp();
+  return new;
+end;
+$$;
+
+drop trigger if exists auditoria_sello_servidor on public.auditoria;
+create trigger auditoria_sello_servidor
+  before insert on public.auditoria
+  for each row execute function public.auditoria_forzar_sello_servidor();
+
+revoke update, delete, truncate on public.auditoria from public, anon, authenticated;
+alter table public.auditoria enable row level security;
+
+-- ########## 20261111000400_rf110_respuesta_simultanea.sql ##########
+-- sensor_pulso · Migración RF110: Optimización de Escritura de Respuestas y Soporte Simultáneo
+-- Requerimiento RF110: "Soportar hasta 100 estudiantes respondiendo a la vez."
+
+create index if not exists respuestas_intento_idx on public.respuestas (intento_id);
+create index if not exists respuestas_pregunta_idx on public.respuestas (pregunta_id);
+create index if not exists respuestas_respondida_en_idx on public.respuestas (respondida_en desc);
+create index if not exists intentos_evaluacion_eval_usuario_idx on public.intentos_evaluacion (evaluacion_id, usuario_id);
+
+create or replace function public.guardar_respuestas_simultaneas_rf110(
+  p_evaluacion_id uuid,
+  p_intento_id uuid,
+  p_respuestas jsonb
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_intento record;
+  v_total_respuestas integer := 0;
+  v_puntaje_total numeric(7,2) := 0;
+  v_nivel public.nivel_logro;
+begin
+  if not public.evaluacion_asignada_a_mi(p_evaluacion_id) then
+    raise exception 'La evaluación ya no está asignada a tu cuenta.' using errcode = '42501';
+  end if;
+
+  if not public.evaluacion_abierta(p_evaluacion_id) then
+    raise exception 'La evaluación está cerrada.' using errcode = '42501';
+  end if;
+
+  select i.id, i.evaluacion_id, i.usuario_id, i.puntaje_maximo
+    into v_intento
+    from public.intentos_evaluacion as i
+   where i.id = p_intento_id
+     and i.evaluacion_id = p_evaluacion_id
+     and i.usuario_id = auth.uid()
+     and i.fin is null
+   for update;
+
+  if not found then
+    raise exception 'El intento no está disponible o ya fue finalizado.' using errcode = '42501';
+  end if;
+
+  if jsonb_typeof(p_respuestas) is distinct from 'object'
+     or p_respuestas = '{}'::jsonb then
+    raise exception 'Envía al menos una respuesta.';
+  end if;
+
+  with items as (
+    select
+      r.clave::uuid as pregunta_id,
+      r.valor as respuesta_enviada
+    from jsonb_each(p_respuestas) as r(clave, valor)
+  ),
+  calificadas as (
+    select
+      p_intento_id as intento_id,
+      i.pregunta_id,
+      i.respuesta_enviada as respuesta,
+      case
+        when c.correcta is null then null
+        when jsonb_typeof(c.correcta) = 'object' then
+          abs((i.respuesta_enviada #>> '{}')::numeric - (c.correcta ->> 'valor')::numeric) <= coalesce((c.correcta ->> 'tolerancia')::numeric, 0)
+        else
+          (i.respuesta_enviada = c.correcta)
+      end as es_correcta,
+      coalesce(ep.puntaje, q.puntaje, 1) as pts_posibles,
+      statement_timestamp() as respondida_en
+    from items i
+    join public.evaluacion_preguntas ep
+      on ep.evaluacion_id = p_evaluacion_id and ep.pregunta_id = i.pregunta_id
+    join public.preguntas q
+      on q.id = i.pregunta_id
+    left join public.preguntas_claves c
+      on c.pregunta_id = i.pregunta_id
+  ),
+  insertadas as (
+    insert into public.respuestas (intento_id, pregunta_id, respuesta, es_correcta, puntaje, respondida_en)
+    select
+      c.intento_id,
+      c.pregunta_id,
+      c.respuesta,
+      c.es_correcta,
+      case when c.es_correcta then c.pts_posibles else 0 end,
+      c.respondida_en
+    from calificadas c
+    on conflict (intento_id, pregunta_id) do update
+      set respuesta = excluded.respuesta,
+          es_correcta = excluded.es_correcta,
+          puntaje = excluded.puntaje,
+          respondida_en = excluded.respondida_en
+    returning 1
+  )
+  select count(*) into v_total_respuestas from insertadas;
+
+  select coalesce(sum(r.puntaje), 0)
+    into v_puntaje_total
+    from public.respuestas r
+   where r.intento_id = p_intento_id;
+
+  update public.intentos_evaluacion
+     set puntaje = v_puntaje_total,
+         fin = statement_timestamp()
+   where id = p_intento_id
+  returning nivel into v_nivel;
+
+  return jsonb_build_object(
+    'ok', true,
+    'intento_id', p_intento_id,
+    'respuestas_guardadas', v_total_respuestas,
+    'puntaje', v_puntaje_total,
+    'nivel', v_nivel,
+    'procesado_en', statement_timestamp()
+  );
+end;
+$$;
+
+revoke all on function public.guardar_respuestas_simultaneas_rf110(uuid, uuid, jsonb) from public, anon;
+grant execute on function public.guardar_respuestas_simultaneas_rf110(uuid, uuid, jsonb) to authenticated;
+
+create or replace function public.entregar_evaluacion_rf109(
+  p_evaluacion_id uuid,
+  p_intento_id uuid,
+  p_respuestas jsonb
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  perform public.guardar_respuestas_simultaneas_rf110(p_evaluacion_id, p_intento_id, p_respuestas);
+end;
+$$;
+
+
+-- ########## 20261112000100_rf113_panel_en_vivo.sql ##########
+-- sensor_pulso · Migración RF113: Panel en Vivo y Monitoreo de Avance
+-- Requerimiento RF113: "Panel que muestra en tiempo real el avance de los estudiantes."
+
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'respuestas'
+    ) then
+      alter publication supabase_realtime add table public.respuestas;
+    end if;
+
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'intentos_evaluacion'
+    ) then
+      alter publication supabase_realtime add table public.intentos_evaluacion;
+    end if;
+  end if;
+end $$;
+
+alter table public.intentos_evaluacion
+  add column if not exists ultimo_heartbeat timestamptz default now(),
+  add column if not exists conectado boolean default false;
+
+create index if not exists intentos_eval_heartbeat_idx
+  on public.intentos_evaluacion (evaluacion_id, ultimo_heartbeat desc);
+
+create or replace function public.ping_presencia_estudiante_rf113(
+  p_evaluacion_id uuid,
+  p_intento_id uuid
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_afectadas integer := 0;
+begin
+  if auth.uid() is null then
+    raise exception 'Sesión requerida' using errcode = '42501';
+  end if;
+
+  update public.intentos_evaluacion
+  set ultimo_heartbeat = statement_timestamp(),
+      conectado = true
+  where id = p_intento_id
+    and evaluacion_id = p_evaluacion_id
+    and usuario_id = auth.uid()
+    and fin is null;
+
+  get diagnostics v_afectadas = row_count;
+  return v_afectadas > 0;
+end;
+$$;
+
+revoke all on function public.ping_presencia_estudiante_rf113(uuid, uuid) from public, anon;
+grant execute on function public.ping_presencia_estudiante_rf113(uuid, uuid) to authenticated;
+
+create or replace function public.desconectar_estudiante_rf113(
+  p_evaluacion_id uuid,
+  p_intento_id uuid
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_afectadas integer := 0;
+begin
+  if auth.uid() is null then
+    return false;
+  end if;
+
+  update public.intentos_evaluacion
+  set conectado = false,
+      ultimo_heartbeat = statement_timestamp()
+  where id = p_intento_id
+    and evaluacion_id = p_evaluacion_id
+    and usuario_id = auth.uid();
+
+  get diagnostics v_afectadas = row_count;
+  return v_afectadas > 0;
+end;
+$$;
+
+revoke all on function public.desconectar_estudiante_rf113(uuid, uuid) from public, anon;
+grant execute on function public.desconectar_estudiante_rf113(uuid, uuid) to authenticated;
+
+create or replace function public.obtener_avance_en_vivo_rf113(
+  p_evaluacion_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_eval record;
+  v_total_preguntas integer := 0;
+  v_total_asignados integer := 0;
+  v_total_respuestas integer := 0;
+  v_conectados integer := 0;
+  v_en_progreso integer := 0;
+  v_finalizados integer := 0;
+  v_estudiantes jsonb := '[]'::jsonb;
+  v_avance_global numeric(5,2) := 0;
+begin
+  select e.id, e.aula_id, e.titulo, e.tipo, e.modo, e.estado, e.tiempo_limite_s, e.iniciada_en
+    into v_eval
+    from public.evaluaciones e
+   where e.id = p_evaluacion_id;
+
+  if not found then
+    raise exception 'Evaluación no encontrada' using errcode = 'P0002';
+  end if;
+
+  if not (public.profesor_de_evaluacion(p_evaluacion_id) or public.es_admin()) then
+    raise exception 'Solo el profesor del aula puede ver el avance en vivo.' using errcode = '42501';
+  end if;
+
+  select count(*)::integer into v_total_preguntas
+    from public.evaluacion_preguntas
+   where evaluacion_id = p_evaluacion_id;
+
+  with estudiantes_elegibles as (
+    select distinct m.usuario_id, p.nombre, p.correo
+      from public.aula_estudiantes m
+      join public.perfiles p on p.id = m.usuario_id
+      join public.evaluaciones e on e.aula_id = m.aula_id
+      join public.evaluacion_asignaciones a on a.evaluacion_id = e.id
+     where e.id = p_evaluacion_id
+       and m.estado = 'activo'
+       and (
+         a.alcance = 'aula'
+         or (a.alcance = 'estudiante' and a.usuario_id = m.usuario_id)
+         or (a.alcance = 'curso' and exists (
+               select 1 from public.curso_estudiantes c
+                where c.curso_id = a.curso_id and c.usuario_id = m.usuario_id
+            ))
+       )
+  ),
+  resumen_intentos as (
+    select
+      ee.usuario_id,
+      ee.nombre,
+      ee.correo,
+      i.id as intento_id,
+      i.inicio,
+      i.fin,
+      i.puntaje,
+      i.puntaje_maximo,
+      i.porcentaje,
+      i.nivel,
+      i.ultimo_heartbeat,
+      coalesce(
+        i.conectado = true and i.fin is null and i.ultimo_heartbeat >= statement_timestamp() - interval '60 seconds',
+        false
+      ) as esta_conectado,
+      case
+        when i.fin is not null then 'finalizado'
+        when i.inicio is not null then 'en_progreso'
+        else 'no_iniciado'
+      end as estado_alumno,
+      coalesce((
+        select count(*)::integer
+          from public.respuestas r
+         where r.intento_id = i.id
+      ), 0) as respuestas_alumno
+    from estudiantes_elegibles ee
+    left join public.intentos_evaluacion i
+      on i.evaluacion_id = p_evaluacion_id and i.usuario_id = ee.usuario_id
+  )
+  select
+    count(*)::integer,
+    count(*) filter (where esta_conectado)::integer,
+    count(*) filter (where estado_alumno = 'en_progreso')::integer,
+    count(*) filter (where estado_alumno = 'finalizado')::integer,
+    coalesce(sum(respuestas_alumno), 0)::integer,
+    coalesce(jsonb_agg(
+      jsonb_build_object(
+        'usuario_id', usuario_id,
+        'nombre', nombre,
+        'correo', correo,
+        'intento_id', intento_id,
+        'conectado', esta_conectado,
+        'estado', estado_alumno,
+        'respuestas_guardadas', respuestas_alumno,
+        'total_preguntas', v_total_preguntas,
+        'porcentaje_avance', case
+          when v_total_preguntas > 0 then round((respuestas_alumno::numeric / v_total_preguntas::numeric) * 100, 1)
+          else 0
+        end,
+        'puntaje', puntaje,
+        'porcentaje_calificacion', porcentaje,
+        'nivel', nivel,
+        'ultimo_heartbeat', ultimo_heartbeat,
+        'inicio', inicio,
+        'fin', fin
+      ) order by esta_conectado desc, respuestas_alumno desc, nombre asc
+    ), '[]'::jsonb)
+    into
+      v_total_asignados,
+      v_conectados,
+      v_en_progreso,
+      v_finalizados,
+      v_total_respuestas,
+      v_estudiantes
+    from resumen_intentos;
+
+  if v_total_asignados > 0 and v_total_preguntas > 0 then
+    v_avance_global := round((v_total_respuestas::numeric / (v_total_asignados * v_total_preguntas)::numeric) * 100, 1);
+    if v_avance_global > 100 then
+      v_avance_global := 100;
+    end if;
+  else
+    v_avance_global := 0;
+  end if;
+
+  return jsonb_build_object(
+    'evaluacion_id', v_eval.id,
+    'aula_id', v_eval.aula_id,
+    'titulo', v_eval.titulo,
+    'tipo', v_eval.tipo,
+    'modo', v_eval.modo,
+    'estado', v_eval.estado,
+    'tiempo_limite_s', v_eval.tiempo_limite_s,
+    'iniciada_en', v_eval.iniciada_en,
+    'total_asignados', v_total_asignados,
+    'total_preguntas', v_total_preguntas,
+    'conectados', v_conectados,
+    'en_progreso', v_en_progreso,
+    'finalizados', v_finalizados,
+    'total_respuestas', v_total_respuestas,
+    'porcentaje_avance_global', v_avance_global,
+    'actualizado_en', statement_timestamp(),
+    'estudiantes', v_estudiantes
+  );
+end;
+$$;
+
+revoke all on function public.obtener_avance_en_vivo_rf113(uuid) from public, anon;
+grant execute on function public.obtener_avance_en_vivo_rf113(uuid) to authenticated;
+
+
+-- sensor_pulso · RF107: calificación automática del ejercicio aplicado
+-- El profesor define el criterio (RF106) y el servidor califica: BPM o SpO₂ dentro de un rango, o
+-- similitud mínima con una señal de referencia. Puntaje parcial, retroalimentación, reintentos y
+-- recalificación por el profesor. Todo se calcula en el servidor: el cliente no envía la similitud.
+--
+-- Criterio de similitud (guardado en evaluaciones.criterio):
+--   {"tipo":"similitud_minima","valor":75,"referencia":{"origen":"plantilla"|"medicion","id":"<uuid>"}}
+
+-- ---------------------------------------------------------------- columnas nuevas
+alter table public.evaluaciones
+  add column if not exists max_reintentos smallint not null default 1
+    check (max_reintentos between 1 and 5);
+
+alter table public.intentos_evaluacion
+  add column if not exists valor_obtenido numeric(7,2),
+  add column if not exists similitud      numeric(5,2),
+  add column if not exists criterio_cumplido boolean,
+  add column if not exists detalle        jsonb,
+  add column if not exists calificaciones smallint not null default 0,
+  add column if not exists calificado_en  timestamptz;
+
+comment on column public.evaluaciones.max_reintentos is 'RF107: veces que el estudiante puede enviar una medición para calificar (1 a 5).';
+comment on column public.intentos_evaluacion.detalle is 'RF107: retroalimentación del último cálculo (valor, criterio, motivo, puntaje).';
+
+-- ---------------------------------------------------------------- similitud en el servidor
+-- Las mediciones no guardan la señal cruda, así que la similitud se calcula con sus rasgos:
+-- BPM (peso 0,60), regularidad (0,25) y ritmo (0,15). Solo cuentan los rasgos que existen en ambas
+-- partes. La diferencia relativa de BPM se duplica (una diferencia de 50 % da similitud 0 en ese rasgo).
+create or replace function public.similitud_rasgos(
+  p_bpm_a numeric, p_bpm_b numeric,
+  p_reg_a numeric default null, p_reg_b numeric default null,
+  p_ritmo_a text default null, p_ritmo_b text default null)
+returns numeric language plpgsql immutable set search_path = '' as $$
+declare v_num numeric := 0; v_den numeric := 0; v_dif numeric;
+begin
+  if p_bpm_a is null or p_bpm_b is null or p_bpm_a <= 0 or p_bpm_b <= 0 then return null; end if;
+  v_dif := least(1, 2 * abs(p_bpm_a - p_bpm_b) / greatest(p_bpm_a, p_bpm_b));
+  v_num := 0.60 * v_dif; v_den := 0.60;
+  if p_reg_a is not null and p_reg_b is not null then
+    v_num := v_num + 0.25 * least(1, abs(p_reg_a - p_reg_b)); v_den := v_den + 0.25;
+  end if;
+  if p_ritmo_a is not null and p_ritmo_b is not null then
+    v_num := v_num + 0.15 * (case when p_ritmo_a = p_ritmo_b then 0 else 1 end); v_den := v_den + 0.15;
+  end if;
+  return round(greatest(0, 100 * (1 - v_num / v_den)), 1);
+end $$;
+
+-- ---------------------------------------------------------------- puntaje parcial
+-- Rango: dentro = 100. Fuera, baja linealmente según la distancia, relativa al ancho del rango.
+create or replace function public.puntaje_rango(p_valor numeric, p_min numeric, p_max numeric)
+returns numeric language sql immutable set search_path = '' as $$
+  select case
+    when p_valor between p_min and p_max then 100
+    else greatest(0, round(100 * (1 - (case when p_valor < p_min then p_min - p_valor else p_valor - p_max end)
+                                       / nullif(p_max - p_min, 0)), 2))
+  end
+$$;
+
+-- Similitud mínima: cumple = 100; si no, proporcional a lo que alcanzó.
+create or replace function public.puntaje_similitud(p_similitud numeric, p_minimo numeric)
+returns numeric language sql immutable set search_path = '' as $$
+  select case when p_similitud >= p_minimo then 100
+              else greatest(0, round(100 * p_similitud / nullif(p_minimo, 0), 2)) end
+$$;
+
+-- ---------------------------------------------------------------- cálculo común (interno)
+-- Valida la medición y calcula valor, similitud, puntaje y retroalimentación. No escribe nada.
+-- p_validar_ventana = false al recalificar: la medición ya fue aceptada antes.
+create or replace function public.evaluar_ejercicio(
+  p_eval uuid, p_medicion uuid, p_alumno uuid, p_desde timestamptz, p_validar_ventana boolean default true)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_ev public.evaluaciones; v_m public.mediciones;
+  v_crit jsonb; v_tipo text; v_min numeric; v_max numeric; v_minimo numeric;
+  v_valor numeric; v_sim numeric; v_pts numeric; v_cumple boolean; v_motivo text;
+  v_desde timestamptz; v_ref jsonb; v_ref_bpm numeric; v_ref_reg numeric; v_ref_ritmo text; v_ref_nombre text;
+begin
+  select * into v_ev from public.evaluaciones where id = p_eval;
+  if not found or v_ev.tipo <> 'ejercicio_aplicado' then
+    raise exception 'La evaluación no es un ejercicio aplicado';
+  end if;
+  select * into v_m from public.mediciones where id = p_medicion and usuario_id = p_alumno;
+  if not found then raise exception 'Medición no válida: debe ser una medición tuya'; end if;
+  if v_m.calidad = 'mala' then
+    raise exception 'La medición tiene calidad de señal mala; repite la medición';
+  end if;
+
+  if p_validar_ventana then
+    v_desde := case when v_ev.modo = 'en_vivo' then v_ev.iniciada_en
+                    else coalesce(v_ev.abre_en, p_desde - interval '1 day') end;
+    if v_desde is not null and v_m.inicio < v_desde then
+      raise exception 'La medición es anterior a la apertura de la evaluación; haz una nueva';
+    end if;
+    if v_m.inicio > now() + interval '5 minutes' then
+      raise exception 'La medición tiene una fecha futura';
+    end if;
+  end if;
+
+  v_crit := v_ev.criterio; v_tipo := v_crit ->> 'tipo';
+
+  if v_tipo = 'bpm_en_rango' then
+    v_valor := v_m.bpm_promedio;
+    if v_valor is null then raise exception 'La medición no tiene BPM'; end if;
+    v_min := (v_crit ->> 'min')::numeric; v_max := (v_crit ->> 'max')::numeric;
+    v_pts := public.puntaje_rango(v_valor, v_min, v_max); v_cumple := v_valor between v_min and v_max;
+    v_motivo := case when v_cumple then format('Tu pulso (%s BPM) está dentro del rango pedido (%s a %s BPM).', v_valor, v_min, v_max)
+                     else format('Tu pulso (%s BPM) está %s del rango pedido (%s a %s BPM).', v_valor,
+                                 case when v_valor < v_min then 'por debajo' else 'por encima' end, v_min, v_max) end;
+
+  elsif v_tipo = 'spo2_en_rango' then
+    v_valor := v_m.spo2_promedio;
+    if v_valor is null then raise exception 'La medición no tiene SpO₂'; end if;
+    v_min := (v_crit ->> 'min')::numeric; v_max := (v_crit ->> 'max')::numeric;
+    v_pts := public.puntaje_rango(v_valor, v_min, v_max); v_cumple := v_valor between v_min and v_max;
+    v_motivo := case when v_cumple then format('Tu SpO₂ (%s %%) está dentro del rango pedido (%s a %s %%).', v_valor, v_min, v_max)
+                     else format('Tu SpO₂ (%s %%) está %s del rango pedido (%s a %s %%).', v_valor,
+                                 case when v_valor < v_min then 'por debajo' else 'por encima' end, v_min, v_max) end;
+
+  elsif v_tipo = 'similitud_minima' then
+    v_ref := v_crit -> 'referencia';
+    if v_ref is null or (v_ref ->> 'id') is null then
+      raise exception 'La evaluación no tiene señal de referencia definida';
+    end if;
+    if v_ref ->> 'origen' = 'plantilla' then
+      select s.bpm_referencia, s.ritmo::text, s.nombre into v_ref_bpm, v_ref_ritmo, v_ref_nombre
+        from public.senales_referencia s where s.id = (v_ref ->> 'id')::uuid and s.aprobada;
+      if not found then raise exception 'La señal de referencia ya no está disponible'; end if;
+    elsif v_ref ->> 'origen' = 'medicion' then
+      -- Solo una medición del propio profesor: nunca los datos de otro estudiante.
+      select r.bpm_promedio, r.regularidad, r.ritmo::text, 'Medición de referencia del profesor'
+        into v_ref_bpm, v_ref_reg, v_ref_ritmo, v_ref_nombre
+        from public.mediciones r where r.id = (v_ref ->> 'id')::uuid and r.usuario_id = v_ev.creador_id;
+      if not found then raise exception 'La medición de referencia ya no está disponible'; end if;
+    else
+      raise exception 'Origen de referencia no válido';
+    end if;
+    v_sim := public.similitud_rasgos(v_m.bpm_promedio, v_ref_bpm, v_m.regularidad, v_ref_reg, v_m.ritmo::text, v_ref_ritmo);
+    if v_sim is null then raise exception 'No hay BPM suficiente para comparar con la referencia'; end if;
+    v_minimo := (v_crit ->> 'valor')::numeric; v_valor := v_sim;
+    v_pts := public.puntaje_similitud(v_sim, v_minimo); v_cumple := v_sim >= v_minimo;
+    v_motivo := case when v_cumple then format('Tu señal tiene %s %% de similitud con «%s» (mínimo %s %%).', v_sim, v_ref_nombre, v_minimo)
+                     else format('Tu señal tiene %s %% de similitud con «%s»; el mínimo era %s %%.', v_sim, v_ref_nombre, v_minimo) end;
+  else
+    raise exception 'La evaluación no tiene un criterio válido';
+  end if;
+
+  return jsonb_build_object('valor', v_valor, 'similitud', v_sim, 'cumple', v_cumple,
+                            'puntaje', v_pts, 'motivo', v_motivo, 'criterio', v_crit - 'referencia');
+end $$;
+
+revoke all on function public.evaluar_ejercicio(uuid,uuid,uuid,timestamptz,boolean) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------- calificar (estudiante)
+drop function if exists public.calificar_ejercicio(uuid, uuid, numeric);
+
+create or replace function public.calificar_ejercicio(p_intento uuid, p_medicion uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_int public.intentos_evaluacion; v_ev public.evaluaciones; v_r jsonb; v_nivel public.nivel_logro;
+begin
+  select * into v_int from public.intentos_evaluacion where id = p_intento and usuario_id = auth.uid() for update;
+  if not found then raise exception 'Intento no disponible'; end if;
+  select * into v_ev from public.evaluaciones where id = v_int.evaluacion_id;
+  if not public.evaluacion_abierta(v_ev.id) then raise exception 'La evaluación está cerrada'; end if;
+  if v_int.calificaciones >= v_ev.max_reintentos then
+    raise exception 'Ya usaste todos tus intentos (%)', v_ev.max_reintentos;
+  end if;
+
+  v_r := public.evaluar_ejercicio(v_ev.id, p_medicion, auth.uid(), v_int.inicio, true);
+
+  update public.intentos_evaluacion
+     set medicion_id = p_medicion, puntaje = (v_r ->> 'puntaje')::numeric, puntaje_maximo = 100,
+         valor_obtenido = (v_r ->> 'valor')::numeric, similitud = (v_r ->> 'similitud')::numeric,
+         criterio_cumplido = (v_r ->> 'cumple')::boolean, detalle = v_r,
+         calificaciones = calificaciones + 1, calificado_en = now(), fin = now()
+   where id = p_intento
+  returning nivel into v_nivel;
+
+  return v_r || jsonb_build_object('nivel', v_nivel,
+                                   'intentos_restantes', v_ev.max_reintentos - (v_int.calificaciones + 1));
+end $$;
+
+-- ---------------------------------------------------------------- recalificar (profesor)
+-- Vuelve a calcular con el criterio y la referencia actuales, sobre la medición ya entregada.
+create or replace function public.recalificar_intento(p_intento uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_int public.intentos_evaluacion; v_r jsonb; v_nivel public.nivel_logro;
+begin
+  select * into v_int from public.intentos_evaluacion where id = p_intento for update;
+  if not found then raise exception 'Intento no encontrado'; end if;
+  if not public.profesor_de_evaluacion(v_int.evaluacion_id) then
+    raise exception 'Solo el profesor de la evaluación puede recalificar' using errcode = '42501';
+  end if;
+  if v_int.medicion_id is null then raise exception 'El estudiante aún no entregó una medición'; end if;
+
+  v_r := public.evaluar_ejercicio(v_int.evaluacion_id, v_int.medicion_id, v_int.usuario_id, v_int.inicio, false);
+
+  update public.intentos_evaluacion
+     set puntaje = (v_r ->> 'puntaje')::numeric, puntaje_maximo = 100,
+         valor_obtenido = (v_r ->> 'valor')::numeric, similitud = (v_r ->> 'similitud')::numeric,
+         criterio_cumplido = (v_r ->> 'cumple')::boolean, detalle = v_r, calificado_en = now()
+   where id = p_intento
+  returning nivel into v_nivel;
+
+  return v_r || jsonb_build_object('nivel', v_nivel);
+end $$;
+
+revoke all on function public.calificar_ejercicio(uuid,uuid), public.recalificar_intento(uuid) from public, anon;
+grant execute on function public.calificar_ejercicio(uuid,uuid), public.recalificar_intento(uuid) to authenticated;
+
+
+-- sensor_pulso · RF107 (ampliación): evaluación mixta = preguntas + uno o más ejercicios aplicados
+-- Una evaluación 'mixta' tiene preguntas (evaluacion_preguntas) y varios ejercicios (evaluacion_ejercicios),
+-- cada uno con su criterio y su puntaje. El estudiante entrega una medición por ejercicio y el intento
+-- suma preguntas + ejercicios. Requiere la migración 20261113000100 (calificación del ejercicio aplicado).
+
+-- ---------------------------------------------------------------- tipo nuevo
+alter table public.evaluaciones drop constraint if exists evaluaciones_tipo_check;
+alter table public.evaluaciones
+  add constraint evaluaciones_tipo_check check (tipo in ('preguntas','ejercicio_aplicado','mixta'));
+
+-- ---------------------------------------------------------------- ejercicios de una evaluación mixta
+create table if not exists public.evaluacion_ejercicios (
+  id            uuid primary key default gen_random_uuid(),
+  evaluacion_id uuid not null references public.evaluaciones (id) on delete cascade,
+  orden         smallint not null default 0,
+  ejercicio     text not null check (ejercicio in ('medir_pulso','medir_spo2','comparar_senales')),
+  criterio      jsonb not null,
+  puntaje       numeric(6,2) not null default 20 check (puntaje > 0 and puntaje <= 1000),
+  creado_en     timestamptz not null default now()
+);
+create index if not exists evaluacion_ejercicios_eval_idx on public.evaluacion_ejercicios (evaluacion_id, orden);
+
+-- Resultado de cada ejercicio dentro de un intento.
+create table if not exists public.intento_ejercicios (
+  id             uuid primary key default gen_random_uuid(),
+  intento_id     uuid not null references public.intentos_evaluacion (id) on delete cascade,
+  ejercicio_id   uuid not null references public.evaluacion_ejercicios (id) on delete cascade,
+  medicion_id    uuid references public.mediciones (id) on delete set null,
+  puntaje        numeric(6,2) not null default 0,          -- puntos obtenidos (porcentaje del ejercicio × su puntaje)
+  puntaje_maximo numeric(6,2) not null default 0,
+  porcentaje     numeric(5,2) not null default 0,
+  valor_obtenido numeric(7,2),
+  similitud      numeric(5,2),
+  criterio_cumplido boolean,
+  detalle        jsonb,
+  calificaciones smallint not null default 0,
+  calificado_en  timestamptz,
+  unique (intento_id, ejercicio_id)
+);
+
+alter table public.evaluacion_ejercicios enable row level security;
+alter table public.intento_ejercicios enable row level security;
+
+create policy evaluacion_ejercicios_profesor on public.evaluacion_ejercicios for all to authenticated
+  using ((select public.profesor_de_evaluacion(evaluacion_id)))
+  with check ((select public.profesor_de_evaluacion(evaluacion_id)));
+
+create policy evaluacion_ejercicios_estudiante on public.evaluacion_ejercicios for select to authenticated
+  using ((select public.evaluacion_asignada_a_mi(evaluacion_id)) and (select public.evaluacion_abierta(evaluacion_id)));
+
+-- Los resultados los escriben solo las funciones de abajo; se leen el estudiante dueño y el profesor.
+create policy intento_ejercicios_ver on public.intento_ejercicios for select to authenticated
+  using (exists (select 1 from public.intentos_evaluacion i
+                 where i.id = intento_id
+                   and (i.usuario_id = (select auth.uid()) or (select public.profesor_de_evaluacion(i.evaluacion_id)))));
+
+-- ---------------------------------------------------------------- cálculo con un criterio dado
+-- Igual que evaluar_ejercicio, pero el criterio llega como parámetro (cada ejercicio de la mixta tiene el suyo).
+create or replace function public.evaluar_criterio(
+  p_eval uuid, p_criterio jsonb, p_medicion uuid, p_alumno uuid, p_desde timestamptz, p_validar_ventana boolean default true)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_ev public.evaluaciones; v_m public.mediciones;
+  v_crit jsonb := p_criterio; v_tipo text; v_min numeric; v_max numeric; v_minimo numeric;
+  v_valor numeric; v_sim numeric; v_pts numeric; v_cumple boolean; v_motivo text;
+  v_desde timestamptz; v_ref jsonb; v_ref_bpm numeric; v_ref_reg numeric; v_ref_ritmo text; v_ref_nombre text;
+begin
+  select * into v_ev from public.evaluaciones where id = p_eval;
+  if not found then raise exception 'Evaluación no encontrada'; end if;
+  select * into v_m from public.mediciones where id = p_medicion and usuario_id = p_alumno;
+  if not found then raise exception 'Medición no válida: debe ser una medición tuya'; end if;
+  if v_m.calidad = 'mala' then
+    raise exception 'La medición tiene calidad de señal mala; repite la medición';
+  end if;
+
+  if p_validar_ventana then
+    v_desde := case when v_ev.modo = 'en_vivo' then v_ev.iniciada_en
+                    else coalesce(v_ev.abre_en, p_desde - interval '1 day') end;
+    if v_desde is not null and v_m.inicio < v_desde then
+      raise exception 'La medición es anterior a la apertura de la evaluación; haz una nueva';
+    end if;
+    if v_m.inicio > now() + interval '5 minutes' then
+      raise exception 'La medición tiene una fecha futura';
+    end if;
+  end if;
+
+  v_tipo := v_crit ->> 'tipo';
+
+  if v_tipo = 'bpm_en_rango' then
+    v_valor := v_m.bpm_promedio;
+    if v_valor is null then raise exception 'La medición no tiene BPM'; end if;
+    v_min := (v_crit ->> 'min')::numeric; v_max := (v_crit ->> 'max')::numeric;
+    v_pts := public.puntaje_rango(v_valor, v_min, v_max); v_cumple := v_valor between v_min and v_max;
+    v_motivo := case when v_cumple then format('Tu pulso (%s BPM) está dentro del rango pedido (%s a %s BPM).', v_valor, v_min, v_max)
+                     else format('Tu pulso (%s BPM) está %s del rango pedido (%s a %s BPM).', v_valor,
+                                 case when v_valor < v_min then 'por debajo' else 'por encima' end, v_min, v_max) end;
+
+  elsif v_tipo = 'spo2_en_rango' then
+    v_valor := v_m.spo2_promedio;
+    if v_valor is null then raise exception 'La medición no tiene SpO₂'; end if;
+    v_min := (v_crit ->> 'min')::numeric; v_max := (v_crit ->> 'max')::numeric;
+    v_pts := public.puntaje_rango(v_valor, v_min, v_max); v_cumple := v_valor between v_min and v_max;
+    v_motivo := case when v_cumple then format('Tu SpO₂ (%s %%) está dentro del rango pedido (%s a %s %%).', v_valor, v_min, v_max)
+                     else format('Tu SpO₂ (%s %%) está %s del rango pedido (%s a %s %%).', v_valor,
+                                 case when v_valor < v_min then 'por debajo' else 'por encima' end, v_min, v_max) end;
+
+  elsif v_tipo = 'similitud_minima' then
+    v_ref := v_crit -> 'referencia';
+    if v_ref is null or (v_ref ->> 'id') is null then
+      raise exception 'La evaluación no tiene señal de referencia definida';
+    end if;
+    if v_ref ->> 'origen' = 'plantilla' then
+      select s.bpm_referencia, s.ritmo::text, s.nombre into v_ref_bpm, v_ref_ritmo, v_ref_nombre
+        from public.senales_referencia s where s.id = (v_ref ->> 'id')::uuid and s.aprobada;
+      if not found then raise exception 'La señal de referencia ya no está disponible'; end if;
+    elsif v_ref ->> 'origen' = 'medicion' then
+      select r.bpm_promedio, r.regularidad, r.ritmo::text, 'Medición de referencia del profesor'
+        into v_ref_bpm, v_ref_reg, v_ref_ritmo, v_ref_nombre
+        from public.mediciones r where r.id = (v_ref ->> 'id')::uuid and r.usuario_id = v_ev.creador_id;
+      if not found then raise exception 'La medición de referencia ya no está disponible'; end if;
+    else
+      raise exception 'Origen de referencia no válido';
+    end if;
+    v_sim := public.similitud_rasgos(v_m.bpm_promedio, v_ref_bpm, v_m.regularidad, v_ref_reg, v_m.ritmo::text, v_ref_ritmo);
+    if v_sim is null then raise exception 'No hay BPM suficiente para comparar con la referencia'; end if;
+    v_minimo := (v_crit ->> 'valor')::numeric; v_valor := v_sim;
+    v_pts := public.puntaje_similitud(v_sim, v_minimo); v_cumple := v_sim >= v_minimo;
+    v_motivo := case when v_cumple then format('Tu señal tiene %s %% de similitud con «%s» (mínimo %s %%).', v_sim, v_ref_nombre, v_minimo)
+                     else format('Tu señal tiene %s %% de similitud con «%s»; el mínimo era %s %%.', v_sim, v_ref_nombre, v_minimo) end;
+  else
+    raise exception 'La evaluación no tiene un criterio válido';
+  end if;
+
+  return jsonb_build_object('valor', v_valor, 'similitud', v_sim, 'cumple', v_cumple,
+                            'puntaje', v_pts, 'motivo', v_motivo, 'criterio', v_crit - 'referencia');
+end $$;
+
+revoke all on function public.evaluar_criterio(uuid,jsonb,uuid,uuid,timestamptz,boolean) from public, anon, authenticated;
+
+-- El ejercicio aplicado simple pasa por el mismo cálculo.
+create or replace function public.evaluar_ejercicio(
+  p_eval uuid, p_medicion uuid, p_alumno uuid, p_desde timestamptz, p_validar_ventana boolean default true)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_ev public.evaluaciones;
+begin
+  select * into v_ev from public.evaluaciones where id = p_eval;
+  if not found or v_ev.tipo <> 'ejercicio_aplicado' then
+    raise exception 'La evaluación no es un ejercicio aplicado';
+  end if;
+  return public.evaluar_criterio(p_eval, v_ev.criterio, p_medicion, p_alumno, p_desde, p_validar_ventana);
+end $$;
+
+-- ---------------------------------------------------------------- total del intento en una mixta
+-- Preguntas + ejercicios. Se recalcula cada vez que se escribe el puntaje del intento (responder_pregunta,
+-- la entrega simultánea del RF110 o la calificación de un ejercicio). Corre antes de `intento_nivel`.
+create or replace function public.total_intento_mixta()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_tipo text; v_pr numeric; v_ej numeric; v_max_pr numeric; v_max_ej numeric;
+begin
+  select tipo into v_tipo from public.evaluaciones where id = new.evaluacion_id;
+  if v_tipo is distinct from 'mixta' then return new; end if;
+  select coalesce(sum(r.puntaje), 0) into v_pr from public.respuestas r where r.intento_id = new.id;
+  select coalesce(sum(ie.puntaje), 0) into v_ej from public.intento_ejercicios ie where ie.intento_id = new.id;
+  select coalesce(sum(coalesce(ep.puntaje, q.puntaje)), 0) into v_max_pr
+    from public.evaluacion_preguntas ep join public.preguntas q on q.id = ep.pregunta_id
+   where ep.evaluacion_id = new.evaluacion_id;
+  select coalesce(sum(e.puntaje), 0) into v_max_ej from public.evaluacion_ejercicios e where e.evaluacion_id = new.evaluacion_id;
+  new.puntaje := v_pr + v_ej;
+  new.puntaje_maximo := case when v_max_pr + v_max_ej = 0 then 100 else v_max_pr + v_max_ej end;
+  return new;
+end $$;
+
+drop trigger if exists intento_a_total_mixta on public.intentos_evaluacion;
+create trigger intento_a_total_mixta before insert or update of puntaje, puntaje_maximo on public.intentos_evaluacion
+  for each row execute function public.total_intento_mixta();
+
+-- ---------------------------------------------------------------- calificar un ejercicio de la mixta (estudiante)
+create or replace function public.calificar_ejercicio_mixto(p_intento uuid, p_ejercicio uuid, p_medicion uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_int public.intentos_evaluacion; v_ev public.evaluaciones; v_ej public.evaluacion_ejercicios;
+  v_usados smallint; v_r jsonb; v_pct numeric; v_pts numeric; v_nivel public.nivel_logro;
+begin
+  select * into v_int from public.intentos_evaluacion where id = p_intento and usuario_id = auth.uid() for update;
+  if not found then raise exception 'Intento no disponible'; end if;
+  select * into v_ev from public.evaluaciones where id = v_int.evaluacion_id;
+  if v_ev.tipo <> 'mixta' then raise exception 'La evaluación no es mixta'; end if;
+  if not public.evaluacion_abierta(v_ev.id) then raise exception 'La evaluación está cerrada'; end if;
+  select * into v_ej from public.evaluacion_ejercicios where id = p_ejercicio and evaluacion_id = v_ev.id;
+  if not found then raise exception 'El ejercicio no pertenece a la evaluación'; end if;
+
+  select coalesce(max(calificaciones), 0) into v_usados
+    from public.intento_ejercicios where intento_id = p_intento and ejercicio_id = p_ejercicio;
+  if v_usados >= v_ev.max_reintentos then
+    raise exception 'Ya usaste todos tus intentos (%)', v_ev.max_reintentos;
+  end if;
+
+  v_r := public.evaluar_criterio(v_ev.id, v_ej.criterio, p_medicion, auth.uid(), v_int.inicio, true);
+  v_pct := (v_r ->> 'puntaje')::numeric;
+  v_pts := round(v_ej.puntaje * v_pct / 100, 2);
+
+  insert into public.intento_ejercicios as ie
+    (intento_id, ejercicio_id, medicion_id, puntaje, puntaje_maximo, porcentaje, valor_obtenido, similitud,
+     criterio_cumplido, detalle, calificaciones, calificado_en)
+  values (p_intento, p_ejercicio, p_medicion, v_pts, v_ej.puntaje, v_pct, (v_r ->> 'valor')::numeric,
+          (v_r ->> 'similitud')::numeric, (v_r ->> 'cumple')::boolean, v_r, 1, now())
+  on conflict (intento_id, ejercicio_id) do update
+    set medicion_id = excluded.medicion_id, puntaje = excluded.puntaje, puntaje_maximo = excluded.puntaje_maximo,
+        porcentaje = excluded.porcentaje, valor_obtenido = excluded.valor_obtenido, similitud = excluded.similitud,
+        criterio_cumplido = excluded.criterio_cumplido, detalle = excluded.detalle,
+        calificaciones = ie.calificaciones + 1, calificado_en = now();
+
+  -- Recalcula el total del intento (preguntas + ejercicios) y su nivel.
+  update public.intentos_evaluacion set puntaje = puntaje where id = p_intento returning nivel into v_nivel;
+
+  return v_r || jsonb_build_object('puntaje_obtenido', v_pts, 'puntaje_ejercicio', v_ej.puntaje, 'nivel', v_nivel,
+                                   'intentos_restantes', v_ev.max_reintentos - (v_usados + 1));
+end $$;
+
+-- ---------------------------------------------------------------- recalificar (profesor): ahora también la mixta
+create or replace function public.recalificar_intento(p_intento uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_int public.intentos_evaluacion; v_tipo text; v_r jsonb; v_nivel public.nivel_logro; v_fila record; v_pct numeric;
+begin
+  select * into v_int from public.intentos_evaluacion where id = p_intento for update;
+  if not found then raise exception 'Intento no encontrado'; end if;
+  if not public.profesor_de_evaluacion(v_int.evaluacion_id) then
+    raise exception 'Solo el profesor de la evaluación puede recalificar' using errcode = '42501';
+  end if;
+  select tipo into v_tipo from public.evaluaciones where id = v_int.evaluacion_id;
+
+  if v_tipo = 'mixta' then
+    for v_fila in
+      select ie.id as ie_id, ie.medicion_id, e.criterio, e.puntaje as peso
+        from public.intento_ejercicios ie join public.evaluacion_ejercicios e on e.id = ie.ejercicio_id
+       where ie.intento_id = p_intento and ie.medicion_id is not null
+    loop
+      v_r := public.evaluar_criterio(v_int.evaluacion_id, v_fila.criterio, v_fila.medicion_id, v_int.usuario_id, v_int.inicio, false);
+      v_pct := (v_r ->> 'puntaje')::numeric;
+      update public.intento_ejercicios
+         set puntaje = round(v_fila.peso * v_pct / 100, 2), puntaje_maximo = v_fila.peso, porcentaje = v_pct,
+             valor_obtenido = (v_r ->> 'valor')::numeric, similitud = (v_r ->> 'similitud')::numeric,
+             criterio_cumplido = (v_r ->> 'cumple')::boolean, detalle = v_r, calificado_en = now()
+       where id = v_fila.ie_id;
+    end loop;
+    update public.intentos_evaluacion set puntaje = puntaje, calificado_en = now()
+     where id = p_intento returning nivel into v_nivel;
+    return jsonb_build_object('nivel', v_nivel, 'mixta', true);
+  end if;
+
+  if v_int.medicion_id is null then raise exception 'El estudiante aún no entregó una medición'; end if;
+  v_r := public.evaluar_ejercicio(v_int.evaluacion_id, v_int.medicion_id, v_int.usuario_id, v_int.inicio, false);
+
+  update public.intentos_evaluacion
+     set puntaje = (v_r ->> 'puntaje')::numeric, puntaje_maximo = 100,
+         valor_obtenido = (v_r ->> 'valor')::numeric, similitud = (v_r ->> 'similitud')::numeric,
+         criterio_cumplido = (v_r ->> 'cumple')::boolean, detalle = v_r, calificado_en = now()
+   where id = p_intento
+  returning nivel into v_nivel;
+
+  return v_r || jsonb_build_object('nivel', v_nivel);
+end $$;
+
+revoke all on function public.calificar_ejercicio_mixto(uuid,uuid,uuid), public.recalificar_intento(uuid) from public, anon;
+grant execute on function public.calificar_ejercicio_mixto(uuid,uuid,uuid), public.recalificar_intento(uuid) to authenticated;
+
+
+-- sensor_pulso · RF107 (ampliación): resultado y correcciones de una evaluación entregada
+-- Al entregar, el estudiante ve su calificación automática: porcentaje y nivel (logrado, medianamente logrado,
+-- no logrado), la corrección de cada pregunta (su respuesta, la correcta y la explicación) y el resultado de cada
+-- ejercicio aplicado. La clave de respuestas sigue sin ser legible para el estudiante: solo esta función la
+-- devuelve, y únicamente cuando el intento ya fue entregado y es del propio estudiante.
+
+create or replace function public.resultado_evaluacion(p_intento uuid)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_int public.intentos_evaluacion; v_ev public.evaluaciones; v_preguntas jsonb; v_ejercicios jsonb;
+begin
+  select * into v_int from public.intentos_evaluacion where id = p_intento and usuario_id = auth.uid();
+  if not found then raise exception 'Intento no disponible' using errcode = '42501'; end if;
+  if v_int.fin is null then
+    raise exception 'Entrega la evaluación para ver las correcciones';
+  end if;
+  select * into v_ev from public.evaluaciones where id = v_int.evaluacion_id;
+
+  -- Preguntas: respuesta del estudiante, si fue correcta, clave y explicación
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pregunta_id', q.id,
+           'orden', ep.orden,
+           'enunciado', q.enunciado,
+           'tipo', q.tipo,
+           'opciones', q.opciones,
+           'respondida', r.id is not null,
+           'respuesta', r.respuesta,
+           'es_correcta', r.es_correcta,
+           'puntaje', coalesce(r.puntaje, 0),
+           'puntaje_maximo', coalesce(ep.puntaje, q.puntaje),
+           'correcta', k.correcta,
+           'explicacion', k.explicacion
+         ) order by ep.orden, q.creado_en), '[]'::jsonb)
+    into v_preguntas
+    from public.evaluacion_preguntas ep
+    join public.preguntas q on q.id = ep.pregunta_id
+    left join public.respuestas r on r.intento_id = p_intento and r.pregunta_id = q.id
+    left join public.preguntas_claves k on k.pregunta_id = q.id
+   where ep.evaluacion_id = v_int.evaluacion_id;
+
+  -- Ejercicios aplicados
+  if v_ev.tipo = 'mixta' then
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'orden', e.orden,
+             'ejercicio', e.ejercicio,
+             'calificado', ie.id is not null,
+             'puntaje', coalesce(ie.puntaje, 0),
+             'puntaje_maximo', e.puntaje,
+             'porcentaje', coalesce(ie.porcentaje, 0),
+             'cumple', ie.criterio_cumplido,
+             'valor', ie.valor_obtenido,
+             'motivo', ie.detalle ->> 'motivo',
+             'criterio', e.criterio - 'referencia'
+           ) order by e.orden), '[]'::jsonb)
+      into v_ejercicios
+      from public.evaluacion_ejercicios e
+      left join public.intento_ejercicios ie on ie.intento_id = p_intento and ie.ejercicio_id = e.id
+     where e.evaluacion_id = v_int.evaluacion_id;
+  elsif v_ev.tipo = 'ejercicio_aplicado' then
+    v_ejercicios := jsonb_build_array(jsonb_build_object(
+      'orden', 1,
+      'ejercicio', v_ev.ejercicio,
+      'calificado', v_int.medicion_id is not null,
+      'puntaje', v_int.puntaje,
+      'puntaje_maximo', v_int.puntaje_maximo,
+      'porcentaje', v_int.porcentaje,
+      'cumple', v_int.criterio_cumplido,
+      'valor', v_int.valor_obtenido,
+      'motivo', v_int.detalle ->> 'motivo',
+      'criterio', (v_ev.criterio - 'referencia')
+    ));
+  else
+    v_ejercicios := '[]'::jsonb;
+  end if;
+
+  return jsonb_build_object(
+    'intento_id', p_intento,
+    'titulo', v_ev.titulo,
+    'tipo', v_ev.tipo,
+    'puntaje', v_int.puntaje,
+    'puntaje_maximo', v_int.puntaje_maximo,
+    'porcentaje', v_int.porcentaje,
+    'nivel', v_int.nivel,
+    'umbral_logrado', v_ev.umbral_logrado,
+    'umbral_medio', v_ev.umbral_medio,
+    'preguntas', v_preguntas,
+    'ejercicios', v_ejercicios
+  );
+end $$;
+
+revoke all on function public.resultado_evaluacion(uuid) from public, anon;
+grant execute on function public.resultado_evaluacion(uuid) to authenticated;
+
+
+-- sensor_pulso · RF109 (ampliación): inicio automático de la evaluación en vivo
+-- El profesor puede indicar la fecha y hora de inicio (o «dentro de N minutos», que el formulario convierte en fecha)
+-- de una evaluación en vivo. Llegada esa hora la evaluación se abre sola, dura su tiempo límite y se cierra sola,
+-- sin que el profesor entre al aula a pulsar «Iniciar en vivo». Si no indica fecha, sigue siendo manual.
+-- La fuente de verdad es el reloj de la base: `evaluacion_abierta` considera el inicio programado (abre_en),
+-- así que funciona aunque nadie abra ninguna pantalla. `activar_evaluaciones_programadas` solo ordena el estado
+-- (en_curso + iniciada_en) para los paneles del profesor.
+
+-- ---------------------------------------------------------------- ¿está abierta ahora?
+create or replace function public.evaluacion_abierta(p_eval uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.evaluaciones as e
+    where e.id = p_eval
+      and (
+        (
+          -- En vivo: empieza cuando el profesor la inicia (iniciada_en) o a la hora programada (abre_en)
+          e.modo = 'en_vivo'
+          and e.estado in ('programada', 'en_curso')
+          and coalesce(e.iniciada_en, e.abre_en) is not null
+          and e.tiempo_limite_s > 0
+          and statement_timestamp() >= coalesce(e.iniciada_en, e.abre_en)
+          and statement_timestamp() <
+            coalesce(e.iniciada_en, e.abre_en) + make_interval(secs => e.tiempo_limite_s)
+        )
+        or (
+          e.modo = 'ventana'
+          and e.estado in ('programada', 'en_curso')
+          and e.abre_en is not null
+          and e.cierra_en is not null
+          and statement_timestamp() >= e.abre_en
+          and statement_timestamp() < e.cierra_en
+        )
+      )
+  );
+$$;
+
+-- ---------------------------------------------------------------- ordenar el estado de las programadas
+-- Pasa a «en_curso» las evaluaciones en vivo cuya hora de inicio ya llegó y siguen dentro de su tiempo límite.
+-- Es idempotente y segura de llamar desde cualquier pantalla: solo aplica lo que el reloj ya decidió.
+create or replace function public.activar_evaluaciones_programadas()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_n integer;
+begin
+  update public.evaluaciones as e
+     set estado = 'en_curso',
+         iniciada_en = e.abre_en
+   where e.modo = 'en_vivo'
+     and e.estado = 'programada'
+     and e.iniciada_en is null
+     and e.abre_en is not null
+     and e.tiempo_limite_s > 0
+     and statement_timestamp() >= e.abre_en
+     and statement_timestamp() < e.abre_en + make_interval(secs => e.tiempo_limite_s);
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+revoke all on function public.activar_evaluaciones_programadas() from public, anon;
+grant execute on function public.activar_evaluaciones_programadas() to authenticated;
+
+-- ---------------------------------------------------------------- asignar con inicio automático
+-- Igual que antes, pero el modo en vivo acepta una fecha de inicio (p_abre_en, opcional).
+create or replace function public.asignar_evaluacion_rf109(
+  p_evaluacion_id uuid,
+  p_modo text,
+  p_alcance text,
+  p_abre_en timestamptz default null,
+  p_cierra_en timestamptz default null,
+  p_tiempo_limite_s integer default null,
+  p_curso_id uuid default null,
+  p_estudiantes_ids uuid[] default null
+)
+returns public.evaluaciones
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_evaluacion public.evaluaciones;
+begin
+  if auth.uid() is null
+     or not public.profesor_de_evaluacion(p_evaluacion_id) then
+    raise exception 'Solo el profesor del aula puede asignar la evaluación.'
+      using errcode = '42501';
+  end if;
+
+  if p_modo = 'ventana' then
+    if p_abre_en is null
+       or p_cierra_en is null
+       or p_cierra_en <= p_abre_en then
+      raise exception 'Indica una fecha de cierre posterior a la apertura.';
+    end if;
+  elsif p_modo = 'en_vivo' then
+    if p_tiempo_limite_s is null or p_tiempo_limite_s <= 0 then
+      raise exception 'Indica una duración mayor que cero para el modo en vivo.';
+    end if;
+    -- Inicio automático: la hora no puede estar ya vencida (se tolera un margen de 5 minutos por el reloj del equipo)
+    if p_abre_en is not null
+       and p_abre_en + make_interval(secs => p_tiempo_limite_s) <= statement_timestamp() then
+      raise exception 'La fecha de inicio ya pasó: elige una hora futura.';
+    end if;
+  else
+    raise exception 'Selecciona un modo de aplicación válido.';
+  end if;
+
+  update public.evaluaciones as e
+  set modo = p_modo,
+      estado = 'programada',
+      -- ventana: apertura y cierre. en vivo: abre_en es el inicio automático (null = lo inicia el profesor)
+      abre_en = p_abre_en,
+      cierra_en = case when p_modo = 'ventana' then p_cierra_en end,
+      tiempo_limite_s = case when p_modo = 'en_vivo' then p_tiempo_limite_s end,
+      iniciada_en = null
+  where e.id = p_evaluacion_id
+    and e.estado in ('borrador', 'programada')
+    and not public.evaluacion_abierta(e.id)
+  returning e.* into v_evaluacion;
+
+  if not found then
+    raise exception 'Solo puedes configurar una evaluación antes de que abra.';
+  end if;
+
+  if p_alcance = 'curso' then
+    if not exists (
+      select 1
+      from public.cursos as c
+      where c.id = p_curso_id
+        and c.aula_id = v_evaluacion.aula_id
+    ) then
+      raise exception 'Selecciona un curso de esta aula.';
+    end if;
+  elsif p_alcance = 'estudiante' then
+    if coalesce(cardinality(p_estudiantes_ids), 0) = 0 then
+      raise exception 'Selecciona al menos un estudiante.';
+    end if;
+
+    if exists (
+      select 1
+      from unnest(p_estudiantes_ids) as seleccionado(usuario_id)
+      where not exists (
+        select 1
+        from public.aula_estudiantes as m
+        where m.aula_id = v_evaluacion.aula_id
+          and m.usuario_id = seleccionado.usuario_id
+          and m.estado = 'activo'
+      )
+    ) then
+      raise exception 'Todos los estudiantes seleccionados deben estar activos en esta aula.';
+    end if;
+  elsif p_alcance is distinct from 'aula' then
+    raise exception 'Selecciona un alcance válido.';
+  end if;
+
+  delete from public.evaluacion_asignaciones
+  where evaluacion_id = p_evaluacion_id;
+
+  if p_alcance = 'estudiante' then
+    insert into public.evaluacion_asignaciones (
+      evaluacion_id, alcance, usuario_id
+    )
+    select distinct p_evaluacion_id, p_alcance, seleccionado.usuario_id
+    from unnest(p_estudiantes_ids) as seleccionado(usuario_id);
+  else
+    insert into public.evaluacion_asignaciones (
+      evaluacion_id, alcance, curso_id
+    )
+    values (
+      p_evaluacion_id,
+      p_alcance,
+      case when p_alcance = 'curso' then p_curso_id end
+    );
+  end if;
+
+  return v_evaluacion;
+end;
+$$;
+
+revoke all on function public.asignar_evaluacion_rf109(
+  uuid, text, text, timestamptz, timestamptz, integer, uuid, uuid[]
+) from public, anon;
+
+grant execute on function public.asignar_evaluacion_rf109(
+  uuid, text, text, timestamptz, timestamptz, integer, uuid, uuid[]
+) to authenticated;
+
+-- ---------------------------------------------------------------- iniciar / cerrar a mano
+-- «Iniciar» sigue sirviendo para adelantar el inicio; si la evaluación ya está abierta (por inicio automático) no la reinicia.
+-- «Cerrar» también funciona sobre una evaluación abierta automáticamente.
+create or replace function public.controlar_evaluacion_en_vivo(
+  p_evaluacion_id uuid,
+  p_accion text
+)
+returns public.evaluaciones
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_evaluacion public.evaluaciones;
+begin
+  if auth.uid() is null
+     or not public.profesor_de_evaluacion(p_evaluacion_id) then
+    raise exception 'Solo el profesor del aula puede controlar la evaluación.'
+      using errcode = '42501';
+  end if;
+
+  if p_accion = 'iniciar' then
+    if public.evaluacion_abierta(p_evaluacion_id) then
+      raise exception 'La evaluación ya está en curso.';
+    end if;
+
+    update public.evaluaciones as e
+    set estado = 'en_curso',
+        iniciada_en = statement_timestamp()
+    where e.id = p_evaluacion_id
+      and e.modo = 'en_vivo'
+      and e.estado = 'programada'
+      and e.tiempo_limite_s > 0
+    returning e.* into v_evaluacion;
+
+    if not found then
+      raise exception 'La evaluación debe estar programada en vivo y tener una duración válida.';
+    end if;
+
+  elsif p_accion = 'cerrar' then
+    update public.evaluaciones as e
+    set estado = 'cerrada'
+    where e.id = p_evaluacion_id
+      and e.modo = 'en_vivo'
+      and e.estado in ('programada', 'en_curso')
+      and public.evaluacion_abierta(e.id)
+    returning e.* into v_evaluacion;
+
+    if not found then
+      raise exception 'La evaluación debe estar en curso para cerrarla.';
+    end if;
+
+  else
+    raise exception 'Acción no válida. Usa iniciar o cerrar.';
+  end if;
+
+  return v_evaluacion;
+end;
+$$;
+
+revoke all on function public.controlar_evaluacion_en_vivo(uuid, text)
+  from public, anon;
+
+grant execute on function public.controlar_evaluacion_en_vivo(uuid, text)
+  to authenticated;
+
+-- ---------------------------------------------------------------- lo que ve el estudiante
+-- El cierre de una evaluación en vivo es inicio (manual o programado) + tiempo límite; si ese tiempo ya pasó, está cerrada.
+create or replace function public.mis_evaluaciones_rf109()
+returns table (
+  id uuid,
+  titulo text,
+  descripcion text,
+  tipo text,
+  ejercicio text,
+  modo text,
+  abre_en timestamptz,
+  cierra_en timestamptz,
+  disponibilidad text
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select
+    e.id,
+    e.titulo,
+    e.descripcion,
+    e.tipo,
+    e.ejercicio,
+    e.modo,
+    e.abre_en,
+    case
+      when e.modo = 'en_vivo' then
+        coalesce(e.iniciada_en, e.abre_en) + make_interval(secs => e.tiempo_limite_s)
+      else e.cierra_en
+    end,
+    case
+      when i.fin is not null then 'entregada'
+      when public.evaluacion_abierta(e.id) then 'disponible'
+      when e.estado in ('cerrada', 'en_curso')
+        or (e.modo = 'ventana' and e.cierra_en <= statement_timestamp())
+        or (e.modo = 'en_vivo'
+            and coalesce(e.iniciada_en, e.abre_en) is not null
+            and e.tiempo_limite_s > 0
+            and coalesce(e.iniciada_en, e.abre_en) + make_interval(secs => e.tiempo_limite_s) <= statement_timestamp())
+        then 'cerrada'
+      else 'pendiente'
+    end
+  from public.evaluaciones as e
+  left join public.intentos_evaluacion as i
+    on i.evaluacion_id = e.id and i.usuario_id = auth.uid()
+  where e.estado <> 'borrador'
+    and public.evaluacion_asignada_a_mi(e.id)
+  order by e.creado_en desc;
+$$;
+
+revoke all on function public.mis_evaluaciones_rf109()
+  from public, anon;
+
+grant execute on function public.mis_evaluaciones_rf109()
+  to authenticated;
+
+
+-- =====================================================================
+-- 20261113000700_rf107_entrega_sin_bloqueos.sql
+-- =====================================================================
+-- sensor_pulso · RF107 (ampliación): el estudiante puede entregar cualquier medición guardada
+-- Antes, la base rechazaba la entrega si la medición tenía calidad «mala», era anterior a la apertura de la evaluación o no
+-- traía el dato pedido (BPM o SpO₂): el estudiante no podía entregar y no veía qué había salido mal. Ahora la entrega
+-- NUNCA se bloquea por la calidad de la medición: se califica con lo que tenga (puede dar 0) y la retroalimentación explica
+-- qué pasó (señal mala, medición antigua, falta el dato). Solo se exige que la medición sea del propio estudiante.
+-- Reemplaza `evaluar_criterio` (migración 20261113000200); las demás funciones de RF107 no cambian.
+
+create or replace function public.evaluar_criterio(
+  p_eval uuid, p_criterio jsonb, p_medicion uuid, p_alumno uuid, p_desde timestamptz, p_validar_ventana boolean default true)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_ev public.evaluaciones; v_m public.mediciones;
+  v_crit jsonb := p_criterio; v_tipo text; v_min numeric; v_max numeric; v_minimo numeric;
+  v_valor numeric; v_sim numeric; v_pts numeric; v_cumple boolean; v_motivo text;
+  v_desde timestamptz; v_ref jsonb; v_ref_bpm numeric; v_ref_reg numeric; v_ref_ritmo text; v_ref_nombre text;
+  v_avisos text[] := '{}';
+begin
+  select * into v_ev from public.evaluaciones where id = p_eval;
+  if not found then raise exception 'Evaluación no encontrada'; end if;
+  select * into v_m from public.mediciones where id = p_medicion and usuario_id = p_alumno;
+  if not found then raise exception 'Medición no válida: debe ser una medición tuya'; end if;
+
+  -- Avisos (no bloquean): se agregan a la retroalimentación para que el estudiante vea qué pasó
+  if v_m.calidad = 'mala' then
+    v_avisos := v_avisos || 'La señal de esta medición era de calidad mala, así que el valor puede no ser confiable.';
+  end if;
+  v_desde := case when v_ev.modo = 'en_vivo' then coalesce(v_ev.iniciada_en, v_ev.abre_en) else v_ev.abre_en end;
+  if v_desde is not null and v_m.inicio < v_desde then
+    v_avisos := v_avisos || 'Esta medición es anterior a la apertura de la evaluación.';
+  end if;
+
+  v_tipo := v_crit ->> 'tipo';
+
+  if v_tipo = 'bpm_en_rango' then
+    v_valor := v_m.bpm_promedio;
+    v_min := (v_crit ->> 'min')::numeric; v_max := (v_crit ->> 'max')::numeric;
+    if v_valor is null then
+      v_pts := 0; v_cumple := false;
+      v_motivo := 'Esta medición no tiene BPM, así que no se puede comparar con el rango pedido.';
+    else
+      v_pts := public.puntaje_rango(v_valor, v_min, v_max); v_cumple := v_valor between v_min and v_max;
+      v_motivo := case when v_cumple then format('Tu pulso (%s BPM) está dentro del rango pedido (%s a %s BPM).', v_valor, v_min, v_max)
+                       else format('Tu pulso (%s BPM) está %s del rango pedido (%s a %s BPM).', v_valor,
+                                   case when v_valor < v_min then 'por debajo' else 'por encima' end, v_min, v_max) end;
+    end if;
+
+  elsif v_tipo = 'spo2_en_rango' then
+    v_valor := v_m.spo2_promedio;
+    v_min := (v_crit ->> 'min')::numeric; v_max := (v_crit ->> 'max')::numeric;
+    if v_valor is null then
+      v_pts := 0; v_cumple := false;
+      v_motivo := 'Esta medición no tiene SpO₂, así que no se puede comparar con el rango pedido.';
+    else
+      v_pts := public.puntaje_rango(v_valor, v_min, v_max); v_cumple := v_valor between v_min and v_max;
+      v_motivo := case when v_cumple then format('Tu SpO₂ (%s %%) está dentro del rango pedido (%s a %s %%).', v_valor, v_min, v_max)
+                       else format('Tu SpO₂ (%s %%) está %s del rango pedido (%s a %s %%).', v_valor,
+                                   case when v_valor < v_min then 'por debajo' else 'por encima' end, v_min, v_max) end;
+    end if;
+
+  elsif v_tipo = 'similitud_minima' then
+    v_ref := v_crit -> 'referencia';
+    v_minimo := (v_crit ->> 'valor')::numeric;
+    if v_ref is null or (v_ref ->> 'id') is null then
+      -- Falta algo del lado del profesor: la entrega queda registrada y él puede recalificarla después
+      v_pts := 0; v_cumple := false;
+      v_motivo := 'El profesor aún no definió la señal de referencia. Tu entrega quedó registrada y se recalificará cuando la defina.';
+    else
+      if v_ref ->> 'origen' = 'plantilla' then
+        select s.bpm_referencia, s.ritmo::text, s.nombre into v_ref_bpm, v_ref_ritmo, v_ref_nombre
+          from public.senales_referencia s where s.id = (v_ref ->> 'id')::uuid and s.aprobada;
+      elsif v_ref ->> 'origen' = 'medicion' then
+        -- Solo una medición del propio profesor: nunca los datos de otro estudiante.
+        select r.bpm_promedio, r.regularidad, r.ritmo::text, 'Medición de referencia del profesor'
+          into v_ref_bpm, v_ref_reg, v_ref_ritmo, v_ref_nombre
+          from public.mediciones r where r.id = (v_ref ->> 'id')::uuid and r.usuario_id = v_ev.creador_id;
+      end if;
+      if not found then
+        v_pts := 0; v_cumple := false;
+        v_motivo := 'La señal de referencia ya no está disponible. Tu entrega quedó registrada y el profesor podrá recalificarla.';
+      else
+        v_sim := public.similitud_rasgos(v_m.bpm_promedio, v_ref_bpm, v_m.regularidad, v_ref_reg, v_m.ritmo::text, v_ref_ritmo);
+        if v_sim is null then
+          v_pts := 0; v_cumple := false;
+          v_motivo := 'No hay BPM suficiente en esta medición para compararla con la referencia.';
+        else
+          v_valor := v_sim;
+          v_pts := public.puntaje_similitud(v_sim, v_minimo); v_cumple := v_sim >= v_minimo;
+          v_motivo := case when v_cumple then format('Tu señal tiene %s %% de similitud con «%s» (mínimo %s %%).', v_sim, v_ref_nombre, v_minimo)
+                           else format('Tu señal tiene %s %% de similitud con «%s»; el mínimo era %s %%.', v_sim, v_ref_nombre, v_minimo) end;
+        end if;
+      end if;
+    end if;
+  else
+    raise exception 'La evaluación no tiene un criterio válido';
+  end if;
+
+  if cardinality(v_avisos) > 0 then
+    v_motivo := v_motivo || ' Aviso: ' || array_to_string(v_avisos, ' ');
+  end if;
+
+  return jsonb_build_object('valor', v_valor, 'similitud', v_sim, 'cumple', v_cumple,
+                            'puntaje', v_pts, 'motivo', v_motivo, 'avisos', to_jsonb(v_avisos),
+                            'criterio', v_crit - 'referencia');
+end $$;
+
+revoke all on function public.evaluar_criterio(uuid,jsonb,uuid,uuid,timestamptz,boolean) from public, anon, authenticated;
+
+-- sensor_pulso · RF111 (ampliación): el estudiante recibe su canal automáticamente y deja los datos del paciente
+-- Igual que el profesor con «Agregar canal», el estudiante pulsa un botón, el sistema le asigna el siguiente canal
+-- libre y queda constancia de los tres requisitos: ficha del paciente (RF03), política de privacidad (RF88) y
+-- consentimiento informado (RF04, RF59). Un estudiante tiene como máximo un canal por sesión (el trigger
+-- `limitar_canales_por_usuario` también lo exige). Requiere la migración 20261109000200 (requisitos por canal).
+
+create or replace function public.asignar_canal_estudiante(
+  p_sesion uuid,
+  p_declaracion uuid,
+  p_politica_version text,
+  p_consentimiento_version text
+) returns smallint language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := auth.uid();
+  v_aula uuid; v_estado public.estado_conexion;
+  v_canal smallint;
+begin
+  if v_uid is null then
+    raise exception 'Inicia sesión para tomar un canal' using errcode = '42501';
+  end if;
+
+  select aula_id, estado into v_aula, v_estado from public.sesiones_medicion where id = p_sesion;
+  if not found or v_estado <> 'activa' then raise exception 'Sesión no disponible'; end if;
+  if v_aula is not null and not public.es_miembro_activo(v_aula) then
+    raise exception 'No perteneces al aula de esta sesión' using errcode = '42501';
+  end if;
+
+  -- Requisitos previos: ficha propia, política vigente y consentimiento activo.
+  if p_declaracion is null or not exists (
+       select 1 from public.declaraciones_paciente d where d.id = p_declaracion and d.usuario_id = v_uid) then
+    raise exception 'Falta la ficha del paciente de este canal (RF03)' using errcode = 'P0001';
+  end if;
+  if p_politica_version is distinct from
+     (select d.version from public.documentos_legales d where d.clave = 'politica_privacidad') then
+    raise exception 'Debes aceptar la política de privacidad vigente (RF88)' using errcode = 'P0001';
+  end if;
+  if p_consentimiento_version is null or not exists (
+       select 1 from public.consentimientos_version c where c.version = p_consentimiento_version and c.activa) then
+    raise exception 'Falta el consentimiento informado vigente (RF04)' using errcode = 'P0001';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_sesion::text || v_uid::text, 0));
+
+  if exists (select 1 from public.sesion_canales where sesion_id = p_sesion and usuario_id = v_uid) then
+    raise exception 'Ya tienes un canal en esta sesión. Libéralo para que el sistema te asigne otro.' using errcode = '23505';
+  end if;
+
+  -- Siguiente canal libre; skip locked evita que dos estudiantes tomen el mismo.
+  select canal into v_canal from public.sesion_canales
+   where sesion_id = p_sesion and usuario_id is null
+   order by canal limit 1 for update skip locked;
+  if v_canal is null then raise exception 'No hay canales libres en esta ronda'; end if;
+
+  update public.sesion_canales set usuario_id = v_uid, asignado_en = now()
+   where sesion_id = p_sesion and canal = v_canal;
+
+  -- La ficha del estudiante es su ficha propia (sesion_id nulo): se reutiliza tal cual y NO se liga a la sesión, así sigue
+  -- siendo su ficha guardada de siempre y no se le vuelve a pedir. La constancia queda en sesion_canal_requisitos.
+
+  insert into public.sesion_canal_requisitos
+    (sesion_id, canal, usuario_id, declaracion_id, politica_version, consentimiento_version)
+  values (p_sesion, v_canal, v_uid, p_declaracion, p_politica_version, p_consentimiento_version);
+
+  return v_canal;
+end $$;
+
+revoke all on function public.asignar_canal_estudiante(uuid, uuid, text, text) from public, anon;
+grant execute on function public.asignar_canal_estudiante(uuid, uuid, text, text) to authenticated;
+
+
+-- sensor_pulso · RF03 (ampliación): la ficha propia del paciente se conserva en la base
+-- La ficha propia de cada persona (estudiante, profesor o administrador) debe quedar guardada aunque cierre la sesión o
+-- pasen días sin conectarse, y solo cambiar cuando la persona lo pida. La retención diaria (RF60) borraba las fichas por
+-- fecha de creación (365 días), también la propia. Ahora la retención solo alcanza a las fichas de canales adicionales y
+-- de sesiones (sesion_id no nulo); la ficha propia (sesion_id nulo) solo se elimina cuando la persona ejerce su derecho
+-- de supresión (función de derechos del titular) o borra su cuenta.
+
+create or replace function public.aplicar_retencion()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare r record; n integer; total integer := 0;
+begin
+  for r in select * from public.politicas_retencion where activa loop
+    if r.tabla = 'lecturas' and r.accion = 'borrar' then
+      delete from public.lecturas where t < now() - make_interval(days => r.dias);
+    elsif r.tabla = 'intentos_login' and r.accion = 'borrar' then
+      delete from public.intentos_login where ocurrio_en < now() - make_interval(days => r.dias);
+    elsif r.tabla = 'limites_peticiones' and r.accion = 'borrar' then
+      delete from public.limites_peticiones where ventana < now() - make_interval(days => r.dias);
+    elsif r.tabla = 'declaraciones_paciente' and r.accion = 'borrar' then
+      -- La ficha propia (sesion_id nulo) se conserva: solo se borran las fichas ligadas a una sesión/canal.
+      delete from public.declaraciones_paciente
+       where creado_en < now() - make_interval(days => r.dias)
+         and sesion_id is not null;
+    else
+      continue;
+    end if;
+    get diagnostics n = row_count;
+    total := total + n;
+  end loop;
+  insert into public.auditoria (accion, entidad, detalle) values ('retencion', 'sistema', jsonb_build_object('filas', total));
+  return total;
+end $$;
+revoke all on function public.aplicar_retencion() from public, anon, authenticated;
+
+-- =====================================================================
+-- 20261114000100_rf62_auditoria_cliente.sql
+-- =====================================================================
+-- sensor_pulso · RF62 (corrección): registro de auditoría de acciones hechas desde el navegador
+-- Antes el cliente guardaba estas acciones en localStorage y su insert directo en public.auditoria
+-- fallaba en silencio (la tabla no tiene política de insert). Ahora pasan por esta función del servidor:
+--   · el actor sale de auth.uid() (el cliente no puede suplantarlo),
+--   · solo se aceptan acciones de una lista cerrada que el servidor no registra por sí mismo,
+--   · el sello de tiempo lo pone el servidor (trigger de RF63).
+-- Las demás acciones de RF62 ya las registra el servidor: login (registrar_intento_login), cambio_rol y
+-- cambio_rangos (triggers), descarga (registrar_descarga), publicacion y retiro_publicacion (publicar_medicion /
+-- retirar_publicacion), retiro_estudiantes, exportacion_datos y supresion_datos.
+
+create or replace function public.registrar_evento_cliente(
+  p_accion text,
+  p_entidad text default null,
+  p_entidad_id text default null,
+  p_detalle jsonb default '{}'::jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_perfil record;
+  v_detalle jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Requiere sesión' using errcode = '42501';
+  end if;
+  if p_accion not in ('eliminacion', 'eliminacion_aula', 'cambio_permisos') then
+    raise exception 'Acción de auditoría no permitida desde el cliente';
+  end if;
+  if jsonb_typeof(coalesce(p_detalle, '{}'::jsonb)) <> 'object'
+     or octet_length(coalesce(p_detalle, '{}'::jsonb)::text) > 4000 then
+    raise exception 'Detalle de auditoría no válido';
+  end if;
+
+  select pf.nombre, pf.correo into v_perfil
+    from public.perfiles as pf
+   where pf.id = auth.uid();
+
+  -- Los datos del actor los pone el servidor; se descartan los que mande el cliente.
+  v_detalle := (coalesce(p_detalle, '{}'::jsonb) - 'actor_nombre' - 'actor_correo')
+    || jsonb_build_object(
+         'actor_nombre', coalesce(v_perfil.nombre, ''),
+         'actor_correo', coalesce(v_perfil.correo, '')
+       );
+
+  perform public.registrar_auditoria(p_accion, left(p_entidad, 60), left(p_entidad_id, 120), v_detalle);
+end $$;
+
+revoke all on function public.registrar_evento_cliente(text, text, text, jsonb) from public, anon;
+grant execute on function public.registrar_evento_cliente(text, text, text, jsonb) to authenticated;
+
+comment on function public.registrar_evento_cliente(text, text, text, jsonb) is
+  'RF62: auditoría de acciones del navegador (eliminacion, eliminacion_aula, cambio_permisos) con actor y hora del servidor';

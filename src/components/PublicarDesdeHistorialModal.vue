@@ -18,21 +18,25 @@
         <div v-if="!resultado">
           <p class="pregunta" data-testid="pregunta-publicar-historial">¿Quieres publicarla para que otras personas la vean (siempre anonimizada)?</p>
           <div class="vista-previa" data-testid="publicar-historial-vista-previa">
-            <p class="vista-titulo">Esto es lo que verá cualquier persona:</p>
-            <ul>
-              <li v-for="c in vistaPrevia.campos" :key="c.etiqueta"><strong>{{ c.etiqueta }}:</strong> {{ c.valor }}</li>
-            </ul>
+            <VistaPreviaAnonimizacion
+              :registro="registroHistorial"
+              :nombre-privado="currentUserName"
+              :correo-privado="user?.email || ''"
+              :edad-privada="medicion.edad || null"
+            />
             <p class="nota">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}). El rango de edad lo calcula la base con la edad registrada al medir.</p>
           </div>
-          <label class="autoriza" data-testid="publicar-historial-autoriza">
-            <input v-model="autoriza" type="checkbox" data-testid="publicar-historial-casilla" />
-            <span>La persona medida autorizó que su medición se publique de forma anónima (sin su nombre ni datos que la identifiquen) para que otras personas la vean y comparen.</span>
-          </label>
+          <ConfirmacionExplicitaTitular
+            v-model="autoriza"
+            :titular="user?.email || currentUserName"
+            label-test-id="publicar-historial-autoriza"
+            checkbox-test-id="publicar-historial-casilla"
+          />
           <p v-if="error" class="alerta alerta-error" role="alert" data-testid="publicar-historial-error">{{ error }}</p>
           <div class="acciones">
             <button type="button" class="btn btn-secondary" :disabled="trabajando" data-testid="publicar-historial-cancelar" @click="intentarCerrar">Cancelar</button>
             <button type="button" class="btn btn-primary" :disabled="trabajando || !autoriza" data-testid="publicar-historial-confirmar" @click="publicar">
-              {{ trabajando ? 'Publicando…' : 'Sí, publicar' }}
+              {{ trabajando ? 'Publicando…' : (autoriza ? 'Sí, publicar' : 'Sí, publicar (Confirmación requerida)') }}
             </button>
           </div>
         </div>
@@ -50,6 +54,9 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { publicarMedicion } from '../services/medicionesService'
+import { useAuth } from '../composables/useAuth'
+import VistaPreviaAnonimizacion from './VistaPreviaAnonimizacion.vue'
+import ConfirmacionExplicitaTitular from './ConfirmacionExplicitaTitular.vue'
 import { vistaPreviaPublica, mensajeErrorHistorial } from '../utils/terminarMedicion.js'
 
 // Confirmación explícita (RF91) para publicar desde el historial una medición ya guardada. Usa la misma función
@@ -60,6 +67,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['cerrar', 'publicada'])
 
+const { user, currentUserName } = useAuth()
 const autoriza = ref(false)
 const trabajando = ref(false)
 const error = ref('')
@@ -69,12 +77,22 @@ const tituloEl = ref(null)
 const botonCerrar = ref(null)
 let enfocadoAntes = null
 
+const registroHistorial = computed(() => ({
+  resumen: {
+    bpm: props.medicion.bpm,
+    spo2: props.medicion.spo2,
+    ritmo: props.medicion.ritmo,
+    calidad: props.medicion.calidad
+  },
+  datos: {
+    edad: props.medicion.edad || null,
+    actividad: props.medicion.actividad || 'reposo'
+  }
+}))
+
 // El rango de edad lo calcula la base con la edad guardada al medir; aquí no se inventa un valor
 const vistaPrevia = computed(() => {
-  const v = vistaPreviaPublica({
-    resumen: { bpm: props.medicion.bpm, spo2: props.medicion.spo2, ritmo: props.medicion.ritmo, calidad: props.medicion.calidad },
-    datos: { edad: null }
-  })
+  const v = vistaPreviaPublica(registroHistorial.value)
   return { ...v, campos: v.campos.filter(c => c.etiqueta !== 'Rango de edad') }
 })
 
@@ -123,7 +141,7 @@ onBeforeUnmount(() => { try { enfocadoAntes?.focus?.() } catch { /* el elemento 
 
 <style scoped>
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 1rem; }
-.modal-container { width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; background: #ffffff; border-radius: 0.75rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid #cbd5e1; padding: 0; color: #0f172a; }
+.modal-container { width: 100%; max-width: 880px; max-height: 90vh; display: flex; flex-direction: column; background: #ffffff; border-radius: 0.75rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1); overflow: hidden; border: 1px solid #cbd5e1; padding: 0; color: #0f172a; }
 .modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
 .modal-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin: 0.2rem 0; }
 .modal-title:focus { outline: none; }

@@ -7,7 +7,7 @@
  * Entrada: { declaracionId }  ·  Salida: { ok, factores }
  */
 import { descifrarSobre, ErrorClave } from '../_lib/cifradoSalud.js'
-import { leerCuerpo, responder, verificarSesion } from '../_lib/sesion.js'
+import { leerCuerpo, responder, verificarSesion, verificarCsrf } from '../_lib/sesion.js'
 import { aplicarLimitePeticiones, extraerIp, LIMITES_PETICIONES_CONFIG } from '../_lib/limitePeticiones.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -15,6 +15,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function crearHandler({ verificar = verificarSesion, env = process.env } = {}) {
   return async function handler(req, res) {
     if (req.method !== 'POST') return responder(res, 405, { ok: false, error: 'Solo se acepta POST.' })
+    if (!verificarCsrf(req, res, { env })) return
     const sesion = await verificar(req, env)
     if (!sesion) return responder(res, 401, { ok: false, error: 'Se requiere una sesión válida.' })
 

@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js'
 import { validarCorreoInstitucional } from '../utils/validators.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 // Reglas de seguridad del RF50
 export const MAX_INTENTOS_FALLIDOS = 5
@@ -79,6 +80,29 @@ export async function registrarIntentoLogin({ correo, exitoso, ip = null }) {
   if (!correo) return { bloqueado: false }
   const correoLimpio = correo.trim().toLowerCase()
   const ahora = Date.now()
+
+  if (exitoso) {
+    registrarEventoAuditoria({
+      accion: 'login',
+      entidad: 'perfiles',
+      entidadId: correoLimpio,
+      actorCorreo: correoLimpio,
+      entidadNombre: 'Sesión Institucional',
+      resumen: `Acceso exitoso verificado${ip ? ` · IP: ${ip}` : ''}`,
+      ip: ip || '127.0.0.1'
+    })
+  } else {
+    registrarEventoAuditoria({
+      accion: 'login_fallido',
+      entidad: 'perfiles',
+      entidadId: correoLimpio,
+      actorCorreo: correoLimpio,
+      entidadNombre: 'Sesión Institucional',
+      resumen: `Intento de inicio de sesión rechazado${ip ? ` · IP: ${ip}` : ''}`,
+      ip: ip || '127.0.0.1',
+      sospechoso: true
+    })
+  }
 
   try {
     // Llamar a la función oficial registrar_intento_login de Supabase

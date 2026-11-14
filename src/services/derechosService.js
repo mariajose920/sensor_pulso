@@ -7,6 +7,7 @@
  * que cada pantalla necesita (minimización de datos).
  */
 import { supabase } from './supabase.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 export const TIPOS_DERECHO = [
   { valor: 'acceso', texto: 'Acceso: saber qué datos tuyos tratamos' },
@@ -100,6 +101,14 @@ export const derechosService = {
       a.click()
       a.remove()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
+      registrarEventoAuditoria({
+        accion: 'exportacion_datos',
+        entidad: 'perfiles',
+        entidadId: u.id,
+        entidadNombre: 'Portabilidad de Datos Personales (JSON)',
+        resumen: 'Descarga completa de portabilidad de datos del titular (JSON)',
+        detalle: { formato: 'json', archivo: 'mis-datos-sensor-pulso.json' }
+      }).catch(() => {})
       return { ok: true }
     } catch {
       return { ok: false, error: 'No hay conexión con el servidor. Inténtalo más tarde.' }
@@ -113,6 +122,15 @@ export const derechosService = {
 
   async eliminarMisDatos() {
     const { error } = await supabase.rpc('eliminar_mis_datos')
+    if (!error) {
+      registrarEventoAuditoria({
+        accion: 'supresion_datos',
+        entidad: 'perfiles',
+        entidadNombre: 'Supresión Total de Datos del Titular',
+        resumen: 'Eliminación completa de mediciones y fichas declaradas solicitada por el titular',
+        detalle: { alcance: 'mediciones, fichas y publicaciones' }
+      }).catch(() => {})
+    }
     return error ? { ok: false, error: 'No se pudieron eliminar tus datos.' } : { ok: true }
   },
 

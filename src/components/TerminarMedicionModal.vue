@@ -3,6 +3,7 @@
     <div
       ref="caja"
       class="modal-container card"
+      :class="{ 'modal-wide': paso === 'publicar' }"
       role="dialog"
       aria-modal="true"
       aria-labelledby="terminar-titulo"
@@ -58,12 +59,20 @@
         <div v-else-if="paso === 'publicar'">
           <p class="pregunta" data-testid="pregunta-publicar">¿Quieres publicarla para que otras personas la vean (siempre anonimizada)?</p>
           <div class="vista-previa" data-testid="terminar-vista-previa">
-            <p class="vista-titulo">Esto es lo que verá cualquier persona:</p>
-            <ul>
-              <li v-for="c in vistaPrevia.campos" :key="c.etiqueta"><strong>{{ c.etiqueta }}:</strong> {{ c.valor }}</li>
-            </ul>
-            <p class="nota">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}).</p>
+            <VistaPreviaAnonimizacion
+              :registro="registro"
+              :nombre-privado="registro.resumen.paciente || currentUserName"
+              :correo-privado="user?.email || ''"
+              :edad-privada="registro.datos?.edad"
+              :declaracion-id="registro.datos?.declaracionId"
+            />
+            <p class="nota sr-nota-compat">Se publica sin nombre ni datos identificables (no se publica: {{ vistaPrevia.excluidos.join(', ') }}).</p>
           </div>
+          <ConfirmacionExplicitaTitular
+            v-model="confirmacionTitularModal"
+            :titular="user?.email || currentUserName"
+            checkbox-test-id="terminar-confirmacion-titular-casilla"
+          />
           <label v-if="evalPublicacion.requiereAutorizacionPaciente" class="autoriza" data-testid="terminar-autoriza">
             <input v-model="autorizaPaciente" type="checkbox" data-testid="terminar-autoriza-casilla" />
             <span>
@@ -79,7 +88,7 @@
           <div class="acciones">
             <button type="button" class="btn btn-secondary" :disabled="trabajando" @click="paso = 'guardar'">Atrás</button>
             <button type="button" class="btn btn-secondary" :disabled="trabajando" data-testid="terminar-solo-guardar" @click="ejecutar(false)">No, solo guardar</button>
-            <button ref="botonPublicar" type="button" class="btn btn-primary" :disabled="trabajando || (evalPublicacion.requiereAutorizacionPaciente && !autorizaPaciente)" data-testid="terminar-publicar" @click="ejecutar(true)">
+            <button ref="botonPublicar" type="button" class="btn btn-primary" :disabled="trabajando || !confirmacionTitularModal || (evalPublicacion.requiereAutorizacionPaciente && !autorizaPaciente)" data-testid="terminar-publicar" @click="ejecutar(true)">
               {{ trabajando ? 'Guardando…' : 'Sí, publicar' }}
             </button>
           </div>
@@ -105,12 +114,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { usePuedePublicar } from '../composables/usePuedePublicar'
 import { useAuth } from '../composables/useAuth'
 import { guardarMedicion, publicarMedicion } from '../services/medicionesService'
+import VistaPreviaAnonimizacion from './VistaPreviaAnonimizacion.vue'
+import ConfirmacionExplicitaTitular from './ConfirmacionExplicitaTitular.vue'
 import {
   evaluarGuardado, evaluarPublicacion, vistaPreviaPublica, resultadoFinal, lineaInformativaPublicar,
   MENSAJES_TERMINAR
 } from '../utils/terminarMedicion.js'
 
-// «Terminar» una medición de canal: pregunta si se guarda (RF30) y, solo con permiso, si se publica (RF31, RF57, RF98).
+// «Terminar» una medición de canal: pregunta si se guarda (RF30) y, solo con permiso, si se publica (RF31, RF57, RF91, RF98).
 const props = defineProps({
   /** Resultado de armarRegistroTerminado() */
   registro: { type: Object, required: true },
@@ -119,7 +130,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['cerrar', 'resultado'])
 
-const { isAuthenticated } = useAuth()
+const { isAuthenticated, user, currentUserName } = useAuth()
 const { cuenta, cargar: cargarCondiciones } = usePuedePublicar()
 
 const paso = ref('guardar') // 'guardar' | 'publicar' | 'resultado'
@@ -127,6 +138,7 @@ const trabajando = ref(false)
 const error = ref('')
 const resultado = ref({ ok: false, titulo: '', detalle: '' })
 const condicionesListas = ref(false)
+const confirmacionTitularModal = ref(false)
 const autorizaPaciente = ref(false) // quien mide confirma que el paciente autorizó publicar (consentimiento propio del canal)
 const caja = ref(null)
 const tituloEl = ref(null)
@@ -191,7 +203,7 @@ async function ejecutar(publicar) {
     // 2) Publicar si se pidió y se puede
     let publicada = false
     let fallo = null
-    const quisoPublicar = publicar && evalPublicacion.value.preguntar && (!evalPublicacion.value.requiereAutorizacionPaciente || autorizaPaciente.value)
+    const quisoPublicar = publicar && confirmacionTitularModal.value && evalPublicacion.value.preguntar && (!evalPublicacion.value.requiereAutorizacionPaciente || autorizaPaciente.value)
     if (quisoPublicar) {
       if (medicionGuardada.pendiente) fallo = MENSAJES_TERMINAR.publicar_pendiente
       else if (!medicionGuardada.id) fallo = MENSAJES_TERMINAR.publicar_sin_id
@@ -283,6 +295,14 @@ onBeforeUnmount(() => { try { enfocadoAntes?.focus?.() } catch { /* el elemento 
   border: 1px solid #cbd5e1;
   padding: 0;
   color: #0f172a;
+  transition: max-width 0.2s ease;
+}
+.modal-container.modal-wide {
+  max-width: 880px;
+}
+.sr-nota-compat {
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
 }
 .modal-header {
   display: flex;

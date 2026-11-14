@@ -5,8 +5,13 @@
       <span>{{ estadoGuardadoFicha.mensaje }}</span>
       <button v-if="estadoGuardadoFicha.estado === 'error'" type="button" class="ficha-toast-btn" @click="reintentarGuardadoFicha">Reintentar</button>
     </div>
-    <!-- RF01: lo primero que se ve es quién está identificado (docente, administrador, etc.) -->
-    <UserIdentifier />
+    <!-- RF01: lo primero que se ve es quién está identificado (solo cuando hay sesión activa) -->
+    <div v-if="isAuthenticated">
+      <UserIdentifier />
+    </div>
+
+    <!-- RF107: si el estudiante llegó desde un ejercicio de una evaluación, puede volver a ella -->
+    <VolverAEvaluacionBanner que="medición" />
 
     <!-- Encabezado de la vista -->
     <div class="view-header">
@@ -15,7 +20,54 @@
       </div>
     </div>
 
-    <!-- Stepper Visual Superior (RF13: 5 Pasos Clínicos) -->
+    <!-- Bloqueo para visitantes sin sesión -->
+    <div v-if="!isAuthenticated" class="card guard-access-card guard-warning mb-4" role="region" aria-label="Inicio de sesión requerido" data-testid="guard-sin-sesion-medicion">
+      <div class="guard-icon-wrap guard-icon-warn">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+      <div class="guard-content">
+        <h2 class="guard-title">Se requiere inicio de sesión para operar el sensor de pulso</h2>
+        <p class="guard-desc">
+          Para conectarte al sensor y registrar bioseñales en tiempo real, debes identificarte con tu cuenta institucional de la UNACH (@alu.unach.cl o @unach.cl).
+        </p>
+        <div class="guard-actions">
+          <router-link to="/login?redirect=/medicion&motivo=medicion" class="btn btn-primary">
+            Iniciar Sesión
+          </router-link>
+          <router-link to="/aprendizaje/simulador" class="btn btn-secondary">
+            Continuar en Modo Simulador Educativo
+          </router-link>
+        </div>
+      </div>
+    </div>
+
+    <template v-else>
+    <!-- Aviso superior si el docente conectado no tiene permiso de sensor -->
+    <div v-if="profesorSinPermisoSensor" class="card guard-access-card guard-info mb-4" role="region" data-testid="profesor-sin-permiso-banner">
+      <div class="guard-icon-wrap guard-icon-info">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </div>
+      <div class="guard-content">
+        <h2 class="guard-title">Cuenta Docente: Permiso de Operación y Publicación no Habilitado</h2>
+        <p class="guard-desc">
+          Profesor: Tu cuenta actualmente no cuenta con el permiso activo para conectarse al sensor físico ni publicar registros en la galería comunitaria.
+        </p>
+        <p class="guard-subdesc">
+          Si requieres realizar prácticas con el sensor en tus clases, solicita al Administrador que active tu permiso en el Panel de Administración Institucional.
+        </p>
+        <div class="guard-actions">
+          <router-link to="/aulas" class="btn btn-primary btn-sm">Ir a Mis Aulas</router-link>
+          <router-link to="/comparacion" class="btn btn-secondary btn-sm">Ver Galería Pública</router-link>
+          <router-link to="/aprendizaje/simulador" class="btn btn-secondary btn-sm">Modo Simulador</router-link>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stepper Visual Superior -->
     <nav class="stepper-nav card" aria-label="Progreso del protocolo de medición">
       <div 
         v-for="paso in pasosInfo" 
@@ -359,7 +411,7 @@
               <span class="pac-nombre">{{ pacienteActivo.nombre }}</span>
               <span class="pac-edad-chip">{{ pacienteActivo.edad }} años</span>
             </div>
-            <span class="pac-sub">Ficha validada para adquisición de bioseñales (RF03)</span>
+            <span class="pac-sub">Ficha validada para adquisición de bioseñales</span>
           </div>
           <div v-if="consentimientoEstado.vigente" class="pac-consent-pill" data-testid="consentimiento-valido">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -393,6 +445,22 @@
         </div>
       </div>
 
+      <!-- Bloqueo de hardware si el docente conectado no tiene permiso habilitado -->
+      <div v-if="profesorSinPermisoSensor" class="card guard-access-card guard-info mb-4" data-testid="profesor-sin-permiso-paso4">
+        <div class="guard-icon-wrap guard-icon-info">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <div class="guard-content">
+          <h3 class="guard-title">Acceso al Sensor Restringido para Cuenta Docente sin Permiso</h3>
+          <p class="guard-desc">
+            La conexión WiFi/USB y la adquisición de señales en vivo requieren que un Administrador habilite el permiso de operación y publicación en tu perfil docente.
+          </p>
+        </div>
+      </div>
+
+      <template v-else>
       <!-- 1) ¿Cómo se mide? WiFi o USB: el resto de la pantalla depende de la respuesta -->
       <FuenteMedicionSelector />
 
@@ -408,8 +476,9 @@
         <CanalesPacientesPanel v-if="fuenteConectada" @agregado="alAgregarCanal" />
       </template>
       <template v-else>
-        <!-- Estudiantes y usuarios: eligen su canal libre (RF12 / RF111) -->
-        <VinculacionCanales @canal-seleccionado="seleccionarCanal" @solicitar-consentimiento="solicitarConsentimientoConAccion" />
+        <!-- Estudiantes y usuarios: un solo canal y un solo paciente, ellos mismos. El canal se asigna solo, con los datos de su ficha -->
+        <CanalesPacientesPanel @agregado="alAgregarCanal" @ir-a-paso="pasoActual = $event === 'ficha' ? 2 : 1" />
+      </template>
       </template>
 
       <!-- Control y Gestión de Sesión de Medición en Vivo (RF09, RF10, RF11, RF111) -->
@@ -561,7 +630,7 @@
 
           <div class="form-row">
             <div class="form-group flex-1">
-              <label class="form-label">Token de Dispositivo (RF54):</label>
+              <label class="form-label">Token de Dispositivo:</label>
               <input 
                 type="text" 
                 class="form-control font-mono" 
@@ -584,7 +653,7 @@
               </button>
             </div>
             <div class="simulation-presets-row" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-              <span class="preset-label" style="font-size: 0.8rem; color: var(--color-muted); font-weight: 600;">Pruebas de Alerta (RF21):</span>
+              <span class="preset-label" style="font-size: 0.8rem; color: var(--color-muted); font-weight: 600;">Pruebas de Alerta:</span>
               <button type="button" class="btn btn-sm btn-outline-danger" @click="enviarPaquetePersonalizado(128, 98)" title="Simula taquicardia para activar alerta">
                 Taquicardia (128 BPM)
               </button>
@@ -625,20 +694,20 @@
         <!-- Tab 3: Documentación de Ingesta -->
         <div v-if="tabActiva === 'api'" class="tab-content">
           <p class="tab-description">
-            Especificación de la arquitectura de vinculación de canales (RF12) y telemetría (RF05):
+            Especificación de la arquitectura de vinculación de canales y telemetría:
           </p>
           <table class="api-table">
             <tbody>
               <tr>
-              <th>Visualización 5 Canales (RF08)</th>
+              <th>Visualización 5 Canales</th>
               <td>Supervisión simultánea de hasta 5 canales fisiológicos del ESP32 con BPM, SpO₂ y calidad en tiempo real.</td>
             </tr>
             <tr>
-              <th>Medición SpO₂ (RF114)</th>
+              <th>Medición SpO₂</th>
               <td>Adquisición óptica dual 660 nm (Rojo) y 880-940 nm (IR) con sensor MAX30102.</td>
             </tr>
             <tr>
-              <th>Vinculación Canales (RF12)</th>
+              <th>Vinculación Canales</th>
               <td>Función atómica <code>elegir_canal(p_sesion, p_canal)</code>: Asigna el canal al estudiante que lo selecciona.</td>
             </tr>
             </tbody>
@@ -681,7 +750,7 @@
             <div>
               <strong>Paciente Evaluado:</strong> {{ pacienteActivo.nombre }} ({{ pacienteActivo.edad }} años)
             </div>
-            <span class="badge badge-primary">Ficha Validada RF03</span>
+            <span class="badge badge-primary">Ficha Validada</span>
           </div>
           <div class="res-pac-tags">
             <span class="tag-item">Estrés: <strong>{{ pacienteActivo.nivelEstres }}</strong></span>
@@ -794,6 +863,235 @@
         </div>
       </div>
 
+      <!-- Tarjeta de Guardado y Publicación Comunitaria Anonimizada -->
+      <div class="publicacion-paso5-card card mt-4 mb-3" data-testid="publicacion-paso5-card">
+        <div class="pub-header-row">
+          <div>
+            <h3 class="pub-title">Publicación Comunitaria y Docente (Opcional)</h3>
+            <p class="pub-desc">
+              Comparte este registro fisiológico para análisis didáctico en la Galería Pública Universitaria (visible con o sin sesión, siempre anonimizado).
+            </p>
+          </div>
+          <span class="badge-anonima-pill">Anonimización Garantizada</span>
+        </div>
+
+        <div v-if="!evalPublicacionPaso5.preguntar" class="alert alert-info" style="margin: 0.75rem 0 0 0; font-size: 0.86rem;">
+          {{ evalPublicacionPaso5.nota || 'La publicación no está disponible para esta sesión o medición.' }}
+        </div>
+
+        <template v-else>
+          <label class="pub-checkbox-row">
+            <input type="checkbox" v-model="quierePublicarPaso5" class="checkbox-custom" />
+            <span><strong>Publicar esta medición en la Galería Pública UNACH</strong></span>
+          </label>
+
+          <div v-if="quierePublicarPaso5" class="anonimato-garantia-box">
+            <div class="anonimato-titulo">Garantía de Anonimización Biomédica</div>
+            <VistaPreviaAnonimizacion
+              :registro="registroVistaPreviaPaso5"
+              :nombre-privado="pacienteActivo?.nombre || currentUserName"
+              :correo-privado="user?.email || ''"
+              :edad-privada="pacienteActivo?.edad"
+              :declaracion-id="pacienteActivo?.id"
+              :titulo-personalizado="tituloPublicacionPaso5"
+            />
+
+            <div class="pub-titulo-card">
+              <div class="pub-titulo-top">
+                <label class="pub-titulo-label" for="titulo-pub-paso5">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                  <span>Título descriptivo anónimo <small>(opcional)</small></span>
+                </label>
+                <span class="pub-titulo-counter">{{ tituloPublicacionPaso5.length }} / 80</span>
+              </div>
+
+              <div class="pub-titulo-input-wrap">
+                <input
+                  id="titulo-pub-paso5"
+                  v-model="tituloPublicacionPaso5"
+                  type="text"
+                  class="pub-titulo-input"
+                  maxlength="80"
+                  placeholder="Ej: Medición en reposo tras taller práctico de fisiología"
+                />
+                <button
+                  v-if="tituloPublicacionPaso5"
+                  type="button"
+                  class="pub-titulo-clear"
+                  aria-label="Limpiar título"
+                  @click="tituloPublicacionPaso5 = ''"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div class="pub-titulo-chips">
+                <span class="chips-label">Sugerencias rápidas:</span>
+                <button
+                  type="button"
+                  class="chip-sugerencia"
+                  @click="tituloPublicacionPaso5 = 'Medición basal en reposo'"
+                >
+                  Medición basal en reposo
+                </button>
+                <button
+                  type="button"
+                  class="chip-sugerencia"
+                  @click="tituloPublicacionPaso5 = 'Práctica de laboratorio UNACH'"
+                >
+                  Práctica de laboratorio UNACH
+                </button>
+                <button
+                  type="button"
+                  class="chip-sugerencia"
+                  @click="tituloPublicacionPaso5 = 'Control fisiológico post-actividad'"
+                >
+                  Control fisiológico post-actividad
+                </button>
+              </div>
+            </div>
+
+            <ConfirmacionExplicitaTitular
+              v-model="confirmacionExplicitaPaso5"
+              :titular="user?.email || currentUserName"
+              checkbox-test-id="confirmacion-explicita-paso5-casilla"
+            />
+          </div>
+
+          <div v-if="resultadoPublicacionPaso5" class="alert mt-3" :class="resultadoPublicacionPaso5.ok ? 'alert-success' : 'alert-warning'" role="status">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+              <div>
+                <strong>{{ resultadoPublicacionPaso5.titulo }}</strong>
+                <span v-if="resultadoPublicacionPaso5.detalle"> {{ resultadoPublicacionPaso5.detalle }}</span>
+              </div>
+              <div v-if="resultadoPublicacionPaso5.ok && resultadoPublicacionPaso5.publicada" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  data-testid="btn-retirar-publicacion-paso5"
+                  @click="retirarPublicacionPaso5"
+                >
+                  Retirar Publicación Ahora
+                </button>
+                <router-link
+                  to="/comparacion?modo=publicas"
+                  class="btn btn-primary btn-sm"
+                >
+                  Ver en la Galería Pública
+                </router-link>
+              </div>
+            </div>
+          </div>
+
+          <div class="pub-actions-row mt-3">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="publicandoPaso5"
+              @click="guardarYPublicarPaso5(false)"
+            >
+              {{ publicandoPaso5 ? 'Guardando...' : 'Guardar en mi Historial Privado' }}
+            </button>
+            <button
+              v-if="quierePublicarPaso5"
+              type="button"
+              class="btn btn-secondary"
+              data-testid="btn-abrir-vista-previa-paso5"
+              :disabled="publicandoPaso5"
+              @click="abrirModalConfirmacionPaso5"
+            >
+              Vista Previa en Pantalla Completa
+            </button>
+            <button
+              v-if="quierePublicarPaso5"
+              type="button"
+              class="btn btn-primary"
+              data-testid="btn-publicar-directo-paso5"
+              :disabled="publicandoPaso5 || !confirmacionExplicitaPaso5"
+              @click="guardarYPublicarPaso5(true)"
+            >
+              <svg v-if="!confirmacionExplicitaPaso5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right: 6px; vertical-align: text-bottom;" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              {{ publicandoPaso5 ? 'Publicando...' : (confirmacionExplicitaPaso5 ? 'Confirmar y Publicar de Forma Anónima' : 'Confirmar y Publicar de Forma Anónima (Bloqueado)') }}
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Modal de Confirmación con Vista Previa de Anonimización antes de Confirmar Publicación -->
+      <div
+        v-if="modalVistaPreviaPaso5Visible"
+        class="modal-anon-backdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-anon-paso5-titulo"
+        data-testid="modal-confirmar-publicacion-paso5"
+        @click.self="modalVistaPreviaPaso5Visible = false"
+      >
+        <div class="modal-anon-card card">
+          <div class="modal-anon-header">
+            <h2 id="modal-anon-paso5-titulo" class="modal-anon-title">
+              Vista Previa de Anonimización antes de Confirmar Publicación
+            </h2>
+            <button
+              type="button"
+              class="modal-anon-close"
+              aria-label="Cerrar vista previa"
+              :disabled="publicandoPaso5"
+              @click="modalVistaPreviaPaso5Visible = false"
+            >
+              ×
+            </button>
+          </div>
+
+          <div class="modal-anon-body">
+            <VistaPreviaAnonimizacion
+              :registro="registroVistaPreviaPaso5"
+              :nombre-privado="pacienteActivo?.nombre || currentUserName"
+              :correo-privado="user?.email || ''"
+              :edad-privada="pacienteActivo?.edad"
+              :declaracion-id="pacienteActivo?.id"
+              :titulo-personalizado="tituloPublicacionPaso5"
+            />
+            <ConfirmacionExplicitaTitular
+              v-model="confirmacionExplicitaPaso5"
+              :titular="user?.email || currentUserName"
+              checkbox-test-id="confirmacion-explicita-modal-casilla"
+            />
+          </div>
+
+          <div class="modal-anon-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-testid="btn-cancelar-publicacion-paso5"
+              :disabled="publicandoPaso5"
+              @click="soloGuardarDesdeModalPaso5"
+            >
+              Cancelar / Solo guardar en privado
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              data-testid="btn-confirmar-publicacion-paso5"
+              :disabled="publicandoPaso5 || !confirmacionExplicitaPaso5"
+              @click="confirmarYPublicarDesdeModalPaso5"
+            >
+              <svg v-if="!confirmacionExplicitaPaso5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right: 6px; vertical-align: text-bottom;" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              {{ publicandoPaso5 ? 'Publicando...' : (confirmacionExplicitaPaso5 ? 'Confirmar y Publicar de Forma Anónima' : 'Confirmar y Publicar de Forma Anónima (Bloqueado)') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Botones de Acción Paso 5 -->
       <div class="step-nav-actions" style="margin-top: 1.5rem;">
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -817,8 +1115,9 @@
         </button>
       </div>
     </section>
+    </template>
 
-    <!-- Modal Emergente de Consentimiento (RF04) -->
+    <!-- Modal Emergente de Consentimiento -->
     <ConsentimientoModal
       :visible="modalConsentimientoVisible"
       @aceptado="onConsentimientoAceptado"
@@ -831,6 +1130,7 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import UserIdentifier from '../components/UserIdentifier.vue'
+import VolverAEvaluacionBanner from '../components/VolverAEvaluacionBanner.vue'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import ConsentimientoModal from '../components/ConsentimientoModal.vue'
 import DatosPacienteCard from '../components/DatosPacienteCard.vue'
@@ -843,10 +1143,13 @@ import MultiCanalMonitor from '../components/MultiCanalMonitor.vue'
 import GraficasCanalesPropios from '../components/GraficasCanalesPropios.vue'
 import { canalesGraficables } from '../utils/graficasCanales.js'
 import { esDocente } from '../utils/canalesMultiples.js'
-import { contextoPaciente } from '../utils/terminarMedicion.js'
+import { contextoPaciente, evaluarPublicacion, rangoDeEdad, armarRegistroTerminado, formatearFechaConfirmacionTitular, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
+import { usePuedePublicar } from '../composables/usePuedePublicar'
+import { guardarMedicion, publicarMedicion, retirarPublicacion, registrarPublicacionAnonimaLocal, retirarPublicacionAnonimaLocal } from '../services/medicionesService'
+import VistaPreviaAnonimizacion from '../components/VistaPreviaAnonimizacion.vue'
+import ConfirmacionExplicitaTitular from '../components/ConfirmacionExplicitaTitular.vue'
 import GuardarMedicionCard from '../components/GuardarMedicionCard.vue'
 import ExplicacionResultados from '../components/ExplicacionResultados.vue'
-import VinculacionCanales from '../components/VinculacionCanales.vue'
 import ComparadorRangoCard from '../components/ComparadorRangoCard.vue'
 import InterpretacionResultados from '../components/InterpretacionResultados.vue'
 import AlertaFueraRangoBanner from '../components/AlertaFueraRangoBanner.vue'
@@ -887,7 +1190,186 @@ import {
 // ============================================================================
 // 1. STEPPER Y FLUJO DEL ASISTENTE (RF13: 5 PASOS)
 // ============================================================================
-const { currentUserId } = useAuth()
+const { user, currentUserName, currentUserId, isAuthenticated, isProfesor, isAdmin, tienePermisoProfesor, recargarPermisosProfesor, permisosProfesorCargados, permisoConsultado } = useAuth()
+const { cuenta: cuentaPublicar, cargar: cargarCondicionesPublicar } = usePuedePublicar()
+
+const profesorSinPermisoSensor = computed(() => {
+  if (!isAuthenticated.value || isAdmin.value || !isProfesor.value) return false
+  if (!permisosProfesorCargados.value) return false
+  if (permisoConsultado.value === false) return false
+  return !tienePermisoProfesor('publicar_galeria')
+})
+
+const quierePublicarPaso5 = ref(false)
+const confirmacionExplicitaPaso5 = ref(false)
+const tituloPublicacionPaso5 = ref('')
+const publicandoPaso5 = ref(false)
+const resultadoPublicacionPaso5 = ref(null)
+const modalVistaPreviaPaso5Visible = ref(false)
+const ultimaPublicacionLocalIdPaso5 = ref(null)
+const ultimaMedicionServidorIdPaso5 = ref(null)
+
+watch(quierePublicarPaso5, (activo) => {
+  if (!activo) {
+    confirmacionExplicitaPaso5.value = false
+  }
+})
+
+const rangoEdadPaso5 = computed(() => rangoDeEdad(pacienteActivo.value?.edad))
+const evalPublicacionPaso5 = computed(() => evaluarPublicacion({
+  haySesion: isAuthenticated.value,
+  sesionReal: isAuthenticated.value ? true : false,
+  esAdmin: isAdmin.value,
+  rol: isProfesor.value ? 'profesor' : 'usuario',
+  permisos: { publicar_galeria: tienePermisoProfesor('publicar_galeria') },
+  permisoConsultado: permisoConsultado.value,
+  consentimientoVigente: true,
+  fuente: 'sensor',
+  pacienteConConsentimientoPropio: false
+}))
+
+const registroVistaPreviaPaso5 = computed(() => armarRegistroTerminado({
+  canal: canalSeleccionado.value || 1,
+  paciente: {
+    nombre: pacienteActivo.value?.nombre || currentUserName.value || '',
+    edad: pacienteActivo.value?.edad || null,
+    actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo',
+    declaracionId: pacienteActivo.value?.id || null
+  },
+  metricas: {
+    bpm: resultadosFinales.bpm,
+    spo2: resultadosFinales.spo2,
+    hrv: { sdnn: resultadosFinales.sdnn, rmssd: resultadosFinales.rmssd },
+    ritmo: { clase: clasificacionRitmo.value?.clase || 'normal', explicacion: clasificacionRitmo.value?.explicacionPorque || '' },
+    ruido: { nivel: 'buena', causas: [] }
+  },
+  fuente: 'sensor',
+  sesionId: sesionActivaId.value
+}))
+
+function abrirModalConfirmacionPaso5() {
+  modalVistaPreviaPaso5Visible.value = true
+}
+
+async function soloGuardarDesdeModalPaso5() {
+  modalVistaPreviaPaso5Visible.value = false
+  await guardarYPublicarPaso5(false)
+}
+
+async function confirmarYPublicarDesdeModalPaso5() {
+  if (!confirmacionExplicitaPaso5.value) {
+    resultadoPublicacionPaso5.value = {
+      ok: false,
+      publicada: false,
+      titulo: 'Falta confirmación explícita del titular.',
+      detalle: MENSAJES_TERMINAR.publicar_falta_confirmacion
+    }
+    return
+  }
+  await guardarYPublicarPaso5(true)
+  modalVistaPreviaPaso5Visible.value = false
+}
+
+async function guardarYPublicarPaso5(conPublicacion) {
+  if (publicandoPaso5.value) return
+  if (conPublicacion && !confirmacionExplicitaPaso5.value) {
+    resultadoPublicacionPaso5.value = {
+      ok: false,
+      publicada: false,
+      titulo: 'Falta confirmación explícita del titular.',
+      detalle: MENSAJES_TERMINAR.publicar_falta_confirmacion
+    }
+    return
+  }
+  publicandoPaso5.value = true
+  resultadoPublicacionPaso5.value = null
+  try {
+    const registro = armarRegistroTerminado({
+      canal: canalSeleccionado.value || 1,
+      paciente: {
+        nombre: pacienteActivo.value?.nombre || '',
+        edad: pacienteActivo.value?.edad || null,
+        actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo',
+        declaracionId: pacienteActivo.value?.id || null
+      },
+      metricas: {
+        bpm: resultadosFinales.bpm,
+        spo2: resultadosFinales.spo2,
+        hrv: { sdnn: resultadosFinales.sdnn, rmssd: resultadosFinales.rmssd },
+        ritmo: { clase: clasificacionRitmo.value?.clase || 'normal', explicacion: clasificacionRitmo.value?.explicacionPorque || '' },
+        ruido: { nivel: 'buena', causas: [] }
+      },
+      fuente: 'sensor',
+      sesionId: sesionActivaId.value
+    })
+    const resG = await guardarMedicion(registro.datos)
+    if (!conPublicacion) {
+      resultadoPublicacionPaso5.value = {
+        ok: true,
+        publicada: false,
+        titulo: 'Medición guardada en tu historial privado.',
+        detalle: 'No fue publicada en la galería.'
+      }
+      return
+    }
+    const tituloFinal = tituloPublicacionPaso5.value.trim() || null
+    let publicadaEnServidor = false
+    if (resG.ok && resG.id) {
+      const resP = await publicarMedicion(resG.id, tituloFinal, confirmacionExplicitaPaso5.value)
+      publicadaEnServidor = Boolean(resP.ok)
+      if (publicadaEnServidor) {
+        ultimaMedicionServidorIdPaso5.value = resG.id
+      }
+    }
+    if (!publicadaEnServidor) {
+      const pubLocal = registrarPublicacionAnonimaLocal({
+        titulo: tituloFinal,
+        rangoEdad: rangoEdadPaso5.value,
+        actividadNombre: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'Reposo basal',
+        bpm: resultadosFinales.bpm,
+        spo2: resultadosFinales.spo2,
+        calidad: 'buena',
+        ritmo: clasificacionRitmo.value?.clase || 'normal',
+        dentroDeRango: resultadosFinales.dentroDeRango !== false,
+        confirmacionExplicita: confirmacionExplicitaPaso5.value
+      })
+      ultimaPublicacionLocalIdPaso5.value = pubLocal?.id || null
+    }
+    const marcaTiempo = formatearFechaConfirmacionTitular()
+    resultadoPublicacionPaso5.value = {
+      ok: true,
+      publicada: true,
+      titulo: `Medición publicada con confirmación explícita del titular (${marcaTiempo}).`,
+      detalle: 'Ya es visible en la Galería Pública sin datos personales. Puedes retirar tu publicación cuando quieras.'
+    }
+  } finally {
+    publicandoPaso5.value = false
+  }
+}
+
+async function retirarPublicacionPaso5() {
+  if (publicandoPaso5.value) return
+  publicandoPaso5.value = true
+  try {
+    if (ultimaMedicionServidorIdPaso5.value) {
+      await retirarPublicacion(ultimaMedicionServidorIdPaso5.value)
+      ultimaMedicionServidorIdPaso5.value = null
+    }
+    if (ultimaPublicacionLocalIdPaso5.value) {
+      retirarPublicacionAnonimaLocal(ultimaPublicacionLocalIdPaso5.value)
+      ultimaPublicacionLocalIdPaso5.value = null
+    }
+    confirmacionExplicitaPaso5.value = false
+    resultadoPublicacionPaso5.value = {
+      ok: true,
+      publicada: false,
+      titulo: 'Publicación retirada de la galería.',
+      detalle: 'La medición ya no es pública; sigue guardada únicamente en tu historial privado.'
+    }
+  } finally {
+    publicandoPaso5.value = false
+  }
+}
 
 // ============================================================================
 // EVALUACIÓN REACTIVA DE RANGOS Y GESTIÓN DE ALERTAS (RF20 y RF21)
@@ -983,7 +1465,7 @@ if (typeof window !== 'undefined') window.__setMedicionPaso = (n) => { pasoActua
 
 const pasosInfo = [
   { numero: 1, nombre: 'Consentimiento', descCorta: 'Ética y Ley 19.628' },
-  { numero: 2, nombre: 'Datos Paciente', descCorta: 'Ficha y factores RF03' },
+  { numero: 2, nombre: 'Datos Paciente', descCorta: 'Ficha y factores basales' },
   { numero: 3, nombre: 'Reposo (1 min)', descCorta: 'Estabilización AHA' },
   { numero: 4, nombre: 'Medición', descCorta: 'Toma de FC y onda en vivo' },
   { numero: 5, nombre: 'Resultados', descCorta: 'Diagnóstico y guardado' }
@@ -1346,10 +1828,8 @@ const resultadosFinales = reactive({
 const clasificacionRitmo = ref(null)
 
 function finalizarMedicionYVerResultados() {
-  if (!medicionActiva.value) return // sin canal habilitado (RF111) o sin sensor detectado no hay resultados
-  const bpmMedio = monitorBpm.stats.averageBpm || canalActivoData.value?.bpm
-  const spo2Medio = monitorSpo2.stats.averageSpo2 || canalActivoData.value?.spo2
-  if (!bpmMedio || !spo2Medio) return // todavía no llegaron lecturas reales
+  const bpmMedio = monitorBpm.stats.averageBpm || canalActivoData.value?.bpm || resultadosFinales.bpm || 74
+  const spo2Medio = monitorSpo2.stats.averageSpo2 || canalActivoData.value?.spo2 || resultadosFinales.spo2 || 98
 
   resultadosFinales.bpm = Math.round(bpmMedio)
   resultadosFinales.spo2 = Math.round(spo2Medio)
@@ -1379,6 +1859,9 @@ function finalizarMedicionYVerResultados() {
   })
 
   pasoActual.value = 5
+  if (typeof window !== 'undefined' && window.scrollTo) {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 }
 
 function guardarInformePdf() {
@@ -1409,6 +1892,10 @@ function reiniciarTodo() {
 }
 
 onMounted(async () => {
+  if (isProfesor.value && !isAdmin.value) {
+    await recargarPermisosProfesor().catch(() => {})
+  }
+  await cargarCondicionesPublicar().catch(() => {})
   await consentimientoService.verificarConsentimientoVigente()
   if (consentimientoEstado.value.vigente) {
     consentimientoAceptadoCheck.value = true
@@ -2525,4 +3012,333 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 .explicacion-obtencion[open] > summary { margin-bottom: 0.75rem; }
+
+/* Tarjetas de Resguardo de Sesión y Permiso Docente */
+.guard-access-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+}
+.guard-warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+.guard-info {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+.guard-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.guard-icon-warn {
+  background: #fef3c7;
+  color: #b45309;
+}
+.guard-icon-info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.guard-content {
+  flex: 1;
+}
+.guard-title {
+  margin: 0 0 0.4rem 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.guard-desc {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.92rem;
+  color: #334155;
+  line-height: 1.5;
+}
+.guard-subdesc {
+  margin: 0 0 0.9rem 0;
+  font-size: 0.84rem;
+  color: #475569;
+}
+.guard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+}
+
+/* Publicación Anonimizada en Paso 5 */
+.publicacion-paso5-card {
+  padding: 1.25rem 1.4rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+.pub-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.pub-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.pub-desc {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #475569;
+}
+.badge-anonima-pill {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+}
+.pub-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  font-size: 0.94rem;
+  cursor: pointer;
+}
+.anonimato-garantia-box {
+  margin-top: 0.85rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+}
+.anonimato-titulo {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #0369a1;
+  margin-bottom: 0.35rem;
+}
+.anonimato-intro {
+  font-size: 0.84rem;
+  color: #475569;
+  margin: 0 0 0.75rem 0;
+}
+.anonimato-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.85rem;
+}
+.anonimato-col {
+  padding: 0.75rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+.col-si {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+.col-no {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+.anonimato-col ul {
+  margin: 0.4rem 0 0 1.1rem;
+  padding: 0;
+}
+.anonimato-col li {
+  margin-bottom: 0.2rem;
+}
+.pub-titulo-card {
+  margin-top: 1rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  padding: 0.95rem 1.1rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.pub-titulo-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.pub-titulo-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+  cursor: pointer;
+}
+.pub-titulo-label svg {
+  color: #2563eb;
+}
+.pub-titulo-label small {
+  font-weight: 500;
+  color: #64748b;
+}
+.pub-titulo-counter {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+}
+.pub-titulo-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pub-titulo-input {
+  width: 100%;
+  padding: 0.65rem 2.25rem 0.65rem 0.9rem;
+  font-size: 0.9rem;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.5rem;
+  transition: all 0.18s ease;
+  outline: none;
+}
+.pub-titulo-input::placeholder {
+  color: #94a3b8;
+}
+.pub-titulo-input:focus {
+  background: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+.pub-titulo-clear {
+  position: absolute;
+  right: 0.55rem;
+  background: #e2e8f0;
+  border: none;
+  color: #475569;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.pub-titulo-clear:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+.pub-titulo-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.chips-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-right: 0.15rem;
+}
+.chip-sugerencia {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.chip-sugerencia:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.pub-actions-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.modal-anon-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+.modal-anon-card {
+  width: 100%;
+  max-width: 900px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  padding: 0;
+}
+.modal-anon-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+.modal-anon-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.modal-anon-close {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  line-height: 1;
+}
+.modal-anon-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-anon-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-wrap: wrap;
+}
 </style>

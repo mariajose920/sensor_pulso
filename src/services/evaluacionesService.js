@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js'
-import { camposTipoParaGuardar, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { camposTipoParaGuardar, ejerciciosParaGuardar, modeloDesdeFila, validarTipoEvaluacion } from '../utils/tiposEvaluacion.js'
+import { explicarErrorBase } from '../utils/erroresBase.js'
 
 const STORAGE_EVALUACIONES = 'sensor_pulso_evaluaciones_locales'
 const CODIGO_VIOLA_CHECK = '23514'
@@ -12,9 +13,12 @@ export const EVALUACIONES_PRECARGADAS = [
     id: 'precargada-01',
     titulo: 'Evaluación Práctica: Medición de Pulso y Ritmo Cardíaco en Reposo',
     descripcion: 'Práctica de adquisición de bioseñal fotopletismográfica (PPG), frecuencia cardíaca y evaluación del ritmo sinusal.',
-    tipo: 'ejercicio_aplicado',
-    ejercicio: 'medir_pulso',
-    criterio: { tipo: 'bpm_en_rango', min: 60, max: 100 },
+    tipo: 'mixta',
+    ejercicio: null,
+    criterio: null,
+    evaluacion_ejercicios: [
+      { orden: 1, ejercicio: 'medir_pulso', criterio: { tipo: 'bpm_en_rango', min: 60, max: 100 }, puntaje: 20 }
+    ],
     precargada: true,
     preguntas: [
       {
@@ -83,9 +87,12 @@ export const EVALUACIONES_PRECARGADAS = [
     id: 'precargada-02',
     titulo: 'Evaluación Práctica: Saturación de Oxígeno (SpO₂) y Detección de Hipoxia',
     descripcion: 'Medición de saturación de oxígeno mediante oximetría óptica con sensor MAX30102 y cálculo del ratio de modulación.',
-    tipo: 'ejercicio_aplicado',
-    ejercicio: 'medir_spo2',
-    criterio: { tipo: 'spo2_en_rango', min: 95, max: 100 },
+    tipo: 'mixta',
+    ejercicio: null,
+    criterio: null,
+    evaluacion_ejercicios: [
+      { orden: 1, ejercicio: 'medir_spo2', criterio: { tipo: 'spo2_en_rango', min: 95, max: 100 }, puntaje: 20 }
+    ],
     precargada: true,
     preguntas: [
       {
@@ -225,9 +232,12 @@ export const EVALUACIONES_PRECARGADAS = [
     id: 'precargada-04',
     titulo: 'Control Práctico: Morfología y Comparación de Señales PPG',
     descripcion: 'Práctica de contraste y análisis morfológico de ondas de pulso arterial con señal de referencia.',
-    tipo: 'ejercicio_aplicado',
-    ejercicio: 'comparar_senales',
-    criterio: { tipo: 'similitud_minima', valor: 75 },
+    tipo: 'mixta',
+    ejercicio: null,
+    criterio: null,
+    evaluacion_ejercicios: [
+      { orden: 1, ejercicio: 'comparar_senales', criterio: { tipo: 'similitud_minima', valor: 75 }, puntaje: 20 }
+    ],
     precargada: true,
     preguntas: [
       {
@@ -310,6 +320,27 @@ function guardarLocales(lista) {
   } catch (_) {}
 }
 
+async function tieneSesionSupabaseReal() {
+  try {
+    const { data } = await supabase.auth.getSession()
+    return Boolean(data?.session?.access_token)
+  } catch (_) {
+    return false
+  }
+}
+
+function mapearPreguntasEvaluacion(evaluacion) {
+  return (evaluacion?.evaluacion_preguntas || [])
+    .slice()
+    .sort((a, b) => (a.orden || 0) - (b.orden || 0))
+    .map(ep => ({
+      ...(ep.preguntas || {}),
+      id: ep.pregunta_id,
+      bancoId: ep.pregunta_id,
+      puntaje: ep.puntaje ?? ep.preguntas?.puntaje ?? 10
+    }))
+}
+
 /**
  * RF105: Listar plantillas precargadas disponibles
  */
@@ -355,7 +386,9 @@ export async function crearEvaluacion({
   if (!aulaId) return { success: false, error: 'Elige el aula de la evaluación.' }
   if (!titulo || !titulo.trim()) return { success: false, error: 'El título es obligatorio.' }
   
-  const errores = validarTipoEvaluacion(modelo)
+  // RF107: salvo al duplicar una precargada (el profesor la completa después), la comparación exige referencia
+  const exigirReferencia = !precargadaBaseId && !precargada
+  const errores = validarTipoEvaluacion(modelo, { exigirReferencia })
   if (errores.length) return { success: false, error: errores[0] }
 
   const fila = {
@@ -364,48 +397,92 @@ export async function crearEvaluacion({
     titulo: titulo.trim(),
     descripcion: (descripcion || '').trim() || null,
     precargada: false,
-    ...camposTipoParaGuardar(modelo)
+    ...camposTipoParaGuardar(modelo, { exigirReferencia })
   }
 
-  // 1. Guardar en Supabase si hay sesión activa
-  try {
+  // 1. Guardar en Supabase si hay sesión real activa (sin ocultar errores reales)
+  const conSesion = await tieneSesionSupabaseReal()
+  if (conSesion) {
     const { data, error } = await supabase.from('evaluaciones').insert(fila).select().single()
-    if (!error && data) {
-      // Guardar preguntas asociadas si se proporcionaron
-      if (preguntas && preguntas.length > 0) {
-        for (let i = 0; i < preguntas.length; i++) {
-          const p = preguntas[i]
-          try {
-            const { data: pregData } = await supabase.from('preguntas').insert({
-              autor_id: creadorId,
-              enunciado: p.enunciado,
-              tipo: p.tipo || 'opcion_multiple',
-              opciones: p.opciones || null,
-              puntaje: Number(p.puntaje) || 10
-            }).select().single()
+    if (error || !data) {
+      return {
+        success: false,
+        origen: 'supabase',
+        error: explicarErrorBase(error, fila.tipo)
+      }
+    }
 
-            if (pregData) {
-              await supabase.from('evaluacion_preguntas').insert({
-                evaluacion_id: data.id,
-                pregunta_id: pregData.id,
-                orden: i + 1,
-                puntaje: Number(p.puntaje) || 10
-              })
+    // RF107: ejercicios de una evaluación mixta
+    const filasEjercicios = ejerciciosParaGuardar(modelo, { exigirReferencia })
+    if (filasEjercicios.length) {
+      const { error: errEj } = await supabase.from('evaluacion_ejercicios')
+        .insert(filasEjercicios.map((f) => ({ ...f, evaluacion_id: data.id })))
+      if (errEj) {
+        // No dejar una evaluación mixta sin sus ejercicios
+        await supabase.from('evaluaciones').delete().eq('id', data.id)
+        return { success: false, origen: 'supabase', error: explicarErrorBase(errEj, fila.tipo) }
+      }
+    }
+
+    // Guardar o vincular preguntas asociadas si se proporcionaron
+    if (preguntas && preguntas.length > 0) {
+      for (let i = 0; i < preguntas.length; i++) {
+        const p = preguntas[i]
+        const esUuidBanco = /^[0-9a-f-]{36}$/i.test(String(p.bancoId || ''))
+        let preguntaIdFinal = esUuidBanco ? p.bancoId : null
+
+        if (!preguntaIdFinal) {
+          const { data: pregData, error: errPreg } = await supabase.from('preguntas').insert({
+            autor_id: creadorId,
+            enunciado: p.enunciado,
+            tipo: p.tipo || 'opcion_multiple',
+            opciones: p.tipo === 'opcion_multiple' ? (p.opciones || null) : null,
+            puntaje: Number(p.puntaje) || 10,
+            etiquetas: Array.isArray(p.etiquetas) ? p.etiquetas : [],
+            compartida: !!p.compartida
+          }).select().single()
+
+          if (errPreg || !pregData) {
+            return {
+              success: false,
+              origen: 'supabase',
+              error: `Evaluación creada, pero falló guardar la pregunta #${i + 1}: ${errPreg?.message || 'error desconocido'}`
             }
-          } catch (_) {}
+          }
+
+          preguntaIdFinal = pregData.id
+          if (p.tipo !== 'abierta' && p.respuesta_correcta !== undefined && p.respuesta_correcta !== null && p.respuesta_correcta !== '') {
+            await supabase.from('preguntas_claves').upsert({
+              pregunta_id: pregData.id,
+              correcta: p.respuesta_correcta,
+              explicacion: p.explicacion || null
+            })
+          }
+        }
+
+        const { error: errVinculo } = await supabase.from('evaluacion_preguntas').insert({
+          evaluacion_id: data.id,
+          pregunta_id: preguntaIdFinal,
+          orden: i + 1,
+          puntaje: Number(p.puntaje) || 10
+        })
+        if (errVinculo) {
+          return {
+            success: false,
+            origen: 'supabase',
+            error: `Evaluación creada, pero falló vincular la pregunta #${i + 1}: ${errVinculo.message}`
+          }
         }
       }
-      return { success: true, origen: 'supabase', data: { ...data, preguntas, precargadaBaseId } }
     }
-    if (error?.code === CODIGO_VIOLA_CHECK) {
-      return { success: false, error: 'La base rechazó el tipo o el criterio de la evaluación.' }
-    }
-  } catch (_) {}
+    return { success: true, origen: 'supabase', data: { ...data, evaluacion_ejercicios: filasEjercicios, preguntas, precargadaBaseId, origen: 'supabase' } }
+  }
 
-  // 2. Respaldo local si no hay conexión
+  // 2. Respaldo local en pruebas Node o sesión demo sin JWT
   const local = { 
     ...fila, 
-    id: `eval-${Date.now()}`, 
+    evaluacion_ejercicios: ejerciciosParaGuardar(modelo, { exigirReferencia }),
+    id: `eval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, 
     preguntas, 
     precargadaBaseId,
     creado_en: new Date().toISOString() 
@@ -431,8 +508,14 @@ export async function duplicarEvaluacion({ evaluacionOriginalId, aulaId, creador
   }
   if (!origen) {
     try {
-      const { data } = await supabase.from('evaluaciones').select('*').eq('id', evaluacionOriginalId).maybeSingle()
-      if (data) origen = data
+      const { data } = await supabase
+        .from('evaluaciones')
+        .select('*, evaluacion_ejercicios(id, orden, ejercicio, criterio, puntaje), evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
+        .eq('id', evaluacionOriginalId)
+        .maybeSingle()
+      if (data) {
+        origen = { ...data, preguntas: mapearPreguntasEvaluacion(data) }
+      }
     } catch (_) {}
   }
 
@@ -444,11 +527,7 @@ export async function duplicarEvaluacion({ evaluacionOriginalId, aulaId, creador
     ? origen.titulo 
     : (origen.titulo.startsWith('[Copia]') ? origen.titulo : `[Copia] ${origen.titulo}`)
 
-  const modelo = {
-    tipo: origen.tipo,
-    ejercicio: origen.ejercicio,
-    criterio: origen.criterio
-  }
+  const modelo = modeloDesdeFila(origen)
 
   return await crearEvaluacion({
     aulaId,
@@ -477,60 +556,65 @@ export async function contarIntentos(evaluacionId) {
 /** Cambia el tipo, el ejercicio y el criterio, salvo que ya existan intentos */
 export async function actualizarTipoEvaluacion({ evaluacionId, modelo, puedeGestionar }) {
   if (!puedeGestionar) return { success: false, error: 'No tienes permiso para editar evaluaciones.' }
-  const errores = validarTipoEvaluacion(modelo)
+  const errores = validarTipoEvaluacion(modelo, { exigirReferencia: true })
   if (errores.length) return { success: false, error: errores[0] }
   if ((await contarIntentos(evaluacionId)) > 0) {
     return { success: false, error: 'La evaluación ya tiene intentos de estudiantes: no se puede cambiar el tipo.' }
   }
 
-  const campos = camposTipoParaGuardar(modelo)
+  const campos = camposTipoParaGuardar(modelo, { exigirReferencia: true })
+  const filasEjercicios = ejerciciosParaGuardar(modelo, { exigirReferencia: true })
   try {
     const { data, error } = await supabase.from('evaluaciones').update(campos).eq('id', evaluacionId).select().single()
-    if (!error && data) return { success: true, origen: 'supabase', data }
-    if (error?.code === CODIGO_VIOLA_CHECK) return { success: false, error: 'La base rechazó el tipo o el criterio de la evaluación.' }
+    if (!error && data) {
+      // RF107: los ejercicios de la mixta se reemplazan completos (no hay intentos, se validó arriba)
+      await supabase.from('evaluacion_ejercicios').delete().eq('evaluacion_id', evaluacionId)
+      if (filasEjercicios.length) {
+        const { error: errEj } = await supabase.from('evaluacion_ejercicios')
+          .insert(filasEjercicios.map((f) => ({ ...f, evaluacion_id: evaluacionId })))
+        if (errEj) return { success: false, error: explicarErrorBase(errEj, campos.tipo) }
+      }
+      return { success: true, origen: 'supabase', data }
+    }
+    // Una evaluación de la base (id uuid) nunca se "guarda" solo en este navegador: se explica el error
+    if (error && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))) {
+      return { success: false, error: explicarErrorBase(error, campos.tipo) }
+    }
   } catch (_) {}
 
   const locales = cargarLocales()
   const i = locales.findIndex((e) => e.id === evaluacionId)
   if (i === -1) return { success: false, error: 'No se pudo guardar el cambio en la base.' }
-  locales[i] = { ...locales[i], ...campos }
+  locales[i] = { ...locales[i], ...campos, evaluacion_ejercicios: filasEjercicios }
   guardarLocales(locales)
   return { success: true, origen: 'local', data: locales[i] }
 }
 
 /** Evaluaciones de un aula */
 export async function obtenerEvaluacionesAula(aulaId) {
-  let remotas = []
-  try {
+  const conSesion = await tieneSesionSupabaseReal()
+  if (conSesion) {
     const { data, error } = await supabase
       .from('evaluaciones')
-      .select('*')
+      .select('*, evaluacion_ejercicios(id, orden, ejercicio, criterio, puntaje), evaluacion_preguntas(pregunta_id, orden, puntaje, preguntas(id, enunciado, tipo, opciones, puntaje, etiquetas, compartida))')
       .eq('aula_id', aulaId)
       .order('creado_en', { ascending: false })
-    if (!error && data) remotas = data.map((e) => ({ ...e, origen: 'supabase' }))
-  } catch (_) {}
+    if (error) return { success: false, error: error.message, data: [] }
+    const remotas = (data || []).map((e) => ({
+      ...e,
+      preguntas: mapearPreguntasEvaluacion(e),
+      origen: 'supabase'
+    }))
+    return { success: true, data: remotas }
+  }
+
   const locales = cargarLocales().filter((e) => e.aula_id === aulaId).map((e) => ({ ...e, origen: 'local' }))
-  return { success: true, data: [...locales, ...remotas] }
+  return { success: true, data: locales }
 }
 
 // ============================================================================
 // RF104: ASIGNACIÓN DE EVALUACIONES (AULA, CURSO, ESTUDIANTE)
 // ============================================================================
-const STORAGE_ASIGNACIONES = 'sensor_pulso_evaluacion_asignaciones'
-
-function cargarAsignacionesLocales() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_ASIGNACIONES) || '[]')
-  } catch (_) {
-    return []
-  }
-}
-
-function guardarAsignacionesLocales(lista) {
-  try {
-    localStorage.setItem(STORAGE_ASIGNACIONES, JSON.stringify(lista))
-  } catch (_) {}
-}
 
 /**
  * RF104: Asignar una evaluación al aula, a un curso o a estudiantes concretos.
@@ -538,8 +622,11 @@ function guardarAsignacionesLocales(lista) {
  */
 export async function asignarEvaluacion({
   evaluacionId,
-  aulaId,
+  modo = 'ventana',
   alcance,
+  abreEn = null,
+  cierraEn = null,
+  tiempoLimiteS = null,
   cursoId = null,
   estudiantesIds = [],
   puedeGestionar = true
@@ -560,53 +647,81 @@ export async function asignarEvaluacion({
     return { success: false, error: 'Debes seleccionar al menos un estudiante para este alcance.' }
   }
 
-  // Estructurar filas según reglas CHECK de Postgres en public.evaluacion_asignaciones
-  let filas = []
-  if (alcance === 'aula') {
-    filas.push({
-      evaluacion_id: evaluacionId,
-      alcance: 'aula',
-      curso_id: null,
-      usuario_id: null
+  // Una evaluación de la base (id uuid) solo se da por asignada si la base lo confirma: el error real se muestra
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))
+  try {
+    const { data, error } = await supabase.rpc('asignar_evaluacion_rf109', {
+      p_evaluacion_id: evaluacionId,
+      p_modo: modo,
+      p_alcance: alcance,
+      p_abre_en: abreEn,
+      p_cierra_en: cierraEn,
+      p_tiempo_limite_s: tiempoLimiteS,
+      p_curso_id: cursoId,
+      p_estudiantes_ids: estudiantesIds
     })
-  } else if (alcance === 'curso') {
-    filas.push({
-      evaluacion_id: evaluacionId,
-      alcance: 'curso',
-      curso_id: cursoId,
-      usuario_id: null
-    })
-  } else if (alcance === 'estudiante') {
-    filas = estudiantesIds.map(uid => ({
-      evaluacion_id: evaluacionId,
-      alcance: 'estudiante',
-      curso_id: null,
-      usuario_id: uid
-    }))
+
+    if (!error && data) {
+      return { success: true, data }
+    }
+    if (error && esDeLaBase) {
+      return { success: false, error: error.message || 'No se pudo asignar la evaluación.' }
+    }
+  } catch (errorRed) {
+    if (esDeLaBase) return { success: false, error: `No se pudo asignar la evaluación: ${errorRed.message}` }
   }
 
-  // 1. Guardar en Supabase (si hay sesión y conexión)
-  try {
-    // Reemplazar asignaciones previas de esta evaluación para evitar inconsistencias
-    await supabase.from('evaluacion_asignaciones').delete().eq('evaluacion_id', evaluacionId)
+  // Respaldo resiliente estructurado (RF104 / RF109)
+  const filas = []
+  if (alcance === 'aula') {
+    filas.push({ evaluacion_id: evaluacionId, alcance: 'aula', curso_id: null, usuario_id: null })
+  } else if (alcance === 'curso') {
+    filas.push({ evaluacion_id: evaluacionId, alcance: 'curso', curso_id: cursoId, usuario_id: null })
+  } else if (alcance === 'estudiante') {
+    filas.push(...estudiantesIds.map(uid => ({ evaluacion_id: evaluacionId, alcance: 'estudiante', curso_id: null, usuario_id: uid })))
+  }
+  return { success: true, data: filas }
+}
 
-    const { data, error } = await supabase.from('evaluacion_asignaciones').insert(filas).select()
-    if (!error && data) {
-      const sinEval = cargarAsignacionesLocales().filter(a => a.evaluacion_id !== evaluacionId)
-      guardarAsignacionesLocales([...sinEval, ...data])
-      return { success: true, origen: 'supabase', data }
+/**
+ * Elimina una evaluación con sus asignaciones, ejercicios, intentos y resultados (borrado en cascada).
+ * Solo la puede borrar el profesor del aula o un administrador (política RLS evaluaciones_borrar).
+ */
+export async function eliminarEvaluacion({ evaluacionId, puedeGestionar = true }) {
+  if (!puedeGestionar) return { success: false, error: 'No tienes permiso para eliminar evaluaciones.' }
+  if (!evaluacionId) return { success: false, error: 'No se indicó qué evaluación eliminar.' }
+
+  const esDeLaBase = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(evaluacionId))
+  if (esDeLaBase) {
+    try {
+      const { data, error } = await supabase.from('evaluaciones').delete().eq('id', evaluacionId).select('id')
+      if (error) return { success: false, error: error.message }
+      if (!Array.isArray(data) || !data.length) {
+        return { success: false, error: 'No se pudo eliminar: la evaluación no existe o no tienes permiso.' }
+      }
+    } catch (errorRed) {
+      return { success: false, error: `No se pudo eliminar la evaluación: ${errorRed.message}` }
     }
-  } catch (_) {}
+  }
 
-  // 2. Respaldo local
-  const nuevasLocales = filas.map((f, i) => ({
-    ...f,
-    id: `asig-${Date.now()}-${i}`,
-    creado_en: new Date().toISOString()
-  }))
-  const sinEval = cargarAsignacionesLocales().filter(a => a.evaluacion_id !== evaluacionId)
-  guardarAsignacionesLocales([...sinEval, ...nuevasLocales])
-  return { success: true, origen: 'local', data: nuevasLocales }
+  const locales = cargarLocales()
+  const quedan = locales.filter((e) => e.id !== evaluacionId)
+  if (!esDeLaBase && quedan.length === locales.length) {
+    return { success: false, error: 'No se encontró la evaluación.' }
+  }
+  guardarLocales(quedan)
+  return { success: true }
+}
+
+export async function controlarEvaluacionEnVivo(evaluacionId, accion) {
+  const { data, error } = await supabase.rpc('controlar_evaluacion_en_vivo', {
+    p_evaluacion_id: evaluacionId,
+    p_accion: accion
+  })
+
+  return error
+    ? { success: false, error: error.message }
+    : { success: true, data }
 }
 
 /**
@@ -614,13 +729,58 @@ export async function asignarEvaluacion({
  */
 export async function obtenerAsignacionesEvaluacion(evaluacionId) {
   if (!evaluacionId) return { success: true, data: [] }
-  try {
-    const { data, error } = await supabase
-      .from('evaluacion_asignaciones')
-      .select('*')
-      .eq('evaluacion_id', evaluacionId)
-    if (!error && data) return { success: true, data }
-  } catch (_) {}
-  const locales = cargarAsignacionesLocales().filter(a => a.evaluacion_id === evaluacionId)
-  return { success: true, data: locales }
+
+  const { data, error } = await supabase
+    .from('evaluacion_asignaciones')
+    .select('*')
+    .eq('evaluacion_id', evaluacionId)
+
+  return error
+    ? { success: false, error: error.message, data: [] }
+    : { success: true, data }
 }
+
+// ----------------------------------------------------------------------------
+// RF110: RESPUESTAS SIMULTÁNEAS Y ALTA CONCURRENCIA (100 ESTUDIANTES)
+// ----------------------------------------------------------------------------
+export {
+  CONFIG_SIMULTANEIDAD_RF110,
+  guardarEnStashSeguro,
+  obtenerDeStashSeguro,
+  limpiarStashSeguro,
+  enviarRespuestasConResiliencia,
+  ejecutarPruebaCarga100Usuarios
+} from './respuestasSimultaneasService.js'
+
+import { enviarRespuestasConResiliencia as enviarRespuestasResilientes } from './respuestasSimultaneasService.js'
+
+/**
+ * RF110: Envío optimizado de respuestas para soportar hasta 100 estudiantes simultáneos sin pérdidas
+ */
+export async function entregarRespuestasEvaluacion({ evaluacionId, intentoId, respuestas, opciones = {} }) {
+  return await enviarRespuestasResilientes({ evaluacionId, intentoId, respuestas, opciones })
+}
+
+// ----------------------------------------------------------------------------
+// RF113: PANEL EN VIVO Y MONITOREO EN TIEMPO REAL
+// ----------------------------------------------------------------------------
+export {
+  obtenerAvanceEnVivo,
+  suscribirAvanceEnVivo,
+  registrarPresenciaEstudiante,
+  desconectarEstudiante,
+  iniciarHeartbeatEstudiante
+} from './panelEnVivoService.js'
+
+
+// ----------------------------------------------------------------------------
+// RF107: CALIFICACIÓN AUTOMÁTICA DEL EJERCICIO APLICADO
+// ----------------------------------------------------------------------------
+export {
+  obtenerOpcionesReferencia,
+  calificarEjercicioAplicado,
+  calificarEjercicioMixto,
+  obtenerResultadoEvaluacion,
+  recalificarIntento,
+  obtenerResultadosEjercicio
+} from './calificacionEjercicioService.js'

@@ -3,6 +3,7 @@
  * El informe PDF está en exportPdf.js.
  */
 import { ppgWaveform, ecgEducationalWaveform } from './ppgMath.js'
+import { registrarEventoAuditoria } from '../services/auditoriaService.js'
 
 const REPOSO_BPM = 72
 const VENTANA_S = 4
@@ -185,6 +186,12 @@ export async function descargarImagen(datos) {
  * @returns {Promise<{registrada: boolean, motivo?: string}>}
  */
 export async function auditarDescarga(tipo, entidadId = null) {
+  await registrarEventoAuditoria({
+    accion: 'descarga',
+    entidad: 'descargas',
+    entidadId: entidadId || tipo,
+    detalle: { tipo }
+  })
   try {
     const { supabase } = await import('../services/supabase.js')
     const { data } = await supabase.auth.getSession()

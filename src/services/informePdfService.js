@@ -21,6 +21,7 @@
 import { jsPDF } from 'jspdf'
 import { evaluarComparacionRango } from '../utils/comparacionRangos.js'
 import { AVISO_EDUCATIVO_TEXTO, AVISO_EDUCATIVO_TITULO, AVISO_EDUCATIVO_CORTO } from '../data/avisoEducativo.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 const FUENTE = 'times'
 
@@ -91,6 +92,14 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   const nombreLimpio = (paciente?.nombre || 'Paciente').replace(/[^a-zA-Z0-9_-]/g, '_')
   const nombreArchivo = `Informe_Clinico_Ritmo_Cardiaco_${nombreLimpio}.pdf`
   doc.save(nombreArchivo)
+  registrarEventoAuditoria({
+    accion: 'descarga',
+    entidad: 'descargas',
+    entidadId: nombreArchivo,
+    entidadNombre: 'Informe Clínico PDF',
+    detalle: { tipo: 'informe_pdf' },
+    resumen: `Archivo exportado: informe_pdf (${paciente?.nombre || 'Participante'} · ${resultados?.bpm || 74} BPM)`
+  })
   return nombreArchivo
 }
 

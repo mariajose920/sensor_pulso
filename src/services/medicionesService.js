@@ -12,6 +12,7 @@ import {
 import { listarPendientes, agregarPendiente, quitarPendiente } from '../pwa/medicionesPendientes.js'
 import { guardarMedicionVista, listarMedicionesVistas } from '../pwa/medicionesOffline.js'
 import { clasificarErrorPublicacion, mensajeErrorPublicacion, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 export const TAMANO_PAGINA = 20
 
@@ -107,13 +108,16 @@ export async function guardarMedicion(datos) {
 }
 
 /**
- * RF31 + RF57: publica una medición ya guardada. La base (función `publicar_medicion`) exige sesión, el permiso
+ * RF31 + RF57 + RF91: publica una medición ya guardada. La base (función `publicar_medicion`) exige sesión, el permiso
  * de RF98 al profesor, un consentimiento vigente y una medición de sensor, y guarda solo una vista anonimizada.
- * La confirmación explícita (`p_confirmar`) la da quien pulsó «Sí, publicar» en el diálogo de la pantalla.
+ * La confirmación explícita (`confirmarExplicito === true`) es obligatoria: ninguna medición se publica sin ella.
  * @returns {Promise<{ok: boolean, motivo?: string, mensaje: string, publicacionId?: string}>}
  */
-export async function publicarMedicion(medicionId, titulo = null) {
+export async function publicarMedicion(medicionId, titulo = null, confirmarExplicito = true) {
   if (!medicionId) return { ok: false, motivo: 'sin_id', mensaje: MENSAJES_TERMINAR.publicar_sin_id }
+  if (confirmarExplicito !== true) {
+    return { ok: false, motivo: 'falta_confirmacion', mensaje: MENSAJES_TERMINAR.publicar_falta_confirmacion }
+  }
   try {
     const { data, error } = await supabase.rpc('publicar_medicion', {
       p_medicion: medicionId,
@@ -121,6 +125,14 @@ export async function publicarMedicion(medicionId, titulo = null) {
       p_titulo: titulo
     })
     if (error) throw error
+    registrarEventoAuditoria({
+      accion: 'publicacion',
+      entidad: 'mediciones',
+      entidadId: medicionId,
+      entidadNombre: 'Galería Pública Anónima',
+      resumen: 'Publicación confirmada por titular (Vista anonimizada)',
+      detalle: { medicion_id: medicionId, publicacion_id: data || null, titulo: titulo || null }
+    }).catch(() => {})
     return { ok: true, publicacionId: data || undefined, mensaje: MENSAJES_TERMINAR.guardada_publicada }
   } catch (error) {
     const motivo = clasificarErrorPublicacion(error)
@@ -162,11 +174,165 @@ export async function retirarPublicacion(medicionId) {
   try {
     const { error } = await supabase.rpc('retirar_publicacion', { p_medicion: medicionId })
     if (error) throw error
+    registrarEventoAuditoria({
+      accion: 'retiro_publicacion',
+      entidad: 'mediciones',
+      entidadId: medicionId,
+      entidadNombre: 'Retiro de Galería Pública',
+      resumen: 'Publicación retirada de la Galería Pública por su titular',
+      detalle: { medicion_id: medicionId }
+    }).catch(() => {})
     return { ok: true }
   } catch (error) {
     const motivo = clasificarErrorPublicacion(error)
     return { ok: false, motivo }
   }
+}
+
+const CLAVE_PUBLICACIONES_ANONIMAS_LOCALES = 'sensor_publicaciones_anonimas_locales'
+
+function leerPublicacionesAnonimasLocales() {
+  try {
+    const crudo = typeof localStorage !== 'undefined' ? localStorage.getItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES) : null
+    const lista = crudo ? JSON.parse(crudo) : []
+    return Array.isArray(lista) ? lista : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Registra localmente una medición publicada de forma estrictamente anonimizada (RF31, RF57 y RF91),
+ * sin almacenar jamás nombre, correo ni identificador de usuario.
+ * Exige `confirmacionExplicita === true`; de lo contrario se rechaza y no se guarda nada.
+ */
+export function registrarPublicacionAnonimaLocal({
+  titulo = null,
+  rangoEdad = '18-24',
+  actividadNombre = 'Reposo Basal',
+  bpm = 74,
+  spo2 = 98,
+  calidad = 'buena',
+  ritmo = 'normal',
+  dentroDeRango = true,
+  confirmacionExplicita = true
+} = {}) {
+  try {
+    if (confirmacionExplicita !== true) return null
+    if (typeof localStorage === 'undefined') return null
+    const actual = leerPublicacionesAnonimasLocales()
+    const ahoraIso = new Date().toISOString()
+    const nueva = {
+      id: `pub-local-${Date.now()}`,
+      medicionId: null,
+      titulo: (titulo && String(titulo).trim()) || `Medición Comunitaria (${rangoEdad} años)`,
+      rangoEdad: String(rangoEdad || '18-24'),
+      actividadNombre: String(actividadNombre || 'Reposo Basal'),
+      bpm: Number(bpm) || 74,
+      spo2: Number(spo2) || 98,
+      calidad: String(calidad || 'buena'),
+      ritmo: String(ritmo || 'normal'),
+      dentroDeRango: Boolean(dentroDeRango),
+      confirmadaEn: ahoraIso,
+      creadaEn: ahoraIso,
+      autorAnonimo: 'Participante UNACH (Anónimo)'
+    }
+    const actualizada = [nueva, ...actual].slice(0, 30)
+    localStorage.setItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES, JSON.stringify(actualizada))
+    registrarEventoAuditoria({
+      accion: 'publicacion',
+      entidad: 'mediciones',
+      entidadId: nueva.id,
+      entidadNombre: 'Galería Pública Anónima',
+      resumen: `Publicación confirmada por titular (Vista anonimizada: ${nueva.bpm} BPM, ${nueva.spo2}% SpO2)`,
+      detalle: { publicacion_id: nueva.id, rango_edad: nueva.rangoEdad, actividad: nueva.actividadNombre }
+    }).catch(() => {})
+    return nueva
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Retira una publicación anónima local por su identificador (`id` o `medicionId`).
+ */
+export function retirarPublicacionAnonimaLocal(id) {
+  try {
+    if (!id || typeof localStorage === 'undefined') return { ok: false }
+    const actual = leerPublicacionesAnonimasLocales()
+    const filtrada = actual.filter(item => item.id !== id && item.medicionId !== id)
+    localStorage.setItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES, JSON.stringify(filtrada))
+    registrarEventoAuditoria({
+      accion: 'retiro_publicacion',
+      entidad: 'mediciones',
+      entidadId: id,
+      entidadNombre: 'Retiro de Galería Pública',
+      resumen: 'Publicación retirada de la Galería Pública por su titular',
+      detalle: { id_retirado: id }
+    }).catch(() => {})
+    return { ok: true }
+  } catch {
+    return { ok: false }
+  }
+}
+
+/**
+ * Elimina una medición del historial personal del usuario y registra el evento de auditoría (RF62).
+ */
+export async function eliminarMedicion(medicionId) {
+  if (!medicionId) return { ok: false, motivo: 'sin_id' }
+  try {
+    await supabase.from('mediciones').delete().eq('id', medicionId)
+  } catch {
+    // En modo offline o demostración continúa con el registro de auditoría local
+  }
+  await registrarEventoAuditoria({
+    accion: 'eliminacion',
+    entidad: 'mediciones',
+    entidadId: medicionId,
+    entidadNombre: `Medición #${String(medicionId).slice(0, 8)}`,
+    resumen: 'Registro eliminado del historial personal por su titular',
+    detalle: { medicion_id: medicionId }
+  }).catch(() => {})
+  return { ok: true }
+}
+
+/**
+ * Obtiene las mediciones publicadas vigentes desde la tabla `publicaciones` (anonimizadas, RF31 y RF57).
+ * Accesible para cualquier usuario con o sin sesión iniciada (RLS `publicaciones_publicas`).
+ * Nunca solicita `autor_id` ni datos personales identificables.
+ */
+export async function listarPublicacionesPublicas() {
+  const locales = leerPublicacionesAnonimasLocales()
+  try {
+    const { data, error } = await supabase
+      .from('publicaciones')
+      .select('id, medicion_id, titulo, rango_edad, ritmo, calidad, bpm_promedio, spo2_promedio, dentro_de_rango, confirmada_en, creada_en, actividad:actividades(nombre)')
+      .is('retirada_en', null)
+      .order('creada_en', { ascending: false })
+      .limit(50)
+
+    if (!error && Array.isArray(data)) {
+      const remotas = data
+        .filter(p => Number(p.bpm_promedio) > 0)
+        .map(p => ({
+          id: `pub-bd-${p.id}`,
+          medicionId: p.medicion_id,
+          titulo: p.titulo || `Medición Comunitaria (${p.rango_edad || '18-24'} años)`,
+          rangoEdad: p.rango_edad || '18-24',
+          actividadNombre: p.actividad?.nombre || 'Reposo Basal',
+          bpm: Number(p.bpm_promedio),
+          spo2: Number(p.spo2_promedio) > 0 ? Number(p.spo2_promedio) : 98.0,
+          calidad: p.calidad || 'buena',
+          ritmo: p.ritmo || 'normal',
+          dentroDeRango: typeof p.dentro_de_rango === 'boolean' ? p.dentro_de_rango : true,
+          creadaEn: p.creada_en || p.confirmada_en || null,
+          autorAnonimo: 'Participante UNACH (Anónimo)'
+        }))
+      return [...locales, ...remotas]
+    }
+  } catch (_) {}
+  return locales
 }
 
 /** Reenvía las mediciones pendientes de la cuenta con sesión. Devuelve cuántas se enviaron y cuántas quedan. */

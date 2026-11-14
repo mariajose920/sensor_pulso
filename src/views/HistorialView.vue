@@ -140,14 +140,22 @@
                 data-testid="historial-publicar"
                 @click="medicionAPublicar = m"
               >Publicar</button>
-              <button
-                v-else-if="accionDe(m).accion === 'retirar'"
-                type="button"
-                class="btn btn-secondary btn-sm"
-                :disabled="publicandoId === m.id"
-                data-testid="historial-retirar"
-                @click="retirar(m)"
-              >{{ publicandoId === m.id ? 'Retirando…' : 'Retirar publicación' }}</button>
+              <template v-else-if="accionDe(m).accion === 'retirar'">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  :disabled="publicandoId === m.id"
+                  data-testid="historial-compartir"
+                  @click="compartir(m)"
+                >Compartir enlace</button>
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  :disabled="publicandoId === m.id"
+                  data-testid="historial-retirar"
+                  @click="retirar(m)"
+                >{{ publicandoId === m.id ? 'Retirando…' : 'Retirar publicación' }}</button>
+              </template>
               <small v-else class="causa" data-testid="historial-motivo-publicar">{{ accionDe(m).motivo }}</small>
             </div>
             <small v-if="avisoPorId[m.id]" class="causa" role="status" data-testid="historial-aviso-publicar">{{ avisoPorId[m.id] }}</small>
@@ -288,6 +296,8 @@ import EstadoConexionBadge from '../components/EstadoConexionBadge.vue'
 import { useAuth } from '../composables/useAuth'
 import PublicarDesdeHistorialModal from '../components/PublicarDesdeHistorialModal.vue'
 import { usePuedePublicar } from '../composables/usePuedePublicar'
+import { obtenerEnlaceDeMedicion } from '../services/compartirService'
+import { compartirEnlace } from '../utils/enlacePublico'
 import { accionHistorial, mensajeErrorHistorial } from '../utils/terminarMedicion.js'
 import { listarHistorial, sincronizarPendientes, contarPendientes, retirarPublicacion } from '../services/medicionesService'
 import { listarHistorialAlertas, obtenerMetadatosAlerta } from '../services/alertasService'
@@ -319,6 +329,22 @@ const accionDe = (m) => accionHistorial(m, cuentaPublicar.value)
 function alPublicada(id) {
   items.value = items.value.map(m => (m.id === id ? { ...m, publica: true } : m))
   avisoPorId.value = { ...avisoPorId.value, [id]: '' }
+}
+
+// RF35: compartir el enlace de una medición propia ya publicada
+async function compartir(m) {
+  const poner = (t) => { avisoPorId.value = { ...avisoPorId.value, [m.id]: t } }
+  poner('')
+  const r = await obtenerEnlaceDeMedicion(m.id)
+  if (!r.ok) {
+    poner(r.motivo === 'no_publicada'
+      ? 'Esta medición ya no está publicada, así que no tiene enlace.'
+      : 'No se pudo obtener el enlace. Inténtalo de nuevo.')
+    return
+  }
+  const res = await compartirEnlace({ url: r.url, titulo: m.titulo || 'Medición pública' })
+  if (res === 'copiado') poner('Enlace copiado. Cualquiera que lo tenga verá tu medición anónima.')
+  else if (res === 'manual') poner(`Copia este enlace: ${r.url}`)
 }
 
 async function retirar(m) {

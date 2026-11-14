@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 import fs from 'fs'
 import { pathToFileURL } from 'url'
+import { asegurarClaveCifradoLocal } from './scripts/claveCifradoLocal.mjs'
 
 // Plugin para simular en desarrollo local las funciones de Vercel de la carpeta /api (/api/<carpeta>/<archivo>).
 // Los archivos o carpetas que empiezan con «_» son internos y no se exponen.
@@ -62,9 +63,20 @@ function apiDevPlugin() {
 }
 
 // RNF03: la web se instala como app (PWA). Ver docs/RNF03-pwa.md.
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  // Cargar variables en process.env para que los endpoints dev puedan leer RESEND_API_KEY
+  // Servidor de desarrollo sin clave de cifrado: se crea una local y se guarda en .env.local. Sin ella la ficha del
+  // paciente no llega a la base de datos (el servidor se niega a cifrar) y se pierde al cerrar sesión. En producción no aplica.
+  const clave = asegurarClaveCifradoLocal({
+    env,
+    rutaEnvLocal: path.resolve(process.cwd(), '.env.local'),
+    esDesarrollo: command === 'serve'
+  })
+  if (clave.generada) {
+    console.warn('\n[sensor_pulso] Se creó una clave de cifrado local (CLAVE_CIFRADO_CAMPOS) en .env.local para que la ficha del paciente se guarde en la base.\n' +
+      '  Las fichas guardadas desde este equipo solo se pueden leer con esa clave; si usas la misma base que producción, reemplázala en .env.local por la CLAVE_CIFRADO_CAMPOS de Vercel.\n')
+  }
+  // Cargar variables en process.env para que los endpoints dev puedan leer GMAIL_USER y GMAIL_APP_PASSWORD
   Object.assign(process.env, env)
 
   return {
@@ -133,7 +145,16 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       host: true, // Expone el servidor en la red local WiFi (0.0.0.0) para que el ESP32 pueda enviar datos (RF05)
-      port: 5173
+      port: 5173,
+      headers: {
+        'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://sensorpulso.vercel.app; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+      }
     },
     resolve: {
       alias: {
