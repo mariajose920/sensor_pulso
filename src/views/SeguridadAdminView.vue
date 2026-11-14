@@ -221,7 +221,105 @@
     </section>
 
     <!-- ============================================================ INCIDENTES -->
-    <section v-else data-testid="panel-incidentes">
+    <section v-else data-testid="panel-incidentes" class="panel-incidentes-grid">
+      <div class="procedimiento-brechas-grid" data-testid="procedimiento-brechas-panel">
+        <article class="card proc-brecha-card" data-testid="flujo-notificacion-brechas">
+          <h2>Procedimiento de notificación de brechas</h2>
+          <p class="ayuda">
+            Define quién avisa, a quién y en qué plazo ante una brecha de datos personales, registrando siempre la fecha de aviso en cada incidente.
+          </p>
+          <div class="proc-tabla-wrap">
+            <table class="proc-tabla">
+              <thead>
+                <tr>
+                  <th>Quién avisa</th>
+                  <th>A quién</th>
+                  <th>En qué plazo</th>
+                  <th>Cómo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="regla in PROCEDIMIENTO_NOTIFICACION_BRECHAS" :key="regla.id">
+                  <td><strong>{{ regla.quienAvisa }}</strong></td>
+                  <td>{{ regla.aQuien }}</td>
+                  <td>{{ regla.plazo }}</td>
+                  <td>{{ regla.como }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pendiente-unach-box" data-testid="pendiente-decision-humana-brechas">
+            <strong>Pendiente de decisión humana (UNACH):</strong>
+            <ul class="pendiente-lista">
+              <li v-for="(item, idx) in PENDIENTES_DECISION_HUMANA_BRECHAS" :key="idx">{{ item }}</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="card proc-brecha-card" data-testid="plantilla-aviso-card">
+          <h2>Plantilla de aviso a personas afectadas</h2>
+          <p class="ayuda">
+            Lista para usar al notificar por correo institucional (sujeta a aprobación formal por la UNACH). No incluyas datos de salud ni credenciales en el mensaje.
+          </p>
+          <div class="form-group">
+            <label class="form-label" for="plantilla-asunto">Asunto</label>
+            <input id="plantilla-asunto" v-model="plantillaAviso.asunto" class="form-input" readonly data-testid="plantilla-asunto-brecha" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="plantilla-cuerpo">Mensaje de aviso</label>
+            <textarea
+              id="plantilla-cuerpo"
+              v-model="plantillaAviso.cuerpo"
+              class="form-input plantilla-textarea"
+              rows="11"
+              data-testid="plantilla-aviso-brecha"
+            ></textarea>
+          </div>
+          <div class="acciones">
+            <button type="button" class="btn btn-primary" data-testid="btn-copiar-plantilla-brecha" @click="copiarPlantillaAviso">
+              Copiar plantilla
+            </button>
+            <button type="button" class="btn btn-secondary" data-testid="btn-restablecer-plantilla-brecha" @click="restablecerPlantillaAviso">
+              Restablecer plantilla base
+            </button>
+          </div>
+        </article>
+      </div>
+
+      <article class="card simulacro-card" data-testid="registro-simulacro-brecha">
+        <div class="simulacro-header">
+          <div>
+            <h2>Simulacro con brecha ficticia</h2>
+            <p class="ayuda">Ejercicio de verificación del flujo de notificación a afectados, registro de fechas y uso de plantilla.</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="ejecutandoSimulacro"
+            data-testid="btn-ejecutar-simulacro-brecha"
+            @click="ejecutarSimulacro"
+          >
+            {{ ejecutandoSimulacro ? 'Registrando simulacro...' : 'Registrar simulacro con brecha ficticia' }}
+          </button>
+        </div>
+        <div class="simulacro-meta-grid">
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Fecha</span>
+            <strong data-testid="simulacro-fecha">{{ simulacroActual.fecha }}</strong>
+          </div>
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Responsable</span>
+            <strong data-testid="simulacro-responsable">{{ simulacroActual.responsable }}</strong>
+          </div>
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Estado del ejercicio</span>
+            <span class="badge-plazo ok">Registrado y verificado</span>
+          </div>
+        </div>
+        <p class="detalle"><strong>Escenario ficticio:</strong> {{ simulacroActual.escenario }}</p>
+        <p class="detalle" data-testid="simulacro-resultado"><strong>Resultado:</strong> {{ simulacroActual.resultado }}</p>
+      </article>
+
       <form class="card" @submit.prevent="crear">
         <h2>Registrar un incidente</h2>
         <div class="form-group">
@@ -253,8 +351,9 @@
         </header>
         <p class="quien">Abierto el {{ fecha(i.abierto_en) }}<template v-if="i.cerrado_en"> · cerrado el {{ fecha(i.cerrado_en) }}</template></p>
         <p v-if="i.descripcion" class="detalle">{{ i.descripcion }}</p>
+        <p v-if="i.lecciones" class="detalle lecciones-incidente"><strong>Lecciones / Resultado:</strong> {{ i.lecciones }}</p>
 
-        <!-- Brecha: solo cuando afecta datos personales (RF92) -->
+        <!-- Brecha: solo cuando afecta datos personales -->
         <div v-if="i.afecta_datos_personales" class="brecha" :data-testid="'brecha-' + i.id">
           <strong>Brecha de datos personales</strong>
           <p class="ayuda">Avisa a las personas afectadas y a la autoridad competente según corresponda; guarda aquí la fecha en que lo hiciste.</p>
@@ -271,6 +370,7 @@
             <button type="button" class="btn btn-secondary" :data-testid="'brecha-guardar-' + i.id" @click="guardarBrecha(i)">Guardar</button>
             <button type="button" class="btn btn-secondary" :disabled="Boolean(i.brecha?.afectados_notificados_en)" @click="guardarBrecha(i, { notificarAfectados: true })">Marcar afectados notificados</button>
             <button type="button" class="btn btn-secondary" :disabled="Boolean(i.brecha?.autoridad_notificada_en)" @click="guardarBrecha(i, { notificarAutoridad: true })">Marcar autoridad notificada</button>
+            <button type="button" class="btn btn-secondary" :data-testid="'brecha-cargar-plantilla-' + i.id" @click="cargarBrechaEnPlantilla(i)">Cargar datos en plantilla de aviso</button>
           </div>
         </div>
       </article>
@@ -287,6 +387,10 @@ import {
   ESTADOS_SOLICITUD,
   SEVERIDADES,
   TIPOS_DERECHO,
+  PROCEDIMIENTO_NOTIFICACION_BRECHAS,
+  PENDIENTES_DECISION_HUMANA_BRECHAS,
+  SIMULACRO_BRECHA_REGISTRADO,
+  generarAvisoAfectados,
   textoPlazo,
   estaSolicitudVencida,
   esSolicitudProximaAVencer,
@@ -308,6 +412,10 @@ const respuestas = reactive({})
 const incidentes = ref([])
 const brechas = reactive({})
 const nuevo = reactive({ titulo: '', descripcion: '', severidad: 'media', afectaDatosPersonales: false })
+const basePlantilla = generarAvisoAfectados()
+const plantillaAviso = reactive({ asunto: basePlantilla.asunto, cuerpo: basePlantilla.cuerpo })
+const simulacroActual = reactive({ ...SIMULACRO_BRECHA_REGISTRADO })
+const ejecutandoSimulacro = ref(false)
 
 const decir = (texto, tipo = 'ok') => { aviso.value = { texto, tipo } }
 const etiquetaTipo = (v) =>
@@ -407,6 +515,61 @@ async function guardarBrecha(i, extra = {}) {
   const r = await derechosService.guardarBrecha(i.id, { ...brechas[i.id], ...extra })
   r.ok ? decir('Brecha guardada.') : decir(r.error, 'error')
   await cargarIncidentes()
+}
+
+function restablecerPlantillaAviso() {
+  const base = generarAvisoAfectados()
+  plantillaAviso.asunto = base.asunto
+  plantillaAviso.cuerpo = base.cuerpo
+  decir('Plantilla de aviso restablecida.')
+}
+
+function cargarBrechaEnPlantilla(i) {
+  const datosB = brechas[i.id] || {}
+  const generada = generarAvisoAfectados({
+    fechaDeteccion: fecha(i.abierto_en),
+    queOcurrio: i.descripcion || i.titulo,
+    datosComprometidos: datosB.datosComprometidos || i.brecha?.datos_comprometidos || 'datos asociados a tu cuenta en la plataforma',
+    medidasTomadas: datosB.medidas || i.brecha?.medidas || 'contención del incidente, revisión de accesos y refuerzo de controles'
+  })
+  plantillaAviso.asunto = generada.asunto
+  plantillaAviso.cuerpo = generada.cuerpo
+  decir('Datos de la brecha cargados en la plantilla de aviso.')
+}
+
+async function copiarPlantillaAviso() {
+  const texto = `Asunto: ${plantillaAviso.asunto}\n\n${plantillaAviso.cuerpo}`
+  try {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(texto)
+    }
+    decir('Plantilla de aviso copiada al portapapeles.')
+  } catch {
+    decir('Plantilla lista para copiar manualmente desde el cuadro de texto.')
+  }
+}
+
+async function ejecutarSimulacro() {
+  ejecutandoSimulacro.value = true
+  try {
+    const r = await derechosService.ejecutarSimulacroBrecha({
+      responsable: simulacroActual.responsable,
+      fecha: simulacroActual.fecha
+    })
+    if (r.ok) {
+      Object.assign(simulacroActual, r.simulacro)
+      if (r.avisoGenerado) {
+        plantillaAviso.asunto = r.avisoGenerado.asunto
+        plantillaAviso.cuerpo = r.avisoGenerado.cuerpo
+      }
+      await cargarIncidentes()
+      decir('Simulacro con brecha ficticia registrado con fecha y responsable.')
+    } else {
+      decir('No se pudo registrar el simulacro.', 'error')
+    }
+  } finally {
+    ejecutandoSimulacro.value = false
+  }
 }
 </script>
 
@@ -788,5 +951,112 @@ h2 {
 
 .vacio {
   color: var(--color-muted);
+}
+
+.panel-incidentes-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.procedimiento-brechas-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.proc-brecha-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.proc-tabla-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.proc-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.proc-tabla th,
+.proc-tabla td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.proc-tabla th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+}
+
+.pendiente-unach-box {
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.85rem;
+}
+
+.pendiente-lista {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.plantilla-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.simulacro-card {
+  display: grid;
+  gap: 0.65rem;
+  border-left: 4px solid #2563eb;
+}
+
+.simulacro-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.simulacro-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.simulacro-meta-item {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.simulacro-meta-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.lecciones-incidente {
+  padding: 0.5rem 0.65rem;
+  background: #f8fafc;
+  border-left: 3px solid #2563eb;
+  border-radius: 6px;
 }
 </style>
