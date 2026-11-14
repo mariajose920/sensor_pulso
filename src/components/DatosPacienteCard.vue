@@ -136,7 +136,7 @@
           <div style="display: flex; align-items: center; gap: 0.4rem;">
             <span style="color: #16a34a; font-weight: 700;">● Consentimiento Informado Vigente</span>
             <span class="badge badge-success" style="font-size: 0.68rem; padding: 0.1rem 0.45rem;">Ley 19.628</span>
-            <span class="badge" style="font-size: 0.68rem; padding: 0.1rem 0.45rem; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">AES-256-GCM + TLS (RF116)</span>
+            <span class="badge" style="font-size: 0.68rem; padding: 0.1rem 0.45rem; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">AES-256-GCM + TLS</span>
           </div>
           <span v-if="consentimientoEstado.aceptadoEn" style="color: #64748b; font-size: 0.75rem;">
             Registrado el <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> para uso docente y confidencial
