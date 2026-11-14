@@ -133,4 +133,68 @@ probar('6. AnalisisAutomaticoComparacionPanel.vue e integración en ComparacionV
   }
 })
 
+// 7. Sin datos no hay análisis: no se rellena con valores por defecto
+probar('7. Sin BPM de la medición o de la referencia el análisis no está disponible (no inventa 78 ni 72)', () => {
+  const vacio = generarAnalisisAutomaticoComparacion({})
+  assert.equal(vacio.disponible, false)
+  assert.equal(vacio.faltantes.length, 2)
+  const soloUno = generarAnalisisAutomaticoComparacion({ bpmActual: 80 })
+  assert.equal(soloUno.disponible, false)
+  assert.deepEqual(soloUno.faltantes, ['BPM de la referencia'])
+  assert.equal(calcularSimilitudComparacion({}), null)
+})
+
+probar('8. Sin amplitud ni SpO2 medidas quedan en null y el texto lo dice', () => {
+  const res = generarAnalisisAutomaticoComparacion({ bpmActual: 80, bpmReferencia: 72 })
+  assert.equal(res.disponible, true)
+  assert.equal(res.deltaAmplitud, null)
+  assert.equal(res.deltaSpo2, null)
+  assert.equal(res.similitudPorcentaje, null)
+  assert.equal(res.fuenteSimilitud, 'no_disponible')
+  assert.ok(res.explicacionMorfologia.explicacion.includes('No se midió la amplitud'))
+  assert.equal(res.diagnosticoResumen.includes('similitud morfológica'), false)
+})
+
+// 9. La similitud sale de la forma de la señal
+const { calcularSimilitudForma, normalizarSenal } = await import('../src/utils/analisisComparacion.js')
+const { generarSenalPpgConDesfase } = await import('../src/utils/sincronizacionSenales.js')
+
+probar('9. calcularSimilitudForma: misma forma da ~100 %, señal plana o ruido dan poco o null', () => {
+  const ref = generarSenalPpgConDesfase({ bpm: 72, duracionSegundos: 5, frecuenciaHz: 100 })
+  const igualConOtraEscala = ref.map((v) => v * 800 + 5000)
+  assert.ok(calcularSimilitudForma(igualConOtraEscala, ref, 100) >= 99)
+  // misma frecuencia pero desfasada: el mejor desfase la reconoce
+  const desfasada = generarSenalPpgConDesfase({ bpm: 72, duracionSegundos: 5, frecuenciaHz: 100, desfaseInicialMs: 120 })
+  assert.ok(calcularSimilitudForma(desfasada, ref, 100) >= 90)
+  // otra frecuencia cardíaca: la forma deja de coincidir
+  const rapida = generarSenalPpgConDesfase({ bpm: 140, duracionSegundos: 5, frecuenciaHz: 100 })
+  assert.ok(calcularSimilitudForma(rapida, ref, 100) < 90)
+  // sin señal usable no se inventa
+  assert.equal(calcularSimilitudForma(new Array(500).fill(3), ref, 100), null)
+  assert.equal(calcularSimilitudForma([1, 2, 3], ref, 100), null)
+  assert.equal(calcularSimilitudForma(null, ref, 100), null)
+  assert.equal(normalizarSenal(['a', 1]), null)
+})
+
+probar('10. El análisis usa las señales cuando se entregan y lo indica en la fuente', () => {
+  const ref = generarSenalPpgConDesfase({ bpm: 72, duracionSegundos: 5, frecuenciaHz: 100 })
+  const medida = generarSenalPpgConDesfase({ bpm: 90, duracionSegundos: 5, frecuenciaHz: 100 })
+  const res = generarAnalisisAutomaticoComparacion({
+    bpmActual: 90, bpmReferencia: 72, senalActual: medida, senalReferencia: ref, frecuenciaHz: 100
+  })
+  assert.equal(res.fuenteSimilitud, 'senal')
+  assert.equal(typeof res.similitudPorcentaje, 'number')
+  assert.ok(res.diagnosticoResumen.includes('similitud morfológica'))
+  const indicada = generarAnalisisAutomaticoComparacion({ bpmActual: 90, bpmReferencia: 72, similitudPorcentaje: 55.5 })
+  assert.equal(indicada.fuenteSimilitud, 'indicada')
+  assert.equal(indicada.similitudPorcentaje, 55.5)
+})
+
+probar('11. La vista ya no trae una similitud ni una medición supuesta de inicio', () => {
+  const vista = readFileSync(resolve(process.cwd(), 'src/views/ComparacionView.vue'), 'utf8')
+  assert.equal(vista.includes('96.4'), false)
+  assert.ok(vista.includes('medicionElegida'))
+  assert.ok(vista.includes(':senalActual="senalMedicion"'))
+})
+
 console.log(`\nTodas las pruebas de RF29 pasaron exitosamente (${pasadas}/${pasadas}).`)

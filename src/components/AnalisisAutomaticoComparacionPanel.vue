@@ -1,5 +1,6 @@
 <template>
   <section class="analisis-comparacion-card" aria-labelledby="titulo-analisis-automatico">
+    <template v-if="analisis.disponible">
     <!-- 1. Encabezado e Insignia de Concordancia -->
     <div class="analisis-header">
       <div class="analisis-header-left">
@@ -59,6 +60,14 @@
         </ul>
       </article>
     </div>
+    </template>
+
+    <div v-else class="analisis-vacio" role="status">
+      <h2 id="titulo-analisis-automatico" class="analisis-title">Análisis Automático de la Comparación Fisiológica</h2>
+      <p class="analisis-subtitle">
+        Aún no hay una medición para analizar. Elige una medición o carga una señal; el análisis se genera con sus valores reales.
+      </p>
+    </div>
   </section>
 </template>
 
@@ -67,13 +76,16 @@ import { computed } from 'vue'
 import { generarAnalisisAutomaticoComparacion } from '../utils/analisisComparacion.js'
 
 const props = defineProps({
-  bpmActual: { type: Number, default: 78 },
-  bpmReferencia: { type: Number, default: 72 },
-  amplitudActual: { type: Number, default: 100 },
-  amplitudReferencia: { type: Number, default: 100 },
-  spo2Actual: { type: Number, default: 98 },
-  spo2Referencia: { type: Number, default: 98 },
+  bpmActual: { type: Number, default: null },
+  bpmReferencia: { type: Number, default: null },
+  amplitudActual: { type: Number, default: null },
+  amplitudReferencia: { type: Number, default: null },
+  spo2Actual: { type: Number, default: null },
+  spo2Referencia: { type: Number, default: null },
   similitudPorcentaje: { type: Number, default: null },
+  senalActual: { type: Array, default: null },
+  senalReferencia: { type: Array, default: null },
+  frecuenciaHz: { type: Number, default: 100 },
   nombreMedicion: { type: String, default: 'Medición Tomada' },
   nombreReferencia: { type: String, default: 'Señal de Referencia' },
   actividadReferencia: { type: String, default: 'Reposo' }
@@ -88,6 +100,9 @@ const analisis = computed(() =>
     spo2Actual: props.spo2Actual,
     spo2Referencia: props.spo2Referencia,
     similitudPorcentaje: props.similitudPorcentaje,
+    senalActual: props.senalActual,
+    senalReferencia: props.senalReferencia,
+    frecuenciaHz: props.frecuenciaHz,
     nombreMedicion: props.nombreMedicion,
     nombreReferencia: props.nombreReferencia,
     actividadReferencia: props.actividadReferencia

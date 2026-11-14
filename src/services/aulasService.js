@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 import { validarCorreoInstitucional } from '../utils/validators.js'
 import { enviarCorreoInvitacion, enviarCorreosInvitacion } from './emailService.js'
 import { escaparHtml, sanitizarContenidoUsuario } from './proteccionWebService.js'
@@ -1104,21 +1105,14 @@ export async function eliminarAula({ aulaId, profesorId, esAdmin }) {
   guardarEnStorage(STORAGE_EVALUACIONES, evaluacionesLocales)
   guardarEnStorage(STORAGE_INTENTOS_EVALUACIONES, intentosEvaluacionesLocales)
 
-  // 3. Registro de auditoría local
-  try {
-    const STORAGE_AUDITORIA = 'sensor_pulso_auditoria_roles'
-    const logs = JSON.parse(localStorage.getItem(STORAGE_AUDITORIA) || '[]')
-    logs.unshift({
-      id: `audit-${Date.now()}`,
-      accion: 'eliminacion_aula',
-      tabla: 'aulas',
-      registro_id: aulaId,
-      actor_id: profesorId,
-      detalles: { nombre: local?.nombre || null, evaluaciones: evaluacionesDelAula.length },
-      creado_en: new Date().toISOString()
-    })
-    localStorage.setItem(STORAGE_AUDITORIA, JSON.stringify(logs))
-  } catch (_) {}
+  // 3. Auditoría en el servidor (RF62): el actor y la hora los pone la base
+  registrarEventoAuditoria({
+    accion: 'eliminacion_aula',
+    entidad: 'aulas',
+    entidadId: aulaId,
+    entidadNombre: local?.nombre || null,
+    detalle: { evaluaciones: evaluacionesDelAula.length }
+  }).catch(() => {})
 
   return { success: true, message: 'Aula eliminada.' }
 }

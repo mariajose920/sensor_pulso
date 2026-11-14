@@ -200,19 +200,11 @@ test('Sello de Tiempo: normalizarEventoAuditoria asegura que todo registro posee
   assert.strictEqual(validarSelloTiempoServidor(evento.ocurrioEn), true)
 })
 
-await testAsync('Sello de Tiempo: registrarEventoAuditoria genera sello de tiempo válido del sistema', async () => {
-  const res = await registrarEventoAuditoria({
-    accion: 'login',
-    actorCorreo: 'docente@unach.cl',
-    resumen: 'Prueba de sello de tiempo servidor'
-  })
-  assert.strictEqual(res.ok, true)
-  assert(res.evento.ocurrioEn, 'El evento registrado debe incluir sello temporal')
-  assert.strictEqual(validarSelloTiempoServidor(res.evento.ocurrioEn), true)
-  const ahora = Date.now()
-  const fechaRegistro = new Date(res.evento.ocurrioEn).getTime()
-  // El sello de tiempo debe ser coherente con el momento de ejecución (delta < 5s)
-  assert(Math.abs(ahora - fechaRegistro) < 5000, 'El sello debe corresponder al momento actual')
+test('Sello de Tiempo: la hora la pone el servidor, no el navegador', () => {
+  const migracion = fs.readFileSync(path.join(ROOT, 'supabase/migrations/20261111000300_rf63_registros_inmutables.sql'), 'utf8')
+  assert(migracion.includes('clock_timestamp()'), 'El trigger debe forzar el sello del servidor')
+  const servicio = fs.readFileSync(path.join(ROOT, 'src/services/auditoriaService.js'), 'utf8')
+  assert(!/ocurrio_en:\s*new Date/.test(servicio), 'El cliente no debe fijar ocurrio_en')
 })
 
 // ----------------------------------------------------------------------------

@@ -100,16 +100,16 @@
       :amplitudActual="selectedAmplitude"
       :nombreMedicion="selectedMeasurementName"
       nombreReferencia="Señal de Referencia"
-      @cambio-sincronizacion="onCambioSincronizacion"
     />
 
     <!-- Análisis Automático de la Comparación y Explicación de Diferencias -->
     <AnalisisAutomaticoComparacionPanel
       v-if="pestañaActiva !== 'senales'"
-      :bpmActual="selectedBpm"
-      :bpmReferencia="72"
-      :amplitudActual="selectedAmplitude"
-      :similitudPorcentaje="similitudActualSync"
+      :bpmActual="medicionElegida ? selectedBpm : null"
+      :bpmReferencia="BPM_PLANTILLA_REPOSO"
+      :senalActual="senalMedicion"
+      :senalReferencia="senalReferencia"
+      :frecuenciaHz="frecuenciaSenal"
       :nombreMedicion="selectedMeasurementName"
       nombreReferencia="Señal de Referencia"
     />
@@ -206,9 +206,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { generarSenalPpgConDesfase } from '../utils/sincronizacionSenales.js'
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import VolverAEvaluacionBanner from '../components/VolverAEvaluacionBanner.vue'
 import SincronizacionSenalesPanel from '../components/SincronizacionSenalesPanel.vue'
@@ -257,12 +258,31 @@ onMounted(() => {
 const selectedBpm = ref(78)
 const selectedAmplitude = ref(100)
 const selectedMeasurementName = ref('Medición Tomada')
-const similitudActualSync = ref(96.4)
+// El análisis automático (RF29) solo se hace con una medición realmente elegida o cargada,
+// y la similitud sale de la forma de la señal, no de valores supuestos.
+const BPM_PLANTILLA_REPOSO = 72
+const medicionElegida = ref(false)
+const senalMedicion = ref(null)
+const frecuenciaSenal = ref(100)
 
-function onCambioSincronizacion(payload) {
-  if (payload && typeof payload.similitudPorcentaje === 'number') {
-    similitudActualSync.value = payload.similitudPorcentaje
-  }
+watch(selectedBpm, () => { medicionElegida.value = true })
+
+const senalReferencia = computed(() => {
+  if (!senalMedicion.value) return null
+  return generarSenalPpgConDesfase({
+    bpm: BPM_PLANTILLA_REPOSO,
+    duracionSegundos: 5,
+    frecuenciaHz: frecuenciaSenal.value,
+    amplitud: 100,
+    desfaseInicialMs: 0
+  })
+})
+
+function guardarSenalElegida(datos) {
+  medicionElegida.value = true
+  const muestras = Array.isArray(datos?.muestrasIr) && datos.muestrasIr.length ? datos.muestrasIr : null
+  senalMedicion.value = muestras
+  frecuenciaSenal.value = Number(datos?.frecuenciaHz) > 0 ? Number(datos.frecuenciaHz) : 100
 }
 
 // Intervalo exacto de la medición calculada: T = 60000 / BPM (en ms)
@@ -274,6 +294,7 @@ function onSenalSeleccionada(datos) {
   selectedBpm.value = datos.bpm
   selectedAmplitude.value = datos.amplitude || 100
   selectedMeasurementName.value = datos.nombre || 'Señal Cargada (RF27)'
+  guardarSenalElegida(datos)
   pestañaActiva.value = 'reposo'
 }
 
@@ -281,6 +302,7 @@ function onUsarMedicionExterna(datos) {
   selectedBpm.value = datos.bpm
   selectedAmplitude.value = datos.amplitude || 100
   selectedMeasurementName.value = datos.nombre || 'Señal Externa (RF27)'
+  guardarSenalElegida(datos)
 }
 </script>
 

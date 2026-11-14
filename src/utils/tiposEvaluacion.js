@@ -85,7 +85,7 @@ export function ejercicioMixtoVacio() {
 }
 
 /** Cambia el tipo. "Preguntas" no guarda ejercicio ni criterio; "mixta" guarda una lista de ejercicios. */
-export function cambiarTipo(modelo, tipo) {
+function cambiarTipoBase(modelo, tipo) {
   if (!TIPOS_EVALUACION[tipo]) return { ...modelo }
   if (tipo === 'preguntas') return { tipo, ejercicio: null, criterio: null }
   if (tipo === 'mixta') {
@@ -103,7 +103,7 @@ export function cambiarTipo(modelo, tipo) {
 }
 
 /** Cambia el ejercicio y deja el criterio por defecto de ese ejercicio. */
-export function cambiarEjercicio(modelo, ejercicio) {
+function cambiarEjercicioBase(modelo, ejercicio) {
   if (!EJERCICIOS[ejercicio]) return { ...modelo, ejercicio: null, criterio: null }
   const nuevo = { tipo: 'ejercicio_aplicado', ejercicio, criterio: criterioPorDefecto(ejercicio) }
   if (modelo?.reintentos !== undefined) nuevo.reintentos = modelo.reintentos
@@ -181,7 +181,7 @@ export function validarEjercicioCriterio(ejercicio, criterio, { exigirReferencia
  * Devuelve la lista de errores (vacía si el modelo es válido).
  * RF107: con `exigirReferencia` la comparación de señales debe traer su señal de referencia.
  */
-export function validarTipoEvaluacion(modelo, { exigirReferencia = false } = {}) {
+function validarTipoBase(modelo, { exigirReferencia = false } = {}) {
   const errores = []
   if (!modelo || !TIPOS_EVALUACION[modelo.tipo]) {
     errores.push('Elige el tipo de evaluación.')
@@ -238,7 +238,7 @@ function criterioParaGuardar(clave, criterio) {
 }
 
 /** Campos que se guardan en `evaluaciones` (números ya convertidos). Lanza si el modelo es inválido. */
-export function camposTipoParaGuardar(modelo, opciones = {}) {
+function camposTipoBase(modelo, opciones = {}) {
   const errores = validarTipoEvaluacion(modelo, opciones)
   if (errores.length) throw new Error(errores[0])
   if (modelo.tipo === 'preguntas') return { tipo: 'preguntas', ejercicio: null, criterio: null }
@@ -268,7 +268,7 @@ export function ejerciciosParaGuardar(modelo, opciones = {}) {
 }
 
 /** Modelo de formulario a partir de una fila de la base. */
-export function modeloDesdeFila(fila) {
+function modeloDesdeFilaBase(fila) {
   if (!fila || !TIPOS_EVALUACION[fila.tipo]) return modeloVacio()
   if (fila.tipo === 'preguntas') return modeloVacio()
   let modelo
@@ -312,4 +312,85 @@ export function instruccionParaEstudiante(tipo, ejercicio) {
   if (tipo === 'ejercicio_aplicado') return EJERCICIOS[ejercicio]?.instruccion || 'Realiza el ejercicio indicado por tu profesor.'
   if (tipo === 'mixta') return 'Responde las preguntas y realiza los ejercicios aplicados de la evaluación.'
   return 'Responde las preguntas de la evaluación.'
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Niveles de logro de cada evaluación (logrado, medianamente logrado, no logrado), con porcentajes que el profesor puede
+// cambiar. La base guarda umbral_logrado y umbral_medio por evaluación (por defecto 70 y 40) y calcula el nivel con ellos.
+// ---------------------------------------------------------------------------------------------------------------------
+export const UMBRALES_NIVEL = { logradoPorDefecto: 70, medioPorDefecto: 40, minLogrado: 1, maxLogrado: 100, minMedio: 0 }
+
+const hayValor = (v) => v !== undefined && v !== null
+
+/** Porcentajes de los niveles del modelo, con los valores por defecto cuando el profesor no los cambió. */
+export function umbralesDelModelo(modelo) {
+  return {
+    logrado: hayValor(modelo?.umbralLogrado) ? modelo.umbralLogrado : UMBRALES_NIVEL.logradoPorDefecto,
+    medio: hayValor(modelo?.umbralMedio) ? modelo.umbralMedio : UMBRALES_NIVEL.medioPorDefecto
+  }
+}
+
+/** Errores de los porcentajes de los niveles (vacía si no se cambiaron o si son válidos). */
+export function validarUmbralesNivel(modelo) {
+  if (!hayValor(modelo?.umbralLogrado) && !hayValor(modelo?.umbralMedio)) return []
+  const { logrado, medio } = umbralesDelModelo(modelo)
+  const errores = []
+  if (!esNumero(logrado)) {
+    errores.push('El porcentaje de «logrado» debe ser un número.')
+  } else if (Number(logrado) < UMBRALES_NIVEL.minLogrado || Number(logrado) > UMBRALES_NIVEL.maxLogrado) {
+    errores.push(`El porcentaje de «logrado» debe estar entre ${UMBRALES_NIVEL.minLogrado} y ${UMBRALES_NIVEL.maxLogrado}.`)
+  }
+  if (!esNumero(medio)) {
+    errores.push('El porcentaje de «medianamente logrado» debe ser un número.')
+  } else if (Number(medio) < UMBRALES_NIVEL.minMedio || Number(medio) > UMBRALES_NIVEL.maxLogrado) {
+    errores.push(`El porcentaje de «medianamente logrado» debe estar entre ${UMBRALES_NIVEL.minMedio} y ${UMBRALES_NIVEL.maxLogrado}.`)
+  }
+  if (!errores.length && Number(medio) >= Number(logrado)) {
+    errores.push('El porcentaje de «medianamente logrado» debe ser menor que el de «logrado».')
+  }
+  return errores
+}
+
+/** Columnas umbral_logrado y umbral_medio para guardar (vacío si el profesor no los cambió: la base usa 70 y 40). */
+export function camposUmbralesParaGuardar(modelo) {
+  if (!hayValor(modelo?.umbralLogrado) && !hayValor(modelo?.umbralMedio)) return {}
+  const { logrado, medio } = umbralesDelModelo(modelo)
+  return { umbral_logrado: Number(logrado), umbral_medio: Number(medio) }
+}
+
+const conservarUmbrales = (origen, destino) => {
+  if (hayValor(origen?.umbralLogrado)) destino.umbralLogrado = origen.umbralLogrado
+  if (hayValor(origen?.umbralMedio)) destino.umbralMedio = origen.umbralMedio
+  return destino
+}
+
+/** Cambia el tipo y conserva los porcentajes de los niveles. */
+export function cambiarTipo(modelo, tipo) {
+  return conservarUmbrales(modelo, cambiarTipoBase(modelo, tipo))
+}
+
+/** Cambia el ejercicio y conserva los porcentajes de los niveles. */
+export function cambiarEjercicio(modelo, ejercicio) {
+  return conservarUmbrales(modelo, cambiarEjercicioBase(modelo, ejercicio))
+}
+
+/**
+ * Devuelve la lista de errores (vacía si el modelo es válido), incluidos los de los porcentajes de los niveles.
+ * Con `exigirReferencia` la comparación de señales debe traer su señal de referencia.
+ */
+export function validarTipoEvaluacion(modelo, opciones = {}) {
+  return [...validarTipoBase(modelo, opciones), ...validarUmbralesNivel(modelo)]
+}
+
+/** Campos que se guardan en `evaluaciones`, con los porcentajes de los niveles si el profesor los cambió. */
+export function camposTipoParaGuardar(modelo, opciones = {}) {
+  return { ...camposTipoBase(modelo, opciones), ...camposUmbralesParaGuardar(modelo) }
+}
+
+/** Modelo de formulario a partir de una fila de la base, con sus porcentajes de niveles. */
+export function modeloDesdeFila(fila) {
+  const modelo = modeloDesdeFilaBase(fila)
+  if (fila && hayValor(fila.umbral_logrado)) modelo.umbralLogrado = Number(fila.umbral_logrado)
+  if (fila && hayValor(fila.umbral_medio)) modelo.umbralMedio = Number(fila.umbral_medio)
+  return modelo
 }

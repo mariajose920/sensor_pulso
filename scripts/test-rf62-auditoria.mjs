@@ -115,60 +115,74 @@ probar('3. normalizarEventoAuditoria entrega registros congelados e inmutables (
   }, TypeError)
 })
 
-// 4. Registro append-only de las 6 categorías y listado completo
-await probarAsync('4. registrarEventoAuditoria agrega eventos sin sobrescribir los anteriores y cubre las 6 categorías', async () => {
-  const listaInicial = await listarEventosAuditoria()
-  const totalInicial = listaInicial.length
-  assert.ok(totalInicial >= 6, 'Debe contar con eventos base para las 6 categorías')
+// 4. Auditoría solo por el servidor: nada en localStorage, sin eventos de ejemplo ni actor por defecto
+await probarAsync('4. registrarEventoAuditoria no escribe en el navegador y delega en el servidor', async () => {
+  store.clear()
 
-  const nuevoLogin = await registrarEventoAuditoria({
-    accion: 'login',
-    actorNombre: 'Estudiante Prueba',
-    actorCorreo: 'prueba@alu.unach.cl',
-    entidad: 'sesiones',
-    entidadNombre: 'Acceso Institucional',
-    resumen: 'Inicio de sesión verificado en prueba automatizada'
-  })
-  assert.equal(nuevoLogin.ok, true)
-  assert.equal(Object.isFrozen(nuevoLogin.evento), true)
+  // Acciones que el servidor ya registra solo (trigger o función): no se duplican desde el navegador
+  const login = await registrarEventoAuditoria({ accion: 'login', actorCorreo: 'prueba@alu.unach.cl' })
+  assert.equal(login.ok, true)
+  assert.equal(login.origen, 'servidor')
+  const rango = await registrarEventoAuditoria({ accion: 'cambio_rangos', entidad: 'rangos_fisiologicos' })
+  assert.equal(rango.origen, 'servidor')
 
-  const nuevoRango = await registrarEventoAuditoria({
-    accion: 'cambio_rangos',
-    actorNombre: 'Administrador Inicial',
-    actorCorreo: 'admin.general@unach.cl',
-    entidad: 'rangos_fisiologicos',
-    entidadNombre: 'Reposo · 18-24 años',
-    resumen: 'Actualización de umbral BPM: 60–100 BPM'
-  })
-  assert.equal(nuevoRango.ok, true)
+  // Una acción desconocida se rechaza
+  const raro = await registrarEventoAuditoria({ accion: 'accion_inventada' })
+  assert.equal(raro.ok, false)
+  assert.equal(raro.motivo, 'accion_no_permitida')
+  const vacia = await registrarEventoAuditoria({})
+  assert.equal(vacia.ok, false)
 
-  const listaPosterior = await listarEventosAuditoria()
-  assert.equal(listaPosterior.length, totalInicial + 2)
+  // Una acción del navegador va a la función del servidor; sin servidor o sin sesión falla y no deja copia local
+  const eliminacion = await registrarEventoAuditoria({ accion: 'eliminacion', entidad: 'mediciones', entidadId: 'x1' })
+  assert.equal(eliminacion.ok, false)
+  assert.equal(store.size, 0, 'No debe guardarse nada en localStorage')
 })
 
-// 5. Filtrado por categoría y término de búsqueda + conteos en vivo
-await probarAsync('5. filtrarEventosAuditoria y contarPorCategoria filtran y contabilizan las 6 categorías', async () => {
-  const todos = await listarEventosAuditoria()
-  const conteos = contarPorCategoria(todos)
+await probarAsync('5. listarEventosAuditoria no inventa eventos de ejemplo sin servidor', async () => {
+  store.clear()
+  const lista = await listarEventosAuditoria()
+  assert.equal(lista.length, 0, 'Sin datos del servidor no hay registros')
+  assert.equal(store.size, 0)
+})
 
-  assert.equal(conteos.todos, todos.length)
-  assert.ok(conteos.login >= 1)
-  assert.ok(conteos.cambio_rol >= 1)
-  assert.ok(conteos.cambio_rangos >= 1)
-  assert.ok(conteos.descarga >= 1)
-  assert.ok(conteos.publicacion >= 1)
-  assert.ok(conteos.eliminacion >= 1)
+probar('5b. filtrarEventosAuditoria y contarPorCategoria trabajan sobre eventos normalizados', () => {
+  const eventos = [
+    { id: '1', accion: 'login', ocurrio_en: '2026-11-11T10:00:00Z', entidad: 'perfiles', entidad_id: 'prueba@alu.unach.cl' },
+    { id: '2', accion: 'cambio_rol', ocurrio_en: '2026-11-11T11:00:00Z', entidad: 'perfiles', detalle: { actor_correo: 'jefe@unach.cl' } },
+    { id: '3', accion: 'cambio_rangos', ocurrio_en: '2026-11-11T12:00:00Z', entidad: 'rangos' },
+    { id: '4', accion: 'descarga', ocurrio_en: '2026-11-11T13:00:00Z', entidad: 'descargas' },
+    { id: '5', accion: 'publicacion', ocurrio_en: '2026-11-11T14:00:00Z', entidad: 'mediciones' },
+    { id: '6', accion: 'eliminacion', ocurrio_en: '2026-11-11T15:00:00Z', entidad: 'mediciones' }
+  ].map(normalizarEventoAuditoria)
+  const conteos = contarPorCategoria(eventos)
 
-  const soloRangos = filtrarEventosAuditoria(todos, { categoria: 'cambio_rangos' })
-  assert.equal(soloRangos.length, conteos.cambio_rangos)
-  assert.ok(soloRangos.every(e => e.categoria === 'cambio_rangos'))
+  assert.equal(conteos.todos, eventos.length)
+  for (const cat of ['login', 'cambio_rol', 'cambio_rangos', 'descarga', 'publicacion', 'eliminacion']) {
+    assert.equal(conteos[cat], 1, 'Debe contar la categoría ' + cat)
+  }
+  const soloRangos = filtrarEventosAuditoria(eventos, { categoria: 'cambio_rangos' })
+  assert.equal(soloRangos.length, 1)
+  const porCorreo = filtrarEventosAuditoria(eventos, { categoria: 'todos', busqueda: 'jefe@unach.cl' })
+  assert.equal(porCorreo.length, 1)
+  assert.equal(porCorreo[0].actorCorreo, 'jefe@unach.cl')
+})
 
-  const porCorreo = filtrarEventosAuditoria(todos, {
-    categoria: 'todos',
-    busqueda: 'prueba@alu.unach.cl'
-  })
-  assert.ok(porCorreo.length >= 1)
-  assert.equal(porCorreo[0].actorCorreo, 'prueba@alu.unach.cl')
+probar('5c. El servicio ya no trae eventos de ejemplo ni actor por defecto', () => {
+  const texto = readFileSync(resolve(process.cwd(), 'src/services/auditoriaService.js'), 'utf8')
+  assert.equal(texto.includes('admin.general@unach.cl'), false)
+  assert.equal(texto.includes('EVENTOS_SEMILLA'), false)
+  assert.equal(texto.includes('localStorage'), false)
+})
+
+probar('5d. La migración registrar_evento_cliente usa auth.uid() y una lista cerrada de acciones', () => {
+  const sql = readFileSync(resolve(process.cwd(), 'supabase/migrations/20261114000100_rf62_auditoria_cliente.sql'), 'utf8')
+  assert.ok(sql.includes('registrar_evento_cliente'))
+  assert.ok(sql.includes('auth.uid()'))
+  assert.ok(sql.includes("'eliminacion', 'eliminacion_aula', 'cambio_permisos'"))
+  assert.ok(sql.includes('revoke all on function public.registrar_evento_cliente'))
+  const completo = readFileSync(resolve(process.cwd(), 'supabase/sensor_pulso_base_de_datos_completa.sql'), 'utf8')
+  assert.ok(completo.includes('registrar_evento_cliente'), 'La base completa debe incluir la función')
 })
 
 // 6. Integración en servicios de inicio de sesión, roles, rangos, descargas, publicaciones y eliminaciones

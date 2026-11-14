@@ -58,8 +58,9 @@ El requerimiento **RF69** establece el estándar de cero secretos en el control 
 | `VITE_CONTACTO_PRIVACIDAD` | Correo de privacidad institucional | Sí (pantalla `/privacidad`) | Vercel (Production/Preview) / `.env.local` |
 | `SUPABASE_SECRET_KEY` | Clave maestra administrativa | **NO (Secreto crítico)** | **Solo servidor en Vercel (sin prefijo VITE_)** |
 | `CLAVE_CIFRADO_CAMPOS` | Llave AES-256-GCM para datos salud | **NO (Secreto crítico)** | **Solo servidor en Vercel (sin prefijo VITE_)** |
-| `RESEND_API_KEY` | Clave API transaccional de correos | **NO (Secreto crítico)** | **Solo servidor en Vercel (sin prefijo VITE_)** |
-| `ESP32_TELEMETRIA_TOKEN` | Token de ingesta para hardware | **NO (Secreto de dispositivo)** | Memoria NVS en ESP32 / Servidor Vercel |
+| `SALUD_ENCRYPTION_KEY_V<n>` y `CLAVE_VERSION_ACTIVA` | Claves versionadas de cifrado de salud y versión en uso | **NO (Secreto crítico)** | **Solo servidor en Vercel (sin prefijo VITE_)** |
+| `GMAIL_USER` y `GMAIL_APP_PASSWORD` | Cuenta y contraseña de aplicación que envían las invitaciones del aula | **NO (Secreto crítico)** | **Solo servidor en Vercel (sin prefijo VITE_)** |
+| Token de cada dispositivo ESP32 | Credencial de ingesta de un dispositivo | **NO (Secreto de dispositivo)** | Se crea con `crear_dispositivo` y vive en la memoria del ESP32; en la base solo queda su huella |
 
 > [!CAUTION]
 > **Regla de oro de Vite:** Todo identificador con prefijo `VITE_` es incrustado directamente en el bundle JavaScript del navegador en tiempo de compilación. Las variables que contienen secretos nunca deben llevar el prefijo `VITE_`.
@@ -98,12 +99,40 @@ Se eliminó la lectura residual `process.env.VITE_RESEND_API_KEY` restringiendo 
 ### 4.4. Automatización en CI (`.github/workflows/validar.yml`)
 Se agregó el job `escaner-secretos` en GitHub Actions para verificar en cada pull request o push hacia `develop` o `main` que no existan secretos ni archivos prohibidos.
 
+### 4.5. Rotación de secretos
+
+Un secreto se rota **cada 90 días**, **cuando una persona del equipo deja de necesitar el acceso** y **de inmediato si hay sospecha de filtración** (se aplica además el procedimiento de la sección 4.6). Regla común: primero se crea el secreto nuevo, luego se actualiza en Vercel y se vuelve a desplegar, se comprueba que todo funciona y **al final** se revoca el anterior, para no dejar el servicio sin acceso.
+
+| Secreto | Dónde se genera | Pasos de rotación | Qué se verifica después |
+| :--- | :--- | :--- | :--- |
+| `SUPABASE_SECRET_KEY` | Supabase, Project Settings, API Keys | 1) Crear una secret key nueva. 2) Reemplazar `SUPABASE_SECRET_KEY` en Vercel (Production y Preview). 3) Redesplegar. 4) Eliminar la secret key anterior en Supabase. | Iniciar sesión, enviar una invitación y descifrar una ficha (usan la clave en el servidor). |
+| `CLAVE_CIFRADO_CAMPOS` / `SALUD_ENCRYPTION_KEY_V<n>` (datos de salud) | Generador aleatorio de al menos 32 caracteres | 1) Crear `SALUD_ENCRYPTION_KEY_V<n+1>` en Vercel con un valor nuevo. 2) Poner `CLAVE_VERSION_ACTIVA=<n+1>` y redesplegar: lo nuevo se cifra con la versión nueva. 3) **No borrar la clave anterior**: cada dato guarda su versión y la necesita para descifrarse. | Guardar una ficha nueva y abrir una ficha antigua; ambas deben descifrar. |
+| `GMAIL_APP_PASSWORD` | Cuenta de Google que envía las invitaciones | 1) Crear una contraseña de aplicación nueva. 2) Reemplazarla en Vercel y redesplegar. 3) Revocar la anterior en la cuenta de Google. | Enviar una invitación de prueba a un correo propio. |
+| Token de un dispositivo ESP32 | Función `crear_dispositivo` (se muestra una sola vez) | 1) Crear el dispositivo nuevo con `crear_dispositivo`. 2) Cargar el token nuevo en el ESP32. 3) Revocar el anterior con `revocar_dispositivo`. | Ver que llegan datos con el token nuevo y que el anterior recibe rechazo. |
+
+**Limitación conocida:** la clave de cifrado de salud se rota hacia adelante (lo nuevo usa la versión nueva), pero **no existe un script que vuelva a cifrar los datos antiguos** con la versión nueva. Hasta que se haga, las claves anteriores deben conservarse. Está pendiente de decidir si se necesita ese re-cifrado.
+
+**Registro de rotaciones** (cada rotación se anota aquí o en el registro del grupo):
+
+| Fecha | Secreto | Motivo | Responsable | Verificado |
+| :--- | :--- | :--- | :--- | :--- |
+| | | | | |
+
+### 4.6. Si un secreto se filtra
+
+1. Rotar de inmediato el secreto afectado con los pasos de la tabla anterior.
+2. Si estuvo en un commit, no basta con borrarlo en un commit nuevo: el valor sigue en el historial, por eso se considera comprometido y **debe rotarse siempre**.
+3. Revisar el registro de auditoría en el periodo de exposición y marcar lo sospechoso.
+4. Anotar la rotación en el registro y avisar al grupo el mismo día.
+5. Ejecutar `node scripts/revisar-secretos.mjs --todo` para confirmar que no quedan secretos en el código.
+
 ---
 
 ## 5. Verificación de Criterios de Aceptación
 
 | Criterio de Aceptación | Resultado de la Verificación | Evidencia Técnica |
 | :--- | :--- | :--- |
+| **Las claves y los tokens se rotan.** | **CUMPLIDO (procedimiento manual documentado)** | Sección 4.5: periodo de rotación, pasos por secreto, verificación y registro. Limitación: falta un re-cifrado de datos antiguos. |
 | **No hay claves en el código ni en el historial nuevo.** | **CUMPLIDO** | `node scripts/revisar-secretos.mjs --todo` reporta **0 secretos** en la totalidad de archivos rastreados. `node scripts/revisar-secretos.mjs --historial 20` reporta **0 secretos** en los últimos 20 commits. |
 
 ---
