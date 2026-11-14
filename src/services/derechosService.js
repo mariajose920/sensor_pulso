@@ -8,11 +8,14 @@
  */
 import { supabase } from './supabase.js'
 import { registrarEventoAuditoria } from './auditoriaService.js'
+import { consentimientoEstado, CAMBIOS_REVOCACION_CONSENTIMIENTO } from './consentimientoService.js'
 import { pacienteService, NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA, OPCIONES_MEDICACION } from './pacienteService.js'
 import { borrarMedicionesVistas } from '../pwa/medicionesOffline.js'
 import { borrarPendientes } from '../pwa/medicionesPendientes.js'
 
 const CLAVE_HABITOS_SESION = 'sensor_evolucion_habitos_sesion_rf37'
+const CLAVE_PUBLICACIONES_ANONIMAS_LOCALES = 'sensor_publicaciones_anonimas_locales'
+const CLAVE_CONSENTIMIENTO_LOCAL = 'sensor_consentimiento_aceptado_rf04'
 
 function limpiarHabitosSesionLocal() {
   if (typeof sessionStorage === 'undefined') return
@@ -209,6 +212,9 @@ function descargarJsonEnNavegador(objetoExportacion) {
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+export { CAMBIOS_REVOCACION_CONSENTIMIENTO }
+export const revocacion_consentimiento = () => derechosService.revocarConsentimiento()
 
 export const derechosService = {
   // ---------------------------------------------------------------- Titular: Consultar, Corregir, Exportar, Revocar y Eliminar
@@ -884,10 +890,36 @@ export const derechosService = {
     }
   },
 
+  /**
+   * Revocación del consentimiento (RF90):
+   * 1. Ejecuta `revocar_consentimiento` en la base de datos (marca `consentimientos_aceptados.revocado_en = now()`,
+   *    retira todas las publicaciones del titular en `publicaciones` (`retirada_en = now()`), desmarca `mediciones.publica = false`,
+   *    inserta el registro en `solicitudes_derechos` (`tipo = 'revocar_consentimiento'`) y registra en `auditoria`).
+   * 2. Limpia las publicaciones anónimas locales y el estado reactivo `consentimientoEstado`, impidiendo nuevas
+   *    mediciones y publicaciones hasta que otorgue un nuevo consentimiento.
+   * 3. Registra el evento en el servicio de auditoría y devuelve el resumen de qué cambió para avisar al usuario.
+   */
   async revocarConsentimiento() {
     const u = await usuarioActual()
+    const ahora = new Date().toISOString()
     const { error } = await deps.supabase.rpc('revocar_consentimiento')
     if (error) return { ok: false, error: 'No se pudo revocar el consentimiento.' }
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(CLAVE_CONSENTIMIENTO_LOCAL)
+        localStorage.removeItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES)
+      }
+    } catch { /* entorno sin storage */ }
+
+    consentimientoEstado.value = {
+      ...consentimientoEstado.value,
+      cargando: false,
+      vigente: false,
+      aceptadoEn: null,
+      fechaHoraTexto: '',
+      revocadoEn: ahora
+    }
 
     await deps.registrarEventoAuditoria({
       accion: 'revocacion_consentimiento',
@@ -895,10 +927,19 @@ export const derechosService = {
       entidadId: u?.id || null,
       entidadNombre: 'Revocación de Consentimiento Informado',
       resumen: 'Consentimiento informado revocado por el titular y publicaciones retiradas',
-      detalle: { alcance: 'consentimientos_aceptados y publicaciones' }
+      detalle: {
+        revocado_en: ahora,
+        alcance: 'consentimientos_aceptados, publicaciones retiradas y bloqueo de nuevas mediciones'
+      }
     }).catch(() => {})
 
-    return { ok: true }
+    return {
+      ok: true,
+      revocadoEn: ahora,
+      cambios: [...CAMBIOS_REVOCACION_CONSENTIMIENTO],
+      mensaje:
+        'Retiraste tu consentimiento. Tus publicaciones dejaron de ser visibles en la galería y por enlace, y no podrás medir ni publicar hasta otorgar un nuevo consentimiento.'
+    }
   },
 
   /**

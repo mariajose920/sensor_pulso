@@ -115,8 +115,34 @@
               <strong>{{ consentimientoEstado.fechaHoraTexto || 'recientemente' }}</strong>.
             </div>
           </div>
-          <span class="badge badge-success">Auditoría Inmutable </span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <span class="badge badge-success">Auditoría Inmutable </span>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-testid="btn-revocar-consentimiento-medicion"
+              @click="revocarConsentimientoDesdeMedicion"
+            >
+              Revocar mi consentimiento
+            </button>
+          </div>
         </div>
+      </div>
+
+      <div
+        v-else-if="consentimientoEstado.revocadoEn || avisoRevocacionMedicion"
+        class="alert alert-danger"
+        style="margin: 1rem 0;"
+        role="status"
+        data-testid="aviso-consentimiento-revocado-medicion"
+      >
+        <strong>Consentimiento revocado:</strong>
+        <p style="margin: 0.25rem 0 0; font-size: 0.88rem;">
+          {{
+            avisoRevocacionMedicion ||
+              'Retiraste tu consentimiento. Tus publicaciones en la galería y por enlace fueron retiradas, y no puedes medir ni publicar hasta otorgar un nuevo consentimiento.'
+          }}
+        </p>
       </div>
 
       <!-- Los 4 Pilares del Consentimiento (RF76) -->
@@ -1223,7 +1249,7 @@ const evalPublicacionPaso5 = computed(() => evaluarPublicacion({
   rol: isProfesor.value ? 'profesor' : 'usuario',
   permisos: { publicar_galeria: tienePermisoProfesor('publicar_galeria') },
   permisoConsultado: permisoConsultado.value,
-  consentimientoVigente: true,
+  consentimientoVigente: consentimientoVigente.value,
   fuente: 'sensor',
   pacienteConConsentimientoPropio: false
 }))
@@ -1481,6 +1507,7 @@ function irAPaso(num) {
 // 2. PASO 1: CONSENTIMIENTO INFORMADO
 // ============================================================================
 const consentimientoAceptadoCheck = ref(false)
+const avisoRevocacionMedicion = ref('')
 
 const consentimientoVigente = computed(() => {
   return consentimientoEstado.value?.vigente === true
@@ -1490,8 +1517,17 @@ const puedeAvanzarPaso1 = computed(() => {
   return consentimientoVigente.value || consentimientoAceptadoCheck.value
 })
 
+async function revocarConsentimientoDesdeMedicion() {
+  const r = await consentimientoService.revocarConsentimiento()
+  consentimientoAceptadoCheck.value = false
+  if (r.ok) {
+    avisoRevocacionMedicion.value = r.mensaje
+  }
+}
+
 async function confirmarPaso1() {
   if (!consentimientoVigente.value && consentimientoAceptadoCheck.value) {
+    avisoRevocacionMedicion.value = ''
     await consentimientoService.aceptarConsentimiento({
       origen: 'medicion_asistente_rf13',
       modalidad: 'paso_a_paso'
