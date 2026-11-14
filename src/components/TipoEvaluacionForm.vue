@@ -73,6 +73,35 @@
       </div>
     </div>
 
+    <!-- Niveles de logro: porcentajes propios de esta evaluación -->
+    <fieldset class="niveles-logro" data-testid="niveles-logro">
+      <legend class="form-label">Niveles de logro</legend>
+      <p class="criterio-ayuda">
+        El resultado del estudiante se muestra como logrado, medianamente logrado o no logrado según el porcentaje del puntaje.
+        Puedes cambiar los porcentajes de esta evaluación.
+      </p>
+      <div class="criterio-campos">
+        <div class="campo">
+          <label :for="`${uid}-umbral-logrado`">Logrado desde (%)</label>
+          <input :id="`${uid}-umbral-logrado`" class="form-input" type="number" step="1"
+                 :min="UMBRALES_NIVEL.minLogrado" :max="UMBRALES_NIVEL.maxLogrado"
+                 :value="umbrales.logrado" :disabled="bloqueado" data-testid="umbral-logrado"
+                 @input="cambiarUmbral('umbralLogrado', $event.target.value)" />
+        </div>
+        <div class="campo">
+          <label :for="`${uid}-umbral-medio`">Medianamente logrado desde (%)</label>
+          <input :id="`${uid}-umbral-medio`" class="form-input" type="number" step="1"
+                 :min="UMBRALES_NIVEL.minMedio" :max="UMBRALES_NIVEL.maxLogrado"
+                 :value="umbrales.medio" :disabled="bloqueado" data-testid="umbral-medio"
+                 @input="cambiarUmbral('umbralMedio', $event.target.value)" />
+        </div>
+      </div>
+      <p class="criterio-ayuda" data-testid="niveles-resumen">
+        Logrado: {{ umbrales.logrado }} % o más. Medianamente logrado: de {{ umbrales.medio }} % a menos de {{ umbrales.logrado }} %.
+        No logrado: menos de {{ umbrales.medio }} %.
+      </p>
+    </fieldset>
+
     <p v-if="bloqueado" class="alert alert-info" data-testid="tipo-bloqueado">
       Esta evaluación ya tiene intentos de estudiantes, así que el tipo y el ejercicio no se pueden cambiar.
     </p>
@@ -92,7 +121,8 @@ import { computed, getCurrentInstance } from 'vue'
 import EjercicioCriterioEditor from './EjercicioCriterioEditor.vue'
 import {
   LISTA_TIPOS, REINTENTOS, PUNTAJE_EJERCICIO, MAX_EJERCICIOS_MIXTA,
-  cambiarTipo, agregarEjercicioMixto, quitarEjercicioMixto, validarTipoEvaluacion
+  cambiarTipo, agregarEjercicioMixto, quitarEjercicioMixto, validarTipoEvaluacion,
+  UMBRALES_NIVEL, umbralesDelModelo
 } from '../utils/tiposEvaluacion.js'
 
 const props = defineProps({
@@ -107,6 +137,12 @@ const emit = defineEmits(['update:modelValue'])
 
 const uid = `tipo-eval-${getCurrentInstance()?.uid ?? 0}`
 const errores = computed(() => validarTipoEvaluacion(props.modelValue, { exigirReferencia: true }))
+
+const umbrales = computed(() => umbralesDelModelo(props.modelValue))
+const cambiarUmbral = (clave, valor) => emit('update:modelValue', {
+  ...props.modelValue,
+  [clave]: valor === '' ? '' : Number(valor)
+})
 
 const elegirTipo = (tipo) => emit('update:modelValue', cambiarTipo(props.modelValue, tipo))
 const cambiarUnico = (parte) => emit('update:modelValue', { ...props.modelValue, ...parte })
@@ -150,5 +186,6 @@ const cambiarReintentos = (valor) => emit('update:modelValue', {
 .ejercicio-item { border: 1px solid var(--color-border); border-radius: 8px; padding: 0.75rem 0.9rem; margin-bottom: 0.75rem; }
 .ejercicio-item-cabecera { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .reintentos { margin-top: 0.75rem; }
+.niveles-logro { border: 0; padding: 0; margin: 1rem 0 0; }
 .errores { margin: 0.75rem 0 0; padding-left: 1.5rem; }
 </style>

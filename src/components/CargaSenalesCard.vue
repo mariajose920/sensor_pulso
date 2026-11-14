@@ -523,6 +523,7 @@ function transferirAComparador() {
     nombre,
     muestrasIr: senalCargada.value.muestrasIr,
     muestrasRojo: senalCargada.value.muestrasRojo,
+    frecuenciaHz: senalCargada.value.frecuenciaHz || 50,
     origen: senalCargada.value.origen
   })
 

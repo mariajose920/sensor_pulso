@@ -163,14 +163,27 @@ test('Criterio 1: Escaneo completo del repositorio actual reporta 0 secretos', (
   assert.strictEqual(problemas.length, 0, `El repositorio contiene ${problemas.length} secreto(s) no permitido(s)`)
 })
 
-test('Criterio 1: .env.example no contiene claves reales ni secretos en claro', () => {
+test('Criterio 1: las variables se documentan en el README (o en .env.example) sin claves reales', () => {
+  // Desde el commit 88acd97 el repositorio ya no rastrea .env.example: las variables se documentan en el README.
   const envExamplePath = path.join(ROOT, '.env.example')
-  assert(fs.existsSync(envExamplePath), '.env.example debe existir')
-  const contenido = fs.readFileSync(envExamplePath, 'utf8')
-  assert(contenido.includes('SUPABASE_SECRET_KEY='), 'SUPABASE_SECRET_KEY debe estar vacía')
-  assert(contenido.includes('CLAVE_CIFRADO_CAMPOS='), 'CLAVE_CIFRADO_CAMPOS debe estar vacía')
+  const readmePath = path.join(ROOT, 'README.md')
+  const fuente = fs.existsSync(envExamplePath) ? envExamplePath : readmePath
+  assert(fs.existsSync(fuente), 'Debe existir .env.example o README.md con las variables')
+  const contenido = fs.readFileSync(fuente, 'utf8')
+  assert(/SUPABASE_SECRET_KEY=\.\.\.|SUPABASE_SECRET_KEY=\s*$/m.test(contenido), 'SUPABASE_SECRET_KEY debe estar vacía o con marcador')
+  assert(/CLAVE_CIFRADO_CAMPOS=\.\.\.|CLAVE_CIFRADO_CAMPOS=\s*$/m.test(contenido), 'CLAVE_CIFRADO_CAMPOS debe estar vacía o con marcador')
   assert(!contenido.includes('sb_secret_'), 'No debe contener sb_secret_')
   assert(!contenido.includes('-----BEGIN PRIVATE KEY-----'), 'No debe contener llaves privadas')
+})
+
+test('Criterio 3: la rotación de secretos está documentada', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs/RF69-manejo-secretos.md'), 'utf8')
+  assert(doc.includes('Rotación de secretos'), 'Debe existir la sección de rotación')
+  for (const secreto of ['SUPABASE_SECRET_KEY', 'CLAVE_CIFRADO_CAMPOS', 'GMAIL_APP_PASSWORD', 'revocar_dispositivo']) {
+    assert(doc.includes(secreto), `La rotación debe cubrir ${secreto}`)
+  }
+  assert(doc.includes('Registro de rotaciones'), 'Debe haber un registro de rotaciones')
+  assert(doc.includes('Si un secreto se filtra'), 'Debe describir qué hacer ante una filtración')
 })
 
 test('Criterio 1: Los servicios de api/ y src/services/ no tienen secretos hardcodeados', () => {

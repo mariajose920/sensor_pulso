@@ -10,6 +10,32 @@ Dependencias:
 
 ---
 
+## 0. Qué se probó y qué no (leer primero)
+
+| Parte | Cómo se verificó | Alcance real |
+| :--- | :--- | :--- |
+| Escritura en bloque, índices, bloqueo del intento y verificación de asignación | Prueba automática que revisa que la migración contiene esas piezas `scripts/test-rf110-respuesta-simultanea.js` | Comprueba que el diseño está escrito. **No ejecuta la función contra la base.** |
+| Reintentos con espera creciente y copia local de las respuestas | Pruebas unitarias del servicio del navegador | Verifica la lógica del cliente con una red simulada. |
+| "Prueba de carga de 100 estudiantes" (`ejecutarPruebaCarga100Usuarios`) | Simulación **dentro del navegador o de Node**, con estudiantes virtuales (identificadores falsos) y una base simulada | **No es una prueba de carga real.** No mide tiempos de la base de datos, ni límites de conexiones, ni el comportamiento de Supabase. |
+| Rondas de 5 estudiantes por ESP32 | Corresponde a RF111, no a este requerimiento | Fuera del alcance de esta rama. |
+
+**Conclusión:** el diseño apunta a soportar 100 envíos simultáneos, pero **hay que probarlo contra la base real** antes de afirmar que lo soporta. La prueba real se describe en la sección 0.1 y queda como tarea del ensayo del 17 de noviembre.
+
+### 0.1. Cómo hacer la prueba real contra la base (pendiente)
+
+1. Usar un proyecto de Supabase de pruebas o una rama de pruebas (no producción) con la migración aplicada.
+2. Crear un aula con 100 estudiantes de prueba, una evaluación abierta y un intento sin terminar por estudiante.
+3. Obtener una sesión para cada estudiante de prueba y lanzar los 100 envíos de `guardar_respuestas_simultaneas_rf110` **a la vez** (por ejemplo, 100 promesas en paralelo desde un script).
+4. Anotar: envíos correctos, errores, tiempo del más lento y tiempo total. Criterio: 100 de 100 guardados sin pérdida y sin duplicados.
+5. Mirar en el panel de Supabase la carga de la base y las conexiones durante la prueba.
+6. Registrar el resultado en este documento, con fecha y quién la hizo.
+
+| Fecha | Quién | Entorno | Correctos / 100 | Tiempo del más lento | Observaciones |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| | | | | | |
+
+---
+
 ## 1. Alcance y Objetivos de Rendimiento
 
 El requerimiento **RF110** garantiza que la plataforma `sensor_pulso` soporte picos de carga extremos donde hasta **100 estudiantes** completan y entregan sus evaluaciones en el mismo instante (concurrencia masiva típica de exámenes presenciales o remotos sincronizados), asegurando:

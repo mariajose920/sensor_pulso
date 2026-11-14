@@ -263,6 +263,19 @@ test('MisEvaluacionesView.vue: Utiliza enviarRespuestasConResiliencia en entrega
 })
 
 // ----------------------------------------------------------------------------
+// 6. TRANSPARENCIA SOBRE EL ALCANCE DE LA PRUEBA DE CARGA
+// ----------------------------------------------------------------------------
+console.log('\n--- 6. La documentación aclara qué se probó y qué no ---')
+
+test('Documentación: aclara que la prueba de 100 estudiantes es simulada y describe la prueba real', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs/RF110-respuesta-simultanea.md'), 'utf8')
+  assert(doc.includes('Qué se probó y qué no'), 'Debe tener la sección de alcance de las pruebas')
+  assert(doc.includes('No es una prueba de carga real'), 'Debe decir que la simulación no es una prueba de carga real')
+  assert(doc.includes('Cómo hacer la prueba real contra la base'), 'Debe describir cómo hacer la prueba real')
+  assert(doc.includes('100 de 100'), 'Debe fijar el criterio de la prueba real')
+})
+
+// ----------------------------------------------------------------------------
 // RESUMEN FINAL
 // ----------------------------------------------------------------------------
 console.log('\n================================================================')

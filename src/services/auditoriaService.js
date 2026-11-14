@@ -16,8 +16,6 @@
 
 import { supabase } from './supabase.js'
 
-const STORAGE_AUDITORIA_SISTEMA = 'sensor_pulso_auditoria_sistema_v1'
-
 export const CATEGORIAS_AUDITORIA = Object.freeze([
   { id: 'todos', etiqueta: 'Todos', acciones: [] },
   {
@@ -79,112 +77,6 @@ export const ETIQUETAS_ACCION_AUDITORIA = Object.freeze({
   supresion_datos: 'Supresión de Datos',
   retiro_estudiante: 'Retiro de Estudiante'
 })
-
-const EVENTOS_SEMILLA_AUDITORIA = [
-  {
-    id: 'aud-sys-001',
-    ocurrio_en: '2026-11-11T16:45:12Z',
-    accion: 'login',
-    entidad: 'perfiles',
-    entidad_id: 'admin.general@unach.cl',
-    actor_id: '00000000-0000-0000-0000-000000000001',
-    ip: '192.168.1.82',
-    sospechoso: false,
-    detalle: {
-      actor_nombre: 'Administrador Inicial',
-      actor_correo: 'admin.general@unach.cl',
-      entidad_nombre: 'Sesión Institucional',
-      resumen: 'Acceso exitoso verificado · IP: 192.168.1.82'
-    }
-  },
-  {
-    id: 'aud-sys-002',
-    ocurrio_en: '2026-11-11T16:40:05Z',
-    accion: 'cambio_rol',
-    entidad: 'perfiles',
-    entidad_id: '00000000-0000-0000-0000-000000000002',
-    actor_id: '00000000-0000-0000-0000-000000000001',
-    ip: '192.168.1.82',
-    sospechoso: false,
-    detalle: {
-      actor_nombre: 'Administrador Inicial',
-      actor_correo: 'admin.general@unach.cl',
-      usuario_nombre: 'Docente de Ciencias',
-      usuario_correo: 'docente.ciencias@unach.cl',
-      rol_antes: 'usuario',
-      rol_despues: 'profesor',
-      admin_antes: false,
-      admin_despues: false,
-      resumen: 'Rol: Estudiante -> Profesor · Permisos actualizados'
-    }
-  },
-  {
-    id: 'aud-sys-003',
-    ocurrio_en: '2026-11-11T16:35:19Z',
-    accion: 'cambio_rangos',
-    entidad: 'rangos',
-    entidad_id: 'rango-reposo-18-24',
-    actor_id: '00000000-0000-0000-0000-000000000001',
-    ip: '192.168.1.82',
-    sospechoso: false,
-    detalle: {
-      actor_nombre: 'Administrador Inicial',
-      actor_correo: 'admin.general@unach.cl',
-      entidad_nombre: 'Rango Reposo (18-24 años)',
-      operacion: 'UPDATE',
-      resumen: 'Actualización BPM: 60-100 BPM · SpO₂: 95-100%'
-    }
-  },
-  {
-    id: 'aud-sys-004',
-    ocurrio_en: '2026-11-11T16:30:44Z',
-    accion: 'descarga',
-    entidad: 'descargas',
-    entidad_id: 'informe-canal-1',
-    actor_id: '00000000-0000-0000-0000-000000000003',
-    ip: '192.168.1.82',
-    sospechoso: false,
-    detalle: {
-      actor_nombre: 'Javiera Rail Astudillo',
-      actor_correo: 'javiera.rail@alu.unach.cl',
-      tipo: 'informe_pdf',
-      entidad_nombre: 'Informe Clínico PDF',
-      resumen: 'Archivo exportado: informe_pdf (Canal 1 · 74 BPM)'
-    }
-  },
-  {
-    id: 'aud-sys-005',
-    ocurrio_en: '2026-11-11T16:28:10Z',
-    accion: 'publicacion',
-    entidad: 'mediciones',
-    entidad_id: 'pub-anon-72bpm',
-    actor_id: '00000000-0000-0000-0000-000000000001',
-    ip: '192.168.1.82',
-    sospechoso: false,
-    detalle: {
-      actor_nombre: 'Administrador Inicial',
-      actor_correo: 'admin.general@unach.cl',
-      entidad_nombre: 'Galería Pública Anónima',
-      resumen: 'Publicación confirmada por titular (Rango 25-34 años · 72 BPM)'
-    }
-  },
-  {
-    id: 'aud-sys-006',
-    ocurrio_en: '2026-11-11T16:20:03Z',
-    accion: 'eliminacion',
-    entidad: 'mediciones',
-    entidad_id: 'med-8492',
-    actor_id: '00000000-0000-0000-0000-000000000004',
-    ip: '192.168.1.82',
-    sospechoso: false,
-    detalle: {
-      actor_nombre: 'Matías Silva',
-      actor_correo: 'msilva@alu.unach.cl',
-      entidad_nombre: 'Medición #med-8492',
-      resumen: 'Registro eliminado del historial personal por su titular'
-    }
-  }
-]
 
 /**
  * Clasifica una acción de base de datos o aplicación dentro de una de las 6 categorías de RF62.
@@ -332,7 +224,7 @@ export function normalizarEventoAuditoria(raw = {}) {
   const det = raw.detalle || {}
 
   const actorCorreo = raw.actor_correo || det.actor_correo || (categoria === 'login' ? raw.entidad_id : '') || 'sistema@unach.cl'
-  const actorNombre = raw.actor_nombre || det.actor_nombre || (actorCorreo === 'admin.general@unach.cl' ? 'Administrador Inicial' : (actorCorreo.split('@')[0] || 'Usuario UNACH'))
+  const actorNombre = raw.actor_nombre || det.actor_nombre || (actorCorreo.split('@')[0] || 'Usuario UNACH')
   const accionNorm = String(raw.accion || 'login')
   const entidadTexto = raw.entidad_nombre || construirEntidadTexto(raw, categoria)
   const detalleTexto = raw.resumen || construirDetalleTexto(raw, categoria)
@@ -364,113 +256,66 @@ export function normalizarEventoAuditoria(raw = {}) {
   return Object.freeze(evento)
 }
 
-function leerUsuarioSesionLocal() {
-  if (typeof localStorage === 'undefined') return null
-  try {
-    const rawProfile = localStorage.getItem('sensor_profile')
-    const rawUser = localStorage.getItem('sensor_user') || localStorage.getItem('sensor_pulso_auth_user')
-    const p = rawProfile ? JSON.parse(rawProfile) : null
-    const u = rawUser ? JSON.parse(rawUser) : null
-    if (!p && !u) return null
-    return {
-      id: p?.id || u?.id || null,
-      email: p?.correo || u?.email || '',
-      nombre: p?.nombre || u?.user_metadata?.full_name || u?.user_metadata?.nombre || ''
-    }
-  } catch {
-    return null
-  }
-}
-
-function leerAuditoriaLocal() {
-  if (typeof localStorage === 'undefined') return [...EVENTOS_SEMILLA_AUDITORIA]
-  try {
-    const raw = localStorage.getItem(STORAGE_AUDITORIA_SISTEMA)
-    if (!raw) {
-      localStorage.setItem(STORAGE_AUDITORIA_SISTEMA, JSON.stringify(EVENTOS_SEMILLA_AUDITORIA))
-      return [...EVENTOS_SEMILLA_AUDITORIA]
-    }
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [...EVENTOS_SEMILLA_AUDITORIA]
-  } catch {
-    return [...EVENTOS_SEMILLA_AUDITORIA]
-  }
-}
-
-function guardarAuditoriaLocal(lista) {
-  if (typeof localStorage === 'undefined') return
-  try {
-    localStorage.setItem(STORAGE_AUDITORIA_SISTEMA, JSON.stringify(lista.slice(0, 250)))
-    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-      window.dispatchEvent(new CustomEvent('auditoria-actualizada'))
-    }
-  } catch {
-    // ignorar errores de cuota en almacenamiento local
-  }
-}
+/**
+ * Acciones que el servidor registra por sí mismo (triggers o funciones): inicio de sesión, cambio de rol,
+ * cambio de rangos, descargas, publicaciones, retiros del aula y derechos. El navegador no las vuelve a escribir.
+ */
+export const ACCIONES_AUDITADAS_POR_SERVIDOR = Object.freeze([
+  'login', 'login_fallido', 'bloqueo_cuenta', 'cambio_rol', 'cambio_rangos', 'descarga',
+  'publicacion', 'retiro_publicacion', 'retiro_estudiantes', 'exportacion_datos', 'supresion_datos'
+])
 
 /**
- * Registra un nuevo evento en la bitácora inmutable de auditoría (RF62).
- * Solo permite agregar registros nuevos (append-only); jamás modifica ni elimina previos.
+ * Acciones del navegador que sí se envían a la función `registrar_evento_cliente` del servidor (RF62).
+ * Deben coincidir con la lista cerrada de esa función en la migración 20261114000100_rf62_auditoria_cliente.sql.
+ */
+export const ACCIONES_AUDITADAS_DESDE_CLIENTE = Object.freeze(['eliminacion', 'eliminacion_aula', 'cambio_permisos'])
+
+/**
+ * Registra un evento de auditoría (RF62) a través del servidor.
+ * El actor y la hora los pone el servidor; aquí no se guarda nada en el navegador ni se inventa un actor.
+ * Devuelve { ok, origen } o { ok: false, motivo }.
  */
 export async function registrarEventoAuditoria({
   accion,
   entidad = 'sistema',
   entidadId = null,
-  actorId = null,
-  actorNombre = null,
-  actorCorreo = null,
   entidadNombre = null,
   resumen = null,
-  detalle = {},
-  ip = '127.0.0.1',
-  sospechoso = false
+  detalle = {}
 } = {}) {
-  if (!accion) return null
+  if (!accion) return { ok: false, motivo: 'sin_accion' }
 
-  const sesionLocal = leerUsuarioSesionLocal()
-  const correoFinal = actorCorreo || sesionLocal?.email || 'admin.general@unach.cl'
-  const nombreFinal = actorNombre || sesionLocal?.user_metadata?.nombre || sesionLocal?.nombre || (correoFinal === 'admin.general@unach.cl' ? 'Administrador Inicial' : correoFinal.split('@')[0])
-  const idActorFinal = actorId || sesionLocal?.id || null
+  if (ACCIONES_AUDITADAS_POR_SERVIDOR.includes(accion)) {
+    // Ya la registró el servidor en la misma operación (trigger o función): no se duplica.
+    return { ok: true, origen: 'servidor' }
+  }
+  if (!ACCIONES_AUDITADAS_DESDE_CLIENTE.includes(accion)) {
+    return { ok: false, motivo: 'accion_no_permitida' }
+  }
 
-  const detalleCompleto = {
+  const detalleEnviado = {
     ...detalle,
-    actor_nombre: nombreFinal,
-    actor_correo: correoFinal,
     ...(entidadNombre ? { entidad_nombre: entidadNombre } : {}),
     ...(resumen ? { resumen } : {})
   }
 
-  const nuevoCrudo = {
-    id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    ocurrio_en: new Date().toISOString(),
-    actor_id: idActorFinal,
-    accion,
-    entidad,
-    entidad_id: entidadId ? String(entidadId) : null,
-    detalle: detalleCompleto,
-    ip,
-    sospechoso: Boolean(sospechoso)
-  }
-
-  const actual = leerAuditoriaLocal()
-  guardarAuditoriaLocal([nuevoCrudo, ...actual])
-
   try {
-    await supabase.from('auditoria').insert({
-      actor_id: idActorFinal,
-      accion,
-      entidad,
-      entidad_id: entidadId ? String(entidadId) : null,
-      detalle: detalleCompleto,
-      sospechoso: Boolean(sospechoso)
+    const { error } = await supabase.rpc('registrar_evento_cliente', {
+      p_accion: accion,
+      p_entidad: entidad,
+      p_entidad_id: entidadId ? String(entidadId) : null,
+      p_detalle: detalleEnviado
     })
-  } catch {
-    // La inserción directa en `auditoria` está restringida a triggers/RPCs en Supabase; la copia local complementa los triggers
+    if (error) return { ok: false, motivo: 'servidor_rechazo', error: error.message }
+  } catch (err) {
+    return { ok: false, motivo: 'sin_conexion', error: err?.message || String(err) }
   }
 
-  const evento = normalizarEventoAuditoria(nuevoCrudo)
-  return Object.freeze({ ok: true, evento })
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('auditoria-actualizada'))
+  }
+  return { ok: true, origen: 'cliente' }
 }
 
 /**
@@ -510,10 +355,10 @@ export function contarPorCategoria(eventos = []) {
 }
 
 /**
- * Obtiene la lista consolidada e inmutable de eventos de auditoría (BD + registro local).
+ * Obtiene la lista de eventos de auditoría leída de la base de datos (solo la ve quien tenga permiso por RLS).
+ * Ya no se mezcla con registros del navegador ni con eventos de ejemplo.
  */
 export async function listarEventosAuditoria({ categoria = 'todos', busqueda = '', limite = 120 } = {}) {
-  const localesCrudos = leerAuditoriaLocal()
   let remotosCrudos = []
 
   try {
@@ -527,21 +372,12 @@ export async function listarEventosAuditoria({ categoria = 'todos', busqueda = '
       remotosCrudos = data
     }
   } catch {
-    // sin conexión o rol demo local: se usan los registros locales
+    // sin conexión: no hay nada que mostrar, no se inventan registros
   }
 
-  const mapaUnico = new Map()
-  for (const item of [...remotosCrudos, ...localesCrudos]) {
-    const norm = normalizarEventoAuditoria(item)
-    const claveDedup = norm.id || `${norm.accion}|${norm.entidadTexto}|${norm.ocurrioEn.slice(0, 19)}`
-    if (!mapaUnico.has(claveDedup)) {
-      mapaUnico.set(claveDedup, norm)
-    }
-  }
-
-  const todosOrdenados = [...mapaUnico.values()].sort(
-    (a, b) => new Date(b.ocurrioEn).getTime() - new Date(a.ocurrioEn).getTime()
-  )
+  const todosOrdenados = remotosCrudos
+    .map(normalizarEventoAuditoria)
+    .sort((x, y) => new Date(y.ocurrioEn).getTime() - new Date(x.ocurrioEn).getTime())
 
   const filtrados = filtrarEventosAuditoria(todosOrdenados, { categoria, busqueda })
   return Object.freeze(filtrados)
