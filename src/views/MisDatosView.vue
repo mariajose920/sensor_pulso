@@ -14,8 +14,99 @@
       {{ aviso.texto }}
     </p>
 
+    <!-- Navegación por Pestañas de Mis datos y mis derechos -->
+    <nav class="mis-datos-tabs" aria-label="Secciones de Mis datos y mis derechos" data-testid="mis-datos-tabs">
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'consultar' }"
+        data-testid="tab-consultar-datos"
+        @click="pestanaActiva = 'consultar'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+        Consultar mis datos
+        <span class="tab-counter" v-if="resumenDatos.totalMediciones >= 0">{{ resumenDatos.totalMediciones }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'corregir' }"
+        data-testid="tab-corregir-datos"
+        @click="pestanaActiva = 'corregir'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </svg>
+        Corregir mis datos
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'exportar' }"
+        data-testid="tab-exportar-datos"
+        @click="pestanaActiva = 'exportar'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Exportar mis datos
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'consentimiento' }"
+        data-testid="tab-consentimiento-supresion"
+        @click="pestanaActiva = 'consentimiento'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        Consentimiento y Supresión
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'solicitudes' }"
+        data-testid="tab-solicitudes-derechos"
+        @click="pestanaActiva = 'solicitudes'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+        </svg>
+        Solicitudes y Registro
+        <span class="tab-counter" v-if="solicitudes.length > 0">{{ solicitudes.length }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'mfa' }"
+        data-testid="tab-mfa"
+        @click="pestanaActiva = 'mfa'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        Autenticación 2FA
+      </button>
+    </nav>
+
     <!-- 1. CONSULTAR MIS DATOS REGISTRADOS -->
-    <section class="card seccion-derecho" data-testid="consultar-datos">
+    <section v-show="pestanaActiva === 'consultar'" class="card seccion-derecho" data-testid="consultar-datos">
       <div class="seccion-encabezado">
         <h2>1. Consultar mis datos registrados</h2>
         <button
@@ -104,7 +195,7 @@
     </section>
 
     <!-- 2. CORREGIR MIS DATOS (RECTIFICACIÓN INMEDIATA) -->
-    <section class="card seccion-derecho" data-testid="corregir-datos">
+    <section v-show="pestanaActiva === 'corregir'" class="card seccion-derecho" data-testid="corregir-datos">
       <h2>2. Corregir mis datos (Rectificación inmediata)</h2>
       <div class="banner-rectificacion">
         Los cambios se reflejan de inmediato en tu perfil y en tu ficha de salud
@@ -223,7 +314,7 @@
     </section>
 
     <!-- 3. EXPORTAR MIS DATOS (PORTABILIDAD) -->
-    <section class="card seccion-derecho" data-testid="descargar-datos">
+    <section v-show="pestanaActiva === 'exportar'" class="card seccion-derecho" data-testid="descargar-datos">
       <h2>3. Exportar mis datos (Portabilidad)</h2>
       <p>
         Obtén un archivo con tu perfil, tus mediciones, tu ficha de salud declarada y tu actividad.
@@ -253,7 +344,7 @@
     </section>
 
     <!-- 4. RETIRAR MI CONSENTIMIENTO O ELIMINAR MIS DATOS (SUPRESIÓN) -->
-    <section class="card peligro seccion-derecho" data-testid="acciones-delicadas">
+    <section v-show="pestanaActiva === 'consentimiento'" class="card peligro seccion-derecho" data-testid="acciones-delicadas">
       <h2>4. Retirar mi consentimiento o eliminar mis datos (Supresión)</h2>
       <p>
         Tienes el derecho de retirar tu consentimiento o eliminar tus datos en cualquier momento.
@@ -269,7 +360,7 @@
           data-testid="boton-revocar"
           @click="revocar"
         >
-          Retirar mi consentimiento
+          {{ trabajando ? 'Procesando…' : 'Retirar mi consentimiento' }}
         </button>
         <button
           type="button"
@@ -281,6 +372,36 @@
           Borrar mis datos
         </button>
       </div>
+
+      <!-- Aviso detallado de qué cambió tras revocar el consentimiento -->
+      <div
+        v-if="resumenRevocacion.visible"
+        class="aviso-revocacion-box"
+        role="status"
+        data-testid="aviso-cambios-revocacion"
+      >
+        <div class="aviso-revocacion-head">
+          <strong>Qué cambió tras retirar tu consentimiento</strong>
+          <span v-if="resumenRevocacion.fecha" class="aviso-revocacion-fecha">
+            Registrado el {{ fechaHoraCompleta(resumenRevocacion.fecha) }}
+          </span>
+        </div>
+        <ul class="aviso-revocacion-lista">
+          <li v-for="(item, idx) in resumenRevocacion.cambios" :key="idx">
+            {{ item }}
+          </li>
+        </ul>
+        <div class="aviso-revocacion-acciones">
+          <router-link
+            to="/medicion"
+            class="btn btn-secondary btn-sm"
+            data-testid="enlace-nuevo-consentimiento"
+          >
+            Ir a otorgar nuevo consentimiento en Medición
+          </router-link>
+        </div>
+      </div>
+
       <div v-if="pedirConfirmacion" class="confirmacion" data-testid="confirmar-eliminar">
         <p>Para confirmar, escribe <strong>BORRAR</strong>:</p>
         <input
@@ -305,7 +426,7 @@
     </section>
 
     <!-- Solicitudes adicionales e historial de derechos ejercidos -->
-    <section class="card seccion-derecho" data-testid="nueva-solicitud">
+    <section v-show="pestanaActiva === 'solicitudes'" class="card seccion-derecho" data-testid="nueva-solicitud">
       <h2>Enviar solicitud formal adicional</h2>
       <p
         v-if="avisoSolicitud.texto"
@@ -351,7 +472,7 @@
       </form>
     </section>
 
-    <section class="card seccion-derecho" data-testid="mis-solicitudes">
+    <section v-show="pestanaActiva === 'solicitudes'" class="card seccion-derecho" data-testid="mis-solicitudes">
       <h2>Mis solicitudes y acciones registradas</h2>
       <p v-if="!solicitudes.length" class="vacio">Aún no has enviado solicitudes.</p>
       <ul v-else class="lista">
@@ -389,7 +510,7 @@
       </ul>
     </section>
 
-    <section class="card seccion-derecho">
+    <section v-show="pestanaActiva === 'mfa'" class="card seccion-derecho">
       <h2>Autenticación de dos factores</h2>
       <p>
         Si tienes una cuenta de usuario, puedes activar esta protección cuando quieras. Si la activas,
@@ -460,6 +581,7 @@ import {
   derechosService,
   ESTADOS_SOLICITUD,
   TIPOS_DERECHO,
+  CAMBIOS_REVOCACION_CONSENTIMIENTO,
   textoPlazo,
   estaSolicitudVencida,
   esSolicitudProximaAVencer,
@@ -468,6 +590,7 @@ import {
 import { NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA } from '../services/pacienteService.js'
 import { PLAZO_RESPUESTA_DIAS } from '../data/politicaPrivacidad.js'
 
+const pestanaActiva = ref('consultar')
 const tipo = ref('')
 const detalle = ref('')
 const solicitudes = ref([])
@@ -482,6 +605,11 @@ const enviando = ref(false)
 const trabajando = ref(false)
 const pedirConfirmacion = ref(false)
 const textoConfirmar = ref('')
+const resumenRevocacion = ref({
+  visible: false,
+  fecha: null,
+  cambios: []
+})
 
 const ocupado = computed(
   () => descargando.value || descargandoPdf.value || rectificando.value || enviando.value || trabajando.value
@@ -514,6 +642,20 @@ const etiquetaTipo = (v) =>
   TIPOS_DERECHO.find(t => t.valor === v)?.texto.split(':')[0] ||
   (v === 'revocar_consentimiento' ? 'Retiro del consentimiento' : v)
 const fecha = (iso) => new Date(iso).toLocaleDateString('es-CL')
+const fechaHoraCompleta = (iso) => {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleString('es-CL', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  } catch {
+    return String(iso)
+  }
+}
 const plazo = (s) => textoPlazo(s.vence_en, s.estado)
 const clasePlazoTitular = (s) => `plazo-${clasificarPlazoSolicitud(s)}`
 const decir = (texto, tipoAviso = 'ok') => { aviso.value = { texto, tipo: tipoAviso } }
@@ -549,6 +691,15 @@ async function cargarDatosTitular() {
     const r = await derechosService.consultarMisDatos()
     if (r.ok && r.datos) {
       resumenDatos.value = r.datos
+      if (!r.datos.consentimiento?.vigente && r.datos.consentimiento?.revocado_en) {
+        resumenRevocacion.value = {
+          visible: true,
+          fecha: r.datos.consentimiento.revocado_en,
+          cambios: [...CAMBIOS_REVOCACION_CONSENTIMIENTO]
+        }
+      } else if (r.datos.consentimiento?.vigente) {
+        resumenRevocacion.value = { visible: false, fecha: null, cambios: [] }
+      }
       formRectificacion.value = {
         nombre: r.datos.perfil.nombre || r.datos.fichaSalud?.nombre || '',
         edad: r.datos.fichaSalud?.edad || 22,
@@ -672,9 +823,27 @@ async function revocar() {
   trabajando.value = true
   const r = await derechosService.revocarConsentimiento()
   trabajando.value = false
-  r.ok
-    ? decir('Retiraste tu consentimiento. Para volver a medir deberás aceptarlo de nuevo.')
-    : decir(r.error, 'error')
+  if (r.ok) {
+    resumenDatos.value = {
+      ...resumenDatos.value,
+      consentimiento: {
+        ...resumenDatos.value.consentimiento,
+        vigente: false,
+        revocado_en: r.revocadoEn || new Date().toISOString()
+      }
+    }
+    resumenRevocacion.value = {
+      visible: true,
+      fecha: r.revocadoEn || new Date().toISOString(),
+      cambios: Array.isArray(r.cambios) && r.cambios.length ? r.cambios : [...CAMBIOS_REVOCACION_CONSENTIMIENTO]
+    }
+    decir(
+      r.mensaje ||
+        'Retiraste tu consentimiento. Tus publicaciones dejaron de ser visibles en la galería y por enlace, y no podrás medir ni publicar hasta otorgar un nuevo consentimiento.'
+    )
+  } else {
+    decir(r.error, 'error')
+  }
   await cargarTodo()
 }
 
@@ -723,6 +892,50 @@ async function eliminar() {
   color: var(--color-muted);
   margin: 0;
   line-height: 1.5;
+}
+
+/* Tabs de Navegación (mismo diseño que Historial) */
+.mis-datos-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.25rem;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 1rem;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 0.35rem 0.35rem 0 0;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--color-text);
+  background: #f8fafc;
+}
+
+.tab-btn.active {
+  color: #1e40af;
+  border-bottom-color: #2563eb;
+  background: #eff6ff;
+}
+
+.tab-counter {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  color: #334155;
+  margin-left: 0.4rem;
 }
 
 .seccion-derecho {
@@ -967,6 +1180,50 @@ h2 {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid #fecaca;
+}
+
+.aviso-revocacion-box {
+  margin-top: 0.9rem;
+  padding: 0.9rem 1.05rem;
+  background: #ffffff;
+  border: 1px solid #fca5a5;
+  border-left: 4px solid #dc2626;
+  border-radius: 8px;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.aviso-revocacion-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  color: #991b1b;
+  font-size: 0.92rem;
+}
+
+.aviso-revocacion-fecha {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.aviso-revocacion-lista {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.88rem;
+  color: #1e293b;
+  line-height: 1.45;
+}
+
+.aviso-revocacion-acciones {
+  margin-top: 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .alerta-local {
