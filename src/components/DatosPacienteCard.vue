@@ -283,18 +283,19 @@
           <!-- Sueño -->
           <div class="form-group">
             <label class="form-label" for="suenoHoras">
-              Sueño / Horas dormidas anoche
+              Sueño / Horas dormidas anoche (opcional)
             </label>
             <select 
               id="suenoHoras"
               v-model="formulario.suenoHoras"
               class="form-control"
             >
+              <option value="">Sin especificar (opcional)</option>
               <option v-for="opt in OPCIONES_SUENO" :key="opt.id" :value="opt.id">
                 {{ opt.label }}
               </option>
             </select>
-            <small class="form-text">La privación de sueño altera la variabilidad (HRV).</small>
+            <small class="form-text">La privación de sueño altera la variabilidad (HRV) y se correlaciona en tu evolución personal.</small>
           </div>
 
           <!-- Cafeína -->

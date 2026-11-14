@@ -21,26 +21,17 @@ function resolverRangoEnLista(rangos, actividadId, edad, personales = []) {
   return matchGlobal ? { ...matchGlobal, origen: 'global' } : null
 }
 
-/**
- * Rangos de referencia por defecto (AHA / fisiología estándar) según actividad y edad,
- * utilizados como respaldo cuando la tabla `rangos` no devuelve una fila específica.
- */
 const RANGOS_RESPALDO_ACTIVIDAD = [
-  // Reposo (id: 1)
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 0, edad_max: 17, bpm_min: 60, bpm_max: 100 },
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 18, edad_max: 35, bpm_min: 60, bpm_max: 100 },
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 36, edad_max: 55, bpm_min: 60, bpm_max: 100 },
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 56, edad_max: 120, bpm_min: 60, bpm_max: 100 },
-  // Caminata suave (id: 2)
   { actividad_id: 2, codigo: 'caminata', nombre: 'Caminata suave', edad_min: 0, edad_max: 35, bpm_min: 90, bpm_max: 120 },
   { actividad_id: 2, codigo: 'caminata', nombre: 'Caminata suave', edad_min: 36, edad_max: 120, bpm_min: 85, bpm_max: 115 },
-  // Ejercicio moderado (id: 3)
   { actividad_id: 3, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado', edad_min: 0, edad_max: 35, bpm_min: 120, bpm_max: 155 },
   { actividad_id: 3, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado', edad_min: 36, edad_max: 120, bpm_min: 110, bpm_max: 145 },
-  // Ejercicio intenso (id: 4)
   { actividad_id: 4, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso', edad_min: 0, edad_max: 35, bpm_min: 150, bpm_max: 185 },
   { actividad_id: 4, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso', edad_min: 36, edad_max: 120, bpm_min: 135, bpm_max: 170 },
-  // Recuperación post-ejercicio (id: 5)
   { actividad_id: 5, codigo: 'recuperacion', nombre: 'Recuperación post-ejercicio', edad_min: 0, edad_max: 120, bpm_min: 80, bpm_max: 120 }
 ]
 
@@ -58,10 +49,6 @@ function redondear1(valor) {
   return Math.round(num * 10) / 10
 }
 
-/**
- * Convierte una fecha ISO o cadena YYYY-MM-DD al día calendario local (YYYY-MM-DD)
- * en la zona horaria America/Santiago.
- */
 export function formatearDiaLocal(fechaEntrada) {
   if (!fechaEntrada) return null
   const texto = String(fechaEntrada).trim()
@@ -85,9 +72,6 @@ export function formatearDiaLocal(fechaEntrada) {
   return `${anio}-${mes}-${dia}`
 }
 
-/**
- * Formatea una fecha YYYY-MM-DD en formato legible corto (ej. "14 nov").
- */
 export function formatearEtiquetaDia(diaIso) {
   if (!diaIso || !/^\d{4}-\d{2}-\d{2}$/.test(String(diaIso))) return String(diaIso || '—')
   const [anio, mes, dia] = String(diaIso).split('-').map(Number)
@@ -99,9 +83,6 @@ export function formatearEtiquetaDia(diaIso) {
   })
 }
 
-/**
- * Determina si una medición pertenece a la actividad solicitada (por defecto 'reposo').
- */
 export function coincideActividadMedicion(medicion, { actividadCodigo = 'reposo', actividadId = 1 } = {}) {
   if (!medicion || typeof medicion !== 'object') return false
   const codigoBuscado = String(actividadCodigo || 'reposo').trim().toLowerCase()
@@ -131,14 +112,9 @@ export function coincideActividadMedicion(medicion, { actividadCodigo = 'reposo'
   if (nombreMedicion) {
     return nombreMedicion.includes(codigoBuscado.replace('_', ' '))
   }
-  // Si la medición no tiene actividad explícita asignada, el esquema de BD la asocia a reposo (actividad por defecto)
   return codigoBuscado === 'reposo'
 }
 
-/**
- * Resuelve el rango esperado de BPM según la edad y la actividad (RF19 + RF36),
- * priorizando los rangos configurados en la base de datos o personales del usuario.
- */
 export function resolverRangoEsperado({
   edad = 30,
   actividadId = 1,
@@ -155,7 +131,6 @@ export function resolverRangoEsperado({
     ? rangosGlobales
     : RANGOS_RESPALDO_ACTIVIDAD
 
-  // Filtrar también por código de actividad si los rangos traen `actividad.codigo` o `codigo`
   const candidatosGlobales = listaGlobal.filter((r) => {
     const rCodigo = String(r.codigo ?? r.actividad?.codigo ?? '').trim().toLowerCase()
     const rId = Number(r.actividad_id ?? r.actividad?.id)
@@ -222,13 +197,6 @@ function clasificarEstadoRespectoAlRango(bpmPromedio, bpmMin, bpmMax) {
   }
 }
 
-/**
- * Construye la serie diaria de evolución personal a partir del historial de mediciones
- * o de la vista `public.evolucion_reposo`, garantizando:
- * 1. Solo incluir mediciones del `usuarioId` autenticado.
- * 2. Nunca inventar días ni valores cuando hay menos de 2 días con datos.
- * 3. Calcular la banda del rango esperado según edad y actividad.
- */
 export function construirSerieEvolucion({
   mediciones = [],
   filasVista = [],
@@ -243,7 +211,6 @@ export function construirSerieEvolucion({
   const codigoNorm = String(actividadCodigo || 'reposo').trim().toLowerCase()
   const idNorm = Number(actividadId) || 1
 
-  // 1. Filtrar estrictamente las mediciones que pertenecen al usuario autenticado
   const medicionesPropias = (Array.isArray(mediciones) ? mediciones : []).filter((m) => {
     if (!m || typeof m !== 'object') return false
     const propietario = String(m.usuario_id ?? m.usuarioId ?? '').trim()
@@ -251,7 +218,6 @@ export function construirSerieEvolucion({
     return propietario === uidActual
   })
 
-  // Determinar la edad aplicable a partir del parámetro o de la medición más reciente del usuario
   let edadDetectada = Number(edad)
   if (!Number.isFinite(edadDetectada) || edadDetectada <= 0) {
     for (let i = medicionesPropias.length - 1; i >= 0; i -= 1) {
@@ -272,7 +238,6 @@ export function construirSerieEvolucion({
     rangosPersonales
   })
 
-  // 2. Agrupar por día calendario local
   const mapaPorDia = new Map()
 
   const medicionesActividad = medicionesPropias.filter((m) =>
@@ -313,7 +278,6 @@ export function construirSerieEvolucion({
     }
   }
 
-  // Si no se pasaron mediciones crudas pero sí filas de la vista `public.evolucion_reposo` para reposo
   if (mapaPorDia.size === 0 && codigoNorm === 'reposo' && Array.isArray(filasVista) && filasVista.length > 0) {
     for (const fila of filasVista) {
       if (!fila || typeof fila !== 'object') continue
@@ -395,7 +359,6 @@ export function construirSerieEvolucion({
       'Se requieren al menos 2 días con registros para trazar la tendencia diaria sin inventar valores.'
   }
 
-  // Resumen estadístico real (nunca inventa datos cuando faltan días)
   let resumen = {
     promedioPeriodoBpm: null,
     minimoBpm: null,
@@ -432,10 +395,6 @@ export function construirSerieEvolucion({
   }
 }
 
-/**
- * Calcula las coordenadas geométricas SVG para dibujar la banda del rango esperado
- * y la curva diaria de BPM en reposo cuando existen al menos 2 días de datos.
- */
 export function calcularGeometriaGraficoEvolucion({
   dias = [],
   rangoEsperado = { bpmMin: 60, bpmMax: 100 },
@@ -479,7 +438,6 @@ export function calcularGeometriaGraficoEvolucion({
     bpmMax: bpmMaxRango
   }
 
-  // Ticks del eje Y (5 niveles equidistantes)
   const ticksY = []
   const pasos = 4
   for (let i = 0; i <= pasos; i += 1) {

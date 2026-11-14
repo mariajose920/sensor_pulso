@@ -4,11 +4,13 @@ import { supabase } from '../services/supabase.js'
 import { borrarMedicionesVistas } from './medicionesOffline.js'
 import { borrarPendientes } from './medicionesPendientes.js'
 import { pacienteService } from '../services/pacienteService.js'
+import { limpiarRegistrosDiariosSesion } from '../services/evolucionService.js'
 
 export async function limpiarDatosLocales() {
   await borrarMedicionesVistas()
   borrarPendientes() // RF30: mediciones guardadas sin conexión que aún no se enviaron
   pacienteService.limpiarDeclaracionLocal() // ficha de salud declarada (dato sensible)
+  limpiarRegistrosDiariosSesion() // registros de estrés/sueño de la sesión activa
   if (typeof caches !== 'undefined') {
     try { await caches.delete('lecciones') } catch { /* sin acceso a la caché */ }
   }

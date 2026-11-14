@@ -56,7 +56,7 @@
       </div>
     </div>
 
-    <!-- Tarjeta de Banda de Rango Esperado activa (siempre visible como referencia fisiológica) -->
+    <!-- Tarjeta de Banda de Rango Esperado activa -->
     <div class="banda-info-bar" data-testid="resumen-rango-esperado">
       <div class="banda-info-item">
         <span class="banda-dot banda-dot--rango"></span>
@@ -105,7 +105,7 @@
       </button>
     </div>
 
-    <!-- Contenido principal cuando la consulta finalizó -->
+    <!-- Contenido principal -->
     <template v-else>
       <!-- Caso con menos de 2 días de datos: mensaje claro sin inventar valores -->
       <div
@@ -130,7 +130,6 @@
           <strong>{{ serie.rangoEsperado.bpmMin }} a {{ serie.rangoEsperado.bpmMax }} BPM</strong>.
         </p>
 
-        <!-- Si existe exactamente 1 día registrado, mostramos su dato real sin trazar curva inventada -->
         <div v-if="serie.totalDias === 1" class="unico-dia-card" data-testid="registro-unico-dia">
           <div class="unico-dia-item">
             <span class="unico-dia-label">Único día registrado</span>
@@ -160,7 +159,6 @@
 
       <!-- Caso con 2 o más días de datos: gráfico de tendencia por días + banda del rango esperado -->
       <div v-else class="evolucion-contenido-completo">
-        <!-- Tarjetas de resumen del período -->
         <div class="kpi-evolucion-grid">
           <div class="kpi-evolucion-card">
             <span class="kpi-evolucion-label">Promedio de BPM en el período</span>
@@ -240,7 +238,6 @@
               role="img"
               aria-label="Gráfico de tendencia diaria de BPM comparado con la banda del rango esperado por edad y actividad"
             >
-              <!-- Líneas de grilla horizontal y etiquetas del eje Y -->
               <g class="grilla-y">
                 <g v-for="tick in geometria.ticksY" :key="tick.valor">
                   <line
@@ -261,7 +258,6 @@
                 </g>
               </g>
 
-              <!-- Banda sombreada del rango esperado según edad y actividad -->
               <rect
                 :x="geometria.bandaRango.x"
                 :y="geometria.bandaRango.yTop"
@@ -271,7 +267,6 @@
                 data-testid="banda-rango-esperado"
               />
 
-              <!-- Límites superior e inferior del rango esperado -->
               <line
                 :x1="geometria.bandaRango.x"
                 :x2="geometria.bandaRango.x + geometria.bandaRango.width"
@@ -304,14 +299,12 @@
                 Mín. esperado: {{ geometria.bandaRango.bpmMin }} BPM
               </text>
 
-              <!-- Línea de tendencia de BPM promedio por día -->
               <path
                 :d="geometria.lineaPath"
                 class="linea-tendencia-bpm"
                 data-testid="linea-tendencia-bpm"
               />
 
-              <!-- Puntos diarios y etiquetas -->
               <g
                 v-for="punto in geometria.puntos"
                 :key="punto.dia"
@@ -396,23 +389,32 @@
           </div>
         </div>
       </div>
+
+      <!-- Sección de Correlación con Estrés o Sueño Registrados -->
+      <CorrelacionEstresSuenoPanel
+        :correlacion="serie.correlacion"
+        :dias-evolucion="serie.dias"
+        @actualizar-factor-dia="manejarActualizarFactorDia"
+      />
     </template>
   </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { obtenerEvolucionPersonal } from '../services/evolucionService.js'
+import CorrelacionEstresSuenoPanel from './CorrelacionEstresSuenoPanel.vue'
+import {
+  obtenerEvolucionPersonal,
+  guardarRegistroDiarioSesion,
+  leerRegistrosDiariosSesion
+} from '../services/evolucionService.js'
 import {
   construirSerieEvolucion,
   calcularGeometriaGraficoEvolucion
 } from '../utils/evolucionPersonal.js'
+import { analizarCorrelacionBpmEstresSueno } from '../utils/correlacionEstresSueno.js'
 
 const props = defineProps({
-  /**
-   * Permite inyectar datos directamente (por ejemplo, en pruebas o desde una vista contenedora),
-   * manteniendo exactamente las mismas reglas de filtrado por usuarioId y no invención de datos.
-   */
   datosIniciales: {
     type: Object,
     default: null
@@ -432,15 +434,20 @@ const actividadesDisponibles = ref([
   { id: 5, codigo: 'recuperacion', nombre: 'Recuperación post-ejercicio' }
 ])
 
-const serie = ref(
-  construirSerieEvolucion({
+const serie = ref({
+  ...construirSerieEvolucion({
     mediciones: [],
     usuarioId: '',
     edad: 30,
     actividadId: 1,
     actividadCodigo: 'reposo'
+  }),
+  correlacion: analizarCorrelacionBpmEstresSueno({
+    diasEvolucion: [],
+    mediciones: [],
+    usuarioId: ''
   })
-)
+})
 
 const geometria = computed(() =>
   calcularGeometriaGraficoEvolucion({
@@ -490,7 +497,7 @@ function aplicarDatosIniciales(datos) {
     actividadesDisponibles.value.find((a) => a.codigo === actividadSeleccionadaCodigo.value) ||
     actividadesDisponibles.value[0]
 
-  serie.value = construirSerieEvolucion({
+  const base = construirSerieEvolucion({
     mediciones: datos.mediciones || [],
     filasVista: datos.filasVista || [],
     usuarioId: datos.usuarioId || '',
@@ -500,6 +507,30 @@ function aplicarDatosIniciales(datos) {
     rangosGlobales: datos.rangosGlobales || [],
     rangosPersonales: datos.rangosPersonales || []
   })
+
+  const correlacion = analizarCorrelacionBpmEstresSueno({
+    diasEvolucion: base.dias,
+    mediciones: datos.mediciones || [],
+    declaracionesPorId: datos.declaracionesPorId || {},
+    registrosDiariosSesion: datos.registrosDiariosSesion || leerRegistrosDiariosSesion(datos.usuarioId || ''),
+    usuarioId: datos.usuarioId || ''
+  })
+
+  serie.value = {
+    ...base,
+    correlacion
+  }
+}
+
+function manejarActualizarFactorDia({ dia, nivelEstres, suenoHoras, horasSuenoOpcional }) {
+  const uid = serie.value.usuarioId
+  if (!uid || !dia) return
+  guardarRegistroDiarioSesion(uid, dia, {
+    nivelEstres,
+    suenoHoras,
+    horasSuenoOpcional
+  })
+  recargarDatos()
 }
 
 watch(
