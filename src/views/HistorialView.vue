@@ -36,8 +36,22 @@
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
-        Registro de Alertas Clínicas (RF21)
+        Registro de Alertas Clínicas
         <span class="tab-counter tab-counter-alertas" v-if="alertasItems.length > 0">{{ alertasItems.length }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'evolucion' }"
+        data-testid="tab-evolucion-personal"
+        @click="pestanaActiva = 'evolucion'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M3 3v18h18"></path>
+          <path d="M7 14l4-4 4 3 5-6"></path>
+        </svg>
+        Evolución Personal
       </button>
     </div>
 
@@ -284,12 +298,18 @@
           </li>
         </ul>
       </section>
+
+      <!-- PESTAÑA 3: PANEL DE EVOLUCIÓN PERSONAL -->
+      <section v-if="pestanaActiva === 'evolucion'" aria-label="Panel de evolución personal">
+        <PanelEvolucionPersonal />
+      </section>
     </template>
   </div>
 </template>
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import PanelEvolucionPersonal from '../components/PanelEvolucionPersonal.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
 import EstadoConexionBadge from '../components/EstadoConexionBadge.vue'
