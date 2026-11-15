@@ -19,7 +19,7 @@ export const CATEGORIAS = {
 
 export const TIPOS_BLOQUE = ['texto', 'lista', 'pasos', 'formula', 'dato', 'tabla', 'aviso', 'esquema', 'spo2_medida']
 
-export const ESQUEMAS = ['corazon', 'cadena_sensor', 'esp32_flujo', 'razon_r']
+export const ESQUEMAS = ['corazon', 'cadena_sensor', 'esp32_flujo', 'razon_r', 'ppg_muestreo', 'ppg_filtrado']
 
 export const AVISO_EDUCATIVO =
   'Contenido educativo. Esta plataforma no sustituye el diagnóstico ni la opinión de un profesional de la salud.'
@@ -401,6 +401,98 @@ export const LECCIONES = [
           { id: 'a', texto: 'Para reemplazar una consulta médica' },
           { id: 'b', texto: 'Para emitir diagnósticos' },
           { id: 'c', texto: 'Para aprender a interpretar señales' }
+        ]
+      }
+    ]
+  },
+  {
+    slug: 'ppg-y-muestreo',
+    titulo: 'De la luz a la señal PPG',
+    categoria: 'sensor',
+    resumen: 'Descubre cómo un sensor óptico obtiene una señal de pulso y qué significa tomar muestras a intervalos regulares.',
+    minutos: 5,
+    bloques: [
+      { tipo: 'texto', texto: 'La fotopletismografía (PPG) usa luz para observar cambios en el volumen de sangre del tejido. En el MAX30102, los LED iluminan el dedo y un fotodetector registra cuánta luz regresa al sensor. Esa intensidad cambia a lo largo del pulso.' },
+      { tipo: 'esquema', nombre: 'cadena_sensor', alt: 'Los LED iluminan el tejido y el fotodetector recibe parte de la luz que regresa.' },
+      { tipo: 'texto', texto: 'Cada lectura del fotodetector es una muestra. La frecuencia de muestreo indica cuántas muestras se toman por segundo. Al colocar las muestras en orden temporal, podemos observar cómo cambia la señal.' },
+      { tipo: 'formula', titulo: 'Tiempo entre muestras', formula: 'Δt (ms) = 1000 ÷ frecuencia de muestreo (Hz)', nota: 'En este ejemplo, a 50 Hz se toma una muestra cada 20 ms.' },
+      { tipo: 'esquema', nombre: 'ppg_muestreo', alt: 'Muestras de una señal simulada a 50 Hz. Los puntos están separados por 20 ms.' },
+      { tipo: 'dato', titulo: 'Muestreo y pulso', texto: 'Los 50 Hz del ejemplo cuentan muestras del sensor por segundo. Para estimar los latidos por minuto, primero hay que analizar cómo cambia la señal a lo largo del tiempo.' }
+    ],
+    reto: [
+      {
+        id: 'ppg-y-muestreo-luz',
+        enunciado: '¿Qué registra el fotodetector del MAX30102?',
+        opciones: [
+          { id: 'a', texto: 'La intensidad de luz que regresa al sensor' },
+          { id: 'b', texto: 'La actividad eléctrica del corazón' },
+          { id: 'c', texto: 'La temperatura del dedo' }
+        ]
+      },
+      {
+        id: 'ppg-y-muestreo-hz',
+        enunciado: '¿Qué significa muestrear a 50 Hz?',
+        opciones: [
+          { id: 'a', texto: 'Medir 50 latidos por minuto' },
+          { id: 'b', texto: 'Tomar 50 muestras por segundo' },
+          { id: 'c', texto: 'Tomar una muestra cada 50 segundos' }
+        ]
+      },
+      {
+        id: 'ppg-y-muestreo-intervalo',
+        enunciado: '¿Cuánto tiempo pasa entre muestras a 50 Hz?',
+        opciones: [
+          { id: 'a', texto: '2 ms' },
+          { id: 'b', texto: '50 ms' },
+          { id: 'c', texto: '20 ms' }
+        ]
+      }
+    ]
+  },
+  {
+    slug: 'filtrado-y-picos-ppg',
+    titulo: 'De la señal PPG al pulso',
+    categoria: 'bpm',
+    resumen: 'Compara una señal con ruido y una señal filtrada, identifica artefactos de movimiento y estima los BPM con los picos.',
+    minutos: 6,
+    bloques: [
+      { tipo: 'texto', texto: 'Al mover el dedo, puede cambiar el contacto con el sensor y variar la cantidad de luz que recibe el fotodetector. Esa alteración se llama artefacto de movimiento y puede parecer un pico de pulso.' },
+      { tipo: 'esquema', nombre: 'ppg_filtrado', alt: 'Ejemplo simulado. La señal original muestra un salto por movimiento. La señal filtrada ilustra dos picos separados por 0,8 segundos.' },
+      { tipo: 'pasos', titulo: 'De las muestras a los BPM', items: [
+        'Revisa la señal original y localiza los tramos afectados por movimiento.',
+        'Aplica un filtro para reducir variaciones rápidas y facilitar la identificación de los pulsos.',
+        'Identifica los máximos locales de un tramo estable. Usa una separación mínima entre candidatos para evitar contar dos veces el mismo pulso.',
+        'Mide el tiempo entre picos consecutivos y calcula los BPM. Si tienes varios intervalos fiables, usa su promedio.'
+      ] },
+      { tipo: 'formula', titulo: 'De la separación entre picos a los BPM', formula: 'BPM = 60 ÷ intervalo entre picos (s)', nota: 'Si dos picos consecutivos están separados por 0,8 segundos, 60 ÷ 0,8 = 75 BPM.' },
+      { tipo: 'aviso', titulo: 'Calidad de la señal', texto: 'Un filtro ayuda a reducir el ruido. Ante un movimiento fuerte, usa un tramo más estable o repite la medición. Los ejemplos son educativos y no permiten hacer diagnósticos.' }
+    ],
+    reto: [
+      {
+        id: 'filtrado-y-picos-ppg-movimiento',
+        enunciado: '¿Qué puede causar un falso pico en la señal PPG?',
+        opciones: [
+          { id: 'a', texto: 'Cambiar la unidad de tiempo' },
+          { id: 'b', texto: 'Mover el dedo y alterar el contacto con el sensor' },
+          { id: 'c', texto: 'Mostrar la señal en otra pantalla' }
+        ]
+      },
+      {
+        id: 'filtrado-y-picos-ppg-filtro',
+        enunciado: '¿Para qué se usa el filtro del ejemplo?',
+        opciones: [
+          { id: 'a', texto: 'Para reducir el ruido y facilitar la detección de picos' },
+          { id: 'b', texto: 'Para duplicar la frecuencia de muestreo' },
+          { id: 'c', texto: 'Para recuperar cualquier tramo dañado por movimiento' }
+        ]
+      },
+      {
+        id: 'filtrado-y-picos-ppg-bpm',
+        enunciado: '¿A cuántos BPM equivale un intervalo de 0,8 s entre picos?',
+        opciones: [
+          { id: 'a', texto: '48 BPM' },
+          { id: 'b', texto: '80 BPM' },
+          { id: 'c', texto: '75 BPM' }
         ]
       }
     ]

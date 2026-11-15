@@ -57,6 +57,32 @@
       <rect class="barra-rojo" x="130" y="132" width="160" height="16" rx="3" />
       <text class="nota" x="294" y="145">roja: más</text>
     </svg>
+    <svg v-else-if="nombre === 'ppg_muestreo'" viewBox="0 0 420 180" role="img" :aria-label="alt">
+      <text class="rotulo" x="40" y="18">Intensidad relativa</text>
+      <path class="guia eje-ppg" d="M40 30 V130 H380" />
+      <polyline class="trazo-ppg" points="60,111 110,101 160,79 210,51 260,63 310,87 360,101" />
+      <g v-for="([x, y], i) in [[60, 111], [110, 101], [160, 79], [210, 51], [260, 63], [310, 87], [360, 101]]" :key="x">
+        <circle class="muestra-ppg" :cx="x" :cy="y" r="4" />
+        <text class="nota" :x="x" y="146" text-anchor="middle">{{ i * 20 }}</text>
+      </g>
+      <text class="nota" x="210" y="167" text-anchor="middle">Tiempo (ms)</text>
+    </svg>
+
+    <svg v-else-if="nombre === 'ppg_filtrado'" viewBox="0 0 420 265" role="img" :aria-label="alt">
+      <text class="rotulo" x="35" y="20">Señal original</text>
+      <path class="guia eje-ppg" d="M35 30 V110 H390" />
+      <polyline class="trazo-ppg trazo-original" points="40,97 60,88 72,91 90,57 100,51 115,74 130,70 145,95 164,88 186,36 193,99 210,90 225,94 250,61 260,51 273,74 290,69 308,91 330,97 355,91 380,98" />
+      <text class="nota" x="198" y="35">Movimiento</text>
+
+      <text class="rotulo" x="35" y="137">Señal filtrada</text>
+      <path class="guia eje-ppg" d="M35 146 V224 H390" />
+      <polyline class="trazo-ppg" points="40,211 60,205 82,185 100,162 120,185 145,200 170,208 200,211 220,205 242,185 260,162 280,185 305,200 330,208 355,210 380,211" />
+      <circle class="muestra-ppg" cx="100" cy="162" r="4" />
+      <circle class="muestra-ppg" cx="260" cy="162" r="4" />
+      <path class="guia eje-ppg" d="M100 169 V183 H260 V169" />
+      <text class="nota" x="180" y="199" text-anchor="middle">0,8 s entre picos</text>
+      <text class="nota" x="210" y="248" text-anchor="middle">Tiempo</text>
+    </svg>
     <figcaption class="pie">{{ alt }}</figcaption>
   </figure>
 </template>
@@ -91,4 +117,8 @@ svg { width: 100%; max-width: 560px; height: auto; }
 .barra-ir { fill: #7c3aed; }
 .barra-rojo { fill: #ef4444; }
 .pie { font-size: 0.8rem; color: var(--color-muted); margin-top: 0.35rem; }
+.eje-ppg { fill: none; }
+.trazo-ppg { fill: none; stroke: var(--color-primary); stroke-width: 2.5; stroke-linejoin: round; }
+.trazo-original { stroke: var(--color-text); }
+.muestra-ppg { fill: var(--color-primary); }
 </style>
