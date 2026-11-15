@@ -102,6 +102,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'dato', titulo: 'Variabilidad de la frecuencia (HRV)', texto: 'Aunque el promedio sea 70 BPM, el tiempo entre un latido y el siguiente cambia unos milisegundos. Esa variación se llama variabilidad de la frecuencia cardíaca. La plataforma la calcula con el índice RMSSD y la usa para decir si el ritmo es regular o irregular.' },
       { tipo: 'aviso', texto: 'Mide siempre en reposo, sentado y tranquilo durante uno o dos minutos, para poder comparar un día con otro.' }
+    ],
+    reto: [
+      {
+        id: 'frecuencia-cardiaca-bpm',
+        enunciado: '¿Qué significa BPM?',
+        opciones: [
+          { id: 'a', texto: 'Latidos por minuto' },
+          { id: 'b', texto: 'Latidos por segundo' },
+          { id: 'c', texto: 'Milisegundos por latido' }
+        ]
+      },
+      {
+        id: 'frecuencia-cardiaca-ejercicio',
+        enunciado: '¿Qué suele ocurrir con la frecuencia cardíaca durante el ejercicio?',
+        opciones: [
+          { id: 'a', texto: 'Siempre baja' },
+          { id: 'b', texto: 'Suele subir' },
+          { id: 'c', texto: 'Se mantiene fija' }
+        ]
+      },
+      {
+        id: 'frecuencia-cardiaca-hrv',
+        enunciado: '¿Qué describe la variabilidad de la frecuencia cardíaca?',
+        opciones: [
+          { id: 'a', texto: 'El color de la sangre' },
+          { id: 'b', texto: 'La saturación de oxígeno' },
+          { id: 'c', texto: 'La variación del tiempo entre latidos' }
+        ]
+      }
     ]
   },
   {
@@ -124,6 +153,35 @@ export const LECCIONES = [
       { tipo: 'dato', titulo: 'Los nanómetros no son BPM', texto: 'Los nanómetros (nm) son la longitud de onda de la luz de cada LED. Lo que el sensor entrega es intensidad: un número por cada muestra. Los BPM se calculan después, a partir de cómo sube y baja esa intensidad.' },
       { tipo: 'texto', texto: 'Con cada latido llega más sangre a los vasos del dedo. La sangre absorbe luz, así que vuelve menos luz al fotodetector. Entre latidos pasa lo contrario. Esa subida y bajada es la señal de pulso.' },
       { tipo: 'aviso', texto: 'Para una buena señal: dedo quieto, presión suave, manos tibias y sin esmalte oscuro en la uña.' }
+    ],
+    reto: [
+      {
+        id: 'sensor-max30102-luz',
+        enunciado: '¿Qué luces usa el MAX30102?',
+        opciones: [
+          { id: 'a', texto: 'Ultravioleta y verde' },
+          { id: 'b', texto: 'Roja e infrarroja' },
+          { id: 'c', texto: 'Azul y amarilla' }
+        ]
+      },
+      {
+        id: 'sensor-max30102-detector',
+        enunciado: '¿Qué mide el fotodetector?',
+        opciones: [
+          { id: 'a', texto: 'El voltaje de la batería' },
+          { id: 'b', texto: 'La temperatura del ESP32' },
+          { id: 'c', texto: 'La intensidad de luz que recibe' }
+        ]
+      },
+      {
+        id: 'sensor-max30102-nm',
+        enunciado: '¿Qué indican los nanómetros de los LED?',
+        opciones: [
+          { id: 'a', texto: 'La longitud de onda' },
+          { id: 'b', texto: 'Los latidos por minuto' },
+          { id: 'c', texto: 'El número de muestras' }
+        ]
+      }
     ]
   },
   {
@@ -144,6 +202,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'dato', titulo: 'Hasta 5 canales', texto: 'Cada ESP32 puede enviar hasta cinco canales a la vez. Así se pueden medir a varias personas al mismo tiempo, cada una con su sensor.' },
       { tipo: 'dato', titulo: 'Sin sensor también se puede', texto: 'El firmware tiene un modo de datos de prueba que genera una señal parecida a la real. Además, el simulador de señal de esta sección permite probar sin ESP32.' }
+    ],
+    reto: [
+      {
+        id: 'esp32-lectura',
+        enunciado: '¿Qué componente lee las muestras del MAX30102?',
+        opciones: [
+          { id: 'a', texto: 'El navegador' },
+          { id: 'b', texto: 'El ESP32' },
+          { id: 'c', texto: 'El usuario' }
+        ]
+      },
+      {
+        id: 'esp32-red',
+        enunciado: '¿Cómo puede enviar las muestras el ESP32 a la plataforma?',
+        opciones: [
+          { id: 'a', texto: 'Por WiFi' },
+          { id: 'b', texto: 'Por luz infrarroja' },
+          { id: 'c', texto: 'Por sonido' }
+        ]
+      },
+      {
+        id: 'esp32-canales',
+        enunciado: '¿Cuántos canales simultáneos se describen en la lección?',
+        opciones: [
+          { id: 'a', texto: 'Dos' },
+          { id: 'b', texto: 'Tres' },
+          { id: 'c', texto: 'Hasta cinco' }
+        ]
+      }
     ]
   },
   {
@@ -169,6 +256,35 @@ export const LECCIONES = [
         'Calidad de la señal: buena, regular o mala, con la causa (movimiento, poca luz, saturación, ruido).'
       ] },
       { tipo: 'aviso', texto: 'Si la calidad es mala la medición no se guarda como válida: es mejor repetirla que guardar un dato dudoso.' }
+    ],
+    reto: [
+      {
+        id: 'como-se-obtienen-los-resultados-intervalo',
+        enunciado: '¿Qué se mide entre dos picos seguidos?',
+        opciones: [
+          { id: 'a', texto: 'La longitud de onda' },
+          { id: 'b', texto: 'El intervalo de tiempo' },
+          { id: 'c', texto: 'La temperatura' }
+        ]
+      },
+      {
+        id: 'como-se-obtienen-los-resultados-calculo',
+        enunciado: '¿A cuántos BPM equivalen picos separados por 800 ms?',
+        opciones: [
+          { id: 'a', texto: '75 BPM' },
+          { id: 'b', texto: '80 BPM' },
+          { id: 'c', texto: '60 BPM' }
+        ]
+      },
+      {
+        id: 'como-se-obtienen-los-resultados-senal',
+        enunciado: '¿Qué representa la señal PPG capturada aquí?',
+        opciones: [
+          { id: 'a', texto: 'La actividad eléctrica del corazón' },
+          { id: 'b', texto: 'La temperatura corporal' },
+          { id: 'c', texto: 'Variaciones de intensidad luminosa asociadas al pulso' }
+        ]
+      }
     ]
   },
   {
@@ -203,6 +319,35 @@ export const LECCIONES = [
         'Monóxido de carbono: el sensor lo confunde con oxígeno y puede mostrar un valor falsamente alto.'
       ] },
       { tipo: 'aviso', texto: 'Un valor bajo no es un diagnóstico. Repite la medición con el dedo quieto y, si sigue bajo o tienes síntomas (falta de aire, mareo, labios azulados), consulta a un profesional de la salud.' }
+    ],
+    reto: [
+      {
+        id: 'saturacion-de-oxigeno-significado',
+        enunciado: '¿Qué estima la SpO₂?',
+        opciones: [
+          { id: 'a', texto: 'La frecuencia cardíaca' },
+          { id: 'b', texto: 'El porcentaje de hemoglobina saturada de oxígeno' },
+          { id: 'c', texto: 'El volumen de sangre del cuerpo' }
+        ]
+      },
+      {
+        id: 'saturacion-de-oxigeno-luces',
+        enunciado: '¿Qué señales de luz se comparan para estimarla?',
+        opciones: [
+          { id: 'a', texto: 'Roja e infrarroja' },
+          { id: 'b', texto: 'Verde y ultravioleta' },
+          { id: 'c', texto: 'Solo infrarroja' }
+        ]
+      },
+      {
+        id: 'saturacion-de-oxigeno-curva',
+        enunciado: '¿Cómo describe la lección la curva usada por la plataforma?',
+        opciones: [
+          { id: 'a', texto: 'Como una calibración clínica universal' },
+          { id: 'b', texto: 'Como una medición directa de oxígeno' },
+          { id: 'c', texto: 'Como una aproximación empírica' }
+        ]
+      }
     ]
   },
   {
@@ -229,6 +374,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'texto', texto: 'Los resultados se comparan con rangos según la actividad y la edad. Así, 110 BPM puede ser esperable después de caminar rápido, pero llamar la atención en reposo.' },
       { tipo: 'aviso', texto: AVISO_EDUCATIVO }
+    ],
+    reto: [
+      {
+        id: 'datos-de-salud-privacidad',
+        enunciado: '¿Cómo debes tratar los datos de salud identificables?',
+        opciones: [
+          { id: 'a', texto: 'Como datos sensibles' },
+          { id: 'b', texto: 'Como datos anónimos' },
+          { id: 'c', texto: 'Como datos públicos' }
+        ]
+      },
+      {
+        id: 'datos-de-salud-consentimiento',
+        enunciado: '¿Qué debes obtener antes de compartir mediciones identificables de otra persona?',
+        opciones: [
+          { id: 'a', texto: 'Su frecuencia en reposo' },
+          { id: 'b', texto: 'Su consentimiento' },
+          { id: 'c', texto: 'Su promedio de SpO₂' }
+        ]
+      },
+      {
+        id: 'datos-de-salud-educativo',
+        enunciado: '¿Para qué puedes usar los resultados de esta plataforma?',
+        opciones: [
+          { id: 'a', texto: 'Para reemplazar una consulta médica' },
+          { id: 'b', texto: 'Para emitir diagnósticos' },
+          { id: 'c', texto: 'Para aprender a interpretar señales' }
+        ]
+      }
     ]
   }
 ]

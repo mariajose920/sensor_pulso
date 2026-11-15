@@ -9,6 +9,19 @@
       <p class="aviso-educativo">{{ AVISO_EDUCATIVO }}</p>
     </div>
 
+    <section v-if="currentUserId" class="card">
+      <h2 class="seccion">Mi progreso e insignias</h2>
+      <p v-if="errorProgreso" role="alert">{{ errorProgreso }}</p>
+      <p v-else-if="cargandoProgreso" role="status">Cargando progreso…</p>
+      <template v-else>
+        <p>{{ totalCompletadas }} de {{ LECCIONES.length }} lecciones completadas.</p>
+        <ul v-if="insignias.length">
+          <li v-for="insignia in insignias" :key="insignia.codigo">{{ insignia.nombre }}</li>
+        </ul>
+        <p v-else>Entrega un reto para obtener tu primera insignia.</p>
+      </template>
+    </section>
+
     <h2 class="seccion">Lecciones</h2>
     <div class="lecciones-grid" data-testid="lista-lecciones">
       <router-link
@@ -22,6 +35,9 @@
         <h3 class="leccion-titulo">{{ l.titulo }}</h3>
         <p class="leccion-resumen">{{ l.resumen }}</p>
         <span class="leccion-meta">{{ l.minutos }} min de lectura</span>
+        <p v-if="progreso[l.slug]?.completada" class="leccion-meta">
+          Completada · Mejor puntaje {{ progreso[l.slug].mejor_puntaje ?? '—' }} %
+        </p>
       </router-link>
     </div>
 
@@ -52,13 +68,55 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
+import { useAuth } from '../composables/useAuth.js'
+import { supabase } from '../services/supabase.js'
 import { AVISO_EDUCATIVO, CATEGORIAS, LECCIONES as LECCIONES_BASE } from '../data/lecciones.js'
 import { obtenerLeccionesPlataforma } from '../services/panelAdminService'
 
 // RF46: las lecciones precargadas más los cambios que aprobó el administrador
 const LECCIONES = ref(LECCIONES_BASE)
 onMounted(async () => { LECCIONES.value = await obtenerLeccionesPlataforma() })
+
+const { currentUserId } = useAuth()
+const progreso = ref({})
+const insignias = ref([])
+const cargandoProgreso = ref(false)
+const errorProgreso = ref('')
+const totalCompletadas = computed(() => LECCIONES.value.filter(l => progreso.value[l.slug]?.completada).length)
+
+watch(currentUserId, async (usuarioId, _, onCleanup) => {
+  progreso.value = {}
+  insignias.value = []
+  errorProgreso.value = ''
+  cargandoProgreso.value = Boolean(usuarioId)
+  if (!usuarioId) return
+
+  let vigente = true
+  onCleanup(() => { vigente = false })
+
+  try {
+    const [registro, premios] = await Promise.all([
+      supabase.from('progreso_lecciones')
+        .select('completada, mejor_puntaje, lecciones!inner(slug)')
+        .eq('usuario_id', usuarioId),
+      supabase.from('insignias_usuario')
+        .select('insignias!inner(codigo, nombre)')
+        .eq('usuario_id', usuarioId)
+        .like('insignias.codigo', 'rf42-%')
+        .order('obtenida_en', { ascending: false })
+    ])
+    if (!vigente) return
+    if (registro.error || premios.error) throw registro.error || premios.error
+
+    progreso.value = Object.fromEntries(registro.data.map(fila => [fila.lecciones.slug, fila]))
+    insignias.value = premios.data.map(fila => fila.insignias)
+  } catch {
+    if (vigente) errorProgreso.value = 'No se pudo cargar tu progreso. Recarga para reintentar.'
+  } finally {
+    if (vigente) cargandoProgreso.value = false
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
