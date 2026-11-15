@@ -134,7 +134,19 @@
         </div>
       </div>
     </div>
-
+    <div v-if="datosAvance" class="card">
+      <label for="rf43-curso">Ver avance de</label>
+      <select id="rf43-curso" v-model="cursoSeleccionadoId" class="form-select">
+        <option value="">Toda el aula</option>
+        <option v-for="curso in cursos" :key="curso.id" :value="curso.id">
+          {{ curso.nombre }}
+        </option>
+      </select>
+      <p>
+        {{ totalFinalizadosFiltro }} de {{ listaEstudiantes.length }} asignados entregaron.
+        {{ totalPendientes }} pendientes.
+      </p>
+    </div>
     <!-- Filtros de lista de estudiantes -->
     <div class="live-toolbar">
       <div class="filter-pills">
@@ -308,6 +320,10 @@ const props = defineProps({
   esProfesorOAdmin: {
     type: Boolean,
     default: true
+  },
+  cursos: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -319,6 +335,7 @@ const controlando = ref(false)
 const conectadoRealtime = ref(false)
 const ultimoEventoEn = ref(new Date())
 const filtroEstado = ref('todos')
+const cursoSeleccionadoId = ref('')
 const busqueda = ref('')
 const feedEventos = ref([])
 
@@ -379,9 +396,21 @@ const textoTiempoRestante = computed(() => {
   return 'Ventana de fechas'
 })
 
+const cursoSeleccionado = computed(() =>
+  props.cursos.find(curso => curso.id === cursoSeleccionadoId.value)
+)
+
 const listaEstudiantes = computed(() => {
-  return Array.isArray(datosAvance.value?.estudiantes) ? datosAvance.value.estudiantes : []
+  const estudiantes = datosAvance.value?.estudiantes || []
+  if (!cursoSeleccionado.value) return estudiantes
+
+  const integrantes = new Set(cursoSeleccionado.value.estudiantes_ids || [])
+  return estudiantes.filter(estudiante => integrantes.has(estudiante.usuario_id))
 })
+
+const totalPendientes = computed(() =>
+  listaEstudiantes.value.filter(estudiante => estudiante.estado !== 'finalizado').length
+)
 
 const totalConectadosFiltro = computed(() => {
   return listaEstudiantes.value.filter(e => e.conectado).length

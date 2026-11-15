@@ -493,6 +493,7 @@
           <PanelAvanceEnVivo
             v-if="mostrarPanelEnVivo || evaluacionSeleccionada?.modo === 'en_vivo'"
             :evaluacion-id="evaluacionSeleccionada.id"
+            :cursos="cursos"
             :aula-id="aula.id"
             :es-profesor-o-admin="isAdmin || isProfesor"
             :permite-cerrar="evaluacionSeleccionada?.modo !== 'en_vivo'"
@@ -571,7 +572,7 @@
               <div class="spinner"></div>
               <p>Cargando resultados de la evaluación...</p>
             </div>
-
+            <p v-else-if="errorDesempeno" class="alert alert-error" role="alert">{{ errorDesempeno }}</p>
             <div v-else-if="intentosEvaluacion.length === 0" class="empty-state">
               <p>Aún no hay intentos registrados por estudiantes activos para esta evaluación.</p>
               <small>Los resultados aparecerán aquí conforme los estudiantes completen sus pruebas.</small>
@@ -1386,6 +1387,7 @@ const mostrarPanelEnVivo = ref(true)
 const intentosEvaluacion = ref([])
 const estadisticasEval = ref(null)
 const cargandoDesempeno = ref(false)
+const errorDesempeno = ref('')
 const intentoVerRespuestas = ref(null)
 const intentoVerMedicion = ref(null)
 
@@ -1404,18 +1406,34 @@ const alActualizarEnVivo = (datos) => {
 
 const seleccionarEvaluacionParaVer = async (ev) => {
   evaluacionSeleccionada.value = ev
+  intentosEvaluacion.value = []
+  estadisticasEval.value = null
+  errorDesempeno.value = ''
   cargandoDesempeno.value = true
+
   try {
     const [resIntentos, resStats] = await Promise.all([
       obtenerIntentosEvaluacionAula(aulaId, ev.id),
       obtenerEstadisticasEvaluacionAula(aulaId, ev.id)
     ])
+
+    if (evaluacionSeleccionada.value?.id !== ev.id) return
+
+    if (!resIntentos.success || !resStats.success) {
+      errorDesempeno.value = resIntentos.error || resStats.error || 'No se pudo cargar el desempeño.'
+      return
+    }
+
     intentosEvaluacion.value = resIntentos.data || []
     estadisticasEval.value = resStats.data || null
-  } catch (err) {
-    console.error('Error cargando desempeño de evaluación:', err)
+  } catch {
+    if (evaluacionSeleccionada.value?.id === ev.id) {
+      errorDesempeno.value = 'No se pudo cargar el desempeño.'
+    }
   } finally {
-    cargandoDesempeno.value = false
+    if (evaluacionSeleccionada.value?.id === ev.id) {
+      cargandoDesempeno.value = false
+    }
   }
 }
 
