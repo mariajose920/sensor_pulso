@@ -48,6 +48,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'dato', titulo: 'Dos circuitos', texto: 'La circulación pulmonar lleva la sangre a los pulmones para cargarla de oxígeno. La circulación sistémica la reparte por el cuerpo. Los dos circuitos trabajan al mismo tiempo en cada latido.' },
       { tipo: 'formula', titulo: 'Gasto cardíaco', formula: 'Gasto cardíaco = frecuencia cardíaca × volumen sistólico', nota: 'En reposo un adulto suele mover alrededor de 5 litros de sangre por minuto.' }
+    ],
+    reto: [
+      {
+        id: 'corazon-circuito',
+        enunciado: '¿Qué circuito lleva la sangre a los pulmones para cargarla de oxígeno?',
+        opciones: [
+          { id: 'a', texto: 'La circulación sistémica' },
+          { id: 'b', texto: 'La circulación pulmonar' },
+          { id: 'c', texto: 'Ambos circuitos hacen el mismo recorrido' }
+        ]
+      },
+      {
+        id: 'corazon-bombeo',
+        enunciado: '¿Qué parte del corazón bombea la sangre hacia el resto del cuerpo?',
+        opciones: [
+          { id: 'a', texto: 'El ventrículo izquierdo' },
+          { id: 'b', texto: 'La aurícula derecha' },
+          { id: 'c', texto: 'El ventrículo derecho' }
+        ]
+      },
+      {
+        id: 'corazon-gasto',
+        enunciado: '¿Cómo se calcula el gasto cardíaco?',
+        opciones: [
+          { id: 'a', texto: 'Volumen sistólico dividido por frecuencia cardíaca' },
+          { id: 'b', texto: 'Frecuencia cardíaca más volumen sistólico' },
+          { id: 'c', texto: 'Frecuencia cardíaca multiplicada por volumen sistólico' }
+        ]
+      }
     ]
   },
   {
