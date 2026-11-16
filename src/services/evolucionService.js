@@ -165,10 +165,11 @@ export async function obtenerEvolucionPersonal({
     ? actividadesResp.data
     : [
         { id: 1, codigo: 'reposo', nombre: 'Reposo' },
-        { id: 2, codigo: 'caminata', nombre: 'Caminata suave' },
-        { id: 3, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado' },
-        { id: 4, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso' },
-        { id: 5, codigo: 'recuperacion', nombre: 'Recuperación post-ejercicio' }
+        { id: 2, codigo: 'sentado', nombre: 'Sentado activo' },
+        { id: 3, codigo: 'caminata', nombre: 'Caminata' },
+        { id: 4, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado' },
+        { id: 5, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso' },
+        { id: 6, codigo: 'post_ejercicio', nombre: 'Recuperación' }
       ]
 
   const actividadSeleccionada =

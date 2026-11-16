@@ -369,7 +369,9 @@
                 <tr v-for="diaItem in serie.dias" :key="diaItem.dia">
                   <td>
                     <strong>{{ diaItem.dia }}</strong>
-                    <span class="subtexto-celda">{{ diaItem.etiquetaDia }}</span>
+                    <span class="subtexto-celda">
+                      {{ diaItem.etiquetaDia }}<template v-if="diaItem.ultimaHoraTexto"> · última {{ diaItem.ultimaHoraTexto }}</template>
+                    </span>
                   </td>
                   <td class="celda-bpm">{{ diaItem.bpmPromedio }} BPM</td>
                   <td>{{ diaItem.spo2Promedio !== null ? `${diaItem.spo2Promedio}%` : '—' }}</td>
@@ -401,7 +403,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import CorrelacionEstresSuenoPanel from './CorrelacionEstresSuenoPanel.vue'
 import {
   obtenerEvolucionPersonal,
@@ -543,8 +545,28 @@ watch(
   { deep: true }
 )
 
+function alVolverFoco() {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+  recargarDatos()
+}
+
 onMounted(() => {
   recargarDatos()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', alVolverFoco)
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', alVolverFoco)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('focus', alVolverFoco)
+  }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', alVolverFoco)
+  }
 })
 </script>
 
