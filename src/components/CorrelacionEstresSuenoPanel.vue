@@ -145,7 +145,7 @@
           <label for="select-dia-factor">Día con medición propia</label>
           <select id="select-dia-factor" v-model="diaSeleccionado" class="input-opcional">
             <option v-for="d in diasConMedicion" :key="d.dia" :value="d.dia">
-              {{ d.dia }} ({{ d.bpmPromedio }} BPM)
+              {{ d.dia }}<template v-if="d.ultimaHoraTexto"> ({{ d.ultimaHoraTexto }})</template> · {{ d.bpmPromedio }} BPM · {{ d.mediciones || 1 }} {{ (d.mediciones || 1) === 1 ? 'medición' : 'mediciones' }}
             </option>
           </select>
         </div>
@@ -205,7 +205,13 @@
           </thead>
           <tbody>
             <tr v-for="fila in datosCorrelacion.diasConsolidados" :key="fila.dia">
-              <td><strong>{{ fila.dia }}</strong></td>
+              <td>
+                <strong>{{ fila.dia }}</strong>
+                <span v-if="fila.ultimaHoraTexto" class="badge-mediciones-dia"> {{ fila.ultimaHoraTexto }}</span>
+                <span v-if="fila.mediciones" class="badge-mediciones-dia">
+                  ({{ fila.mediciones }} {{ fila.mediciones === 1 ? 'medición' : 'mediciones' }})
+                </span>
+              </td>
               <td>{{ fila.bpmPromedio }} BPM</td>
               <td>{{ fila.etiquetaEstres || 'No registrado' }}</td>
               <td>{{ fila.etiquetaSueno || 'No registrado' }}</td>

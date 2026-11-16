@@ -303,6 +303,13 @@ function prepararDeclaracion(datosEntrada, { adicional = false } = {}) {
   }
 
   const fechaNacimiento = datos.fechaNacimiento ? String(datos.fechaNacimiento).trim() : ''
+  const actividadRef =
+    datosEntrada?.actividadId ||
+    datosEntrada?.actividadPrevia ||
+    datos.actividadPrevia ||
+    datos.actividadId ||
+    1
+
   const factoresSalud = {
     nivelEstres: datos.nivelEstres,
     // La fecha de nacimiento va dentro de los factores cifrados (dato personal); la columna `edad` queda en claro para los rangos
@@ -314,8 +321,8 @@ function prepararDeclaracion(datosEntrada, { adicional = false } = {}) {
     medicacionDetalle: detalleMed,
     medicacion: textoMedicacion,
     actividadPrevia: datos.actividadPrevia || 'reposo',
-    actividadId: normalizarActividadId(datos.actividadId || datos.actividadPrevia || 1),
-    actividadNombre: obtenerNombreActividad(datos.actividadId || datos.actividadPrevia || 1),
+    actividadId: normalizarActividadId(actividadRef),
+    actividadNombre: obtenerNombreActividad(actividadRef),
     condicionSalud: datos.condicionSalud || 'Ninguna conocida',
     observaciones: datos.observaciones ? datos.observaciones.trim() : ''
   }

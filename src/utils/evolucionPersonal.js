@@ -26,21 +26,25 @@ const RANGOS_RESPALDO_ACTIVIDAD = [
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 18, edad_max: 35, bpm_min: 60, bpm_max: 100 },
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 36, edad_max: 55, bpm_min: 60, bpm_max: 100 },
   { actividad_id: 1, codigo: 'reposo', nombre: 'Reposo', edad_min: 56, edad_max: 120, bpm_min: 60, bpm_max: 100 },
-  { actividad_id: 2, codigo: 'caminata', nombre: 'Caminata suave', edad_min: 0, edad_max: 35, bpm_min: 90, bpm_max: 120 },
-  { actividad_id: 2, codigo: 'caminata', nombre: 'Caminata suave', edad_min: 36, edad_max: 120, bpm_min: 85, bpm_max: 115 },
-  { actividad_id: 3, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado', edad_min: 0, edad_max: 35, bpm_min: 120, bpm_max: 155 },
-  { actividad_id: 3, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado', edad_min: 36, edad_max: 120, bpm_min: 110, bpm_max: 145 },
-  { actividad_id: 4, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso', edad_min: 0, edad_max: 35, bpm_min: 150, bpm_max: 185 },
-  { actividad_id: 4, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso', edad_min: 36, edad_max: 120, bpm_min: 135, bpm_max: 170 },
-  { actividad_id: 5, codigo: 'recuperacion', nombre: 'Recuperación post-ejercicio', edad_min: 0, edad_max: 120, bpm_min: 80, bpm_max: 120 }
+  { actividad_id: 2, codigo: 'sentado', nombre: 'Sentado activo', edad_min: 0, edad_max: 35, bpm_min: 65, bpm_max: 105 },
+  { actividad_id: 2, codigo: 'sentado', nombre: 'Sentado activo', edad_min: 36, edad_max: 120, bpm_min: 65, bpm_max: 105 },
+  { actividad_id: 3, codigo: 'caminata', nombre: 'Caminata', edad_min: 0, edad_max: 35, bpm_min: 90, bpm_max: 120 },
+  { actividad_id: 3, codigo: 'caminata', nombre: 'Caminata', edad_min: 36, edad_max: 120, bpm_min: 85, bpm_max: 115 },
+  { actividad_id: 4, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado', edad_min: 0, edad_max: 35, bpm_min: 120, bpm_max: 155 },
+  { actividad_id: 4, codigo: 'ejercicio_moderado', nombre: 'Ejercicio moderado', edad_min: 36, edad_max: 120, bpm_min: 110, bpm_max: 145 },
+  { actividad_id: 5, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso', edad_min: 0, edad_max: 35, bpm_min: 150, bpm_max: 185 },
+  { actividad_id: 5, codigo: 'ejercicio_intenso', nombre: 'Ejercicio intenso', edad_min: 36, edad_max: 120, bpm_min: 135, bpm_max: 170 },
+  { actividad_id: 6, codigo: 'post_ejercicio', nombre: 'Recuperación', edad_min: 0, edad_max: 120, bpm_min: 80, bpm_max: 120 }
 ]
 
 const ETIQUETAS_ACTIVIDAD = {
   reposo: 'Reposo',
-  caminata: 'Caminata suave',
+  sentado: 'Sentado activo',
+  caminata: 'Caminata',
   ejercicio_moderado: 'Ejercicio moderado',
   ejercicio_intenso: 'Ejercicio intenso',
-  recuperacion: 'Recuperación post-ejercicio'
+  post_ejercicio: 'Recuperación',
+  recuperacion: 'Recuperación'
 }
 
 function redondear1(valor) {
@@ -70,6 +74,20 @@ export function formatearDiaLocal(fechaEntrada) {
   const dia = partes.find((p) => p.type === 'day')?.value
   if (!anio || !mes || !dia) return null
   return `${anio}-${mes}-${dia}`
+}
+
+export function formatearHoraLocal(fechaEntrada) {
+  if (!fechaEntrada) return null
+  const texto = String(fechaEntrada).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return null
+  const fecha = new Date(texto)
+  if (Number.isNaN(fecha.getTime())) return null
+  return new Intl.DateTimeFormat('es-CL', {
+    timeZone: ZONA_HORARIA_CHILE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(fecha)
 }
 
 export function formatearEtiquetaDia(diaIso) {
@@ -131,27 +149,39 @@ export function resolverRangoEsperado({
     ? rangosGlobales
     : RANGOS_RESPALDO_ACTIVIDAD
 
-  const candidatosGlobales = listaGlobal.filter((r) => {
+  const porCodigo = listaGlobal.filter((r) => {
     const rCodigo = String(r.codigo ?? r.actividad?.codigo ?? '').trim().toLowerCase()
-    const rId = Number(r.actividad_id ?? r.actividad?.id)
-    if (rCodigo && rCodigo === codigoNorm) return true
-    if (Number.isFinite(rId) && rId === idNorm) return true
-    return false
+    return rCodigo && rCodigo === codigoNorm
   })
-
-  const resuelto = resolverRangoEnLista(
-    candidatosGlobales.length > 0 ? candidatosGlobales : RANGOS_RESPALDO_ACTIVIDAD,
-    idNorm,
-    edadAplicada,
-    Array.isArray(rangosPersonales) ? rangosPersonales : []
-  )
+  const candidatosGlobales = porCodigo.length > 0
+    ? porCodigo
+    : listaGlobal.filter((r) => Number(r.actividad_id ?? r.actividad?.id) === idNorm)
 
   const respaldo = RANGOS_RESPALDO_ACTIVIDAD.find(
     (r) =>
-      (r.codigo === codigoNorm || r.actividad_id === idNorm) &&
+      r.codigo === codigoNorm &&
+      edadAplicada >= r.edad_min &&
+      edadAplicada <= r.edad_max
+  ) || RANGOS_RESPALDO_ACTIVIDAD.find(
+    (r) =>
+      r.actividad_id === idNorm &&
       edadAplicada >= r.edad_min &&
       edadAplicada <= r.edad_max
   ) || RANGOS_RESPALDO_ACTIVIDAD[0]
+
+  const idParaResolver = Number(
+    candidatosGlobales[0]?.actividad_id ??
+    candidatosGlobales[0]?.actividad?.id ??
+    respaldo?.actividad_id ??
+    idNorm
+  )
+
+  const resuelto = resolverRangoEnLista(
+    candidatosGlobales.length > 0 ? candidatosGlobales : RANGOS_RESPALDO_ACTIVIDAD,
+    idParaResolver,
+    edadAplicada,
+    Array.isArray(rangosPersonales) ? rangosPersonales : []
+  )
 
   const bpmMin = Number(resuelto?.bpm_min ?? respaldo.bpm_min)
   const bpmMax = Number(resuelto?.bpm_max ?? respaldo.bpm_max)
@@ -262,11 +292,19 @@ export function construirSerieEvolucion({
         conteoBpm: 0,
         sumaSpo2: 0,
         conteoSpo2: 0,
-        edades: []
+        edades: [],
+        ultimaMarcaMs: -1,
+        ultimaMedicionEn: null
       })
     }
 
     const acum = mapaPorDia.get(dia)
+    const marcaCruda = m.inicio ?? m.fechaHora ?? m.creado_en ?? null
+    const marcaMs = marcaCruda ? new Date(marcaCruda).getTime() : NaN
+    if (Number.isFinite(marcaMs) && marcaMs >= acum.ultimaMarcaMs) {
+      acum.ultimaMarcaMs = marcaMs
+      acum.ultimaMedicionEn = marcaCruda
+    }
     acum.sumaBpm += bpm
     acum.conteoBpm += 1
     if (spo2Valido !== null) {
@@ -332,6 +370,8 @@ export function construirSerieEvolucion({
     return {
       dia,
       etiquetaDia: formatearEtiquetaDia(dia),
+      ultimaMedicionEn: item.ultimaMedicionEn || null,
+      ultimaHoraTexto: formatearHoraLocal(item.ultimaMedicionEn),
       bpmPromedio,
       spo2Promedio,
       mediciones: item.conteoBpm,

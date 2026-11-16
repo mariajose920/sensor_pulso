@@ -38,7 +38,10 @@
     "test:rf34": "node scripts/test-rf34-galeria-publica.mjs",
     "test:rf35": "node scripts/test-rf35-compartir-enlace.mjs",
     "test:rf113": "node scripts/test-rf113-panel-en-vivo.js",
-    "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs"
+    "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs",
+    "auditar:dependencias": "npm audit --audit-level=high",
+    "test:rf70": "node scripts/test-rf70-revision-dependencias.mjs",
+    "test:rf72": "node scripts/test-rf72-alertas-seguridad.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
@@ -49,7 +52,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
-    "puppeteer-core": "^23.11.1",
+    "puppeteer-core": "^25.17.0",
     "vite": "^6.0.0",
     "vite-plugin-pwa": "^0.21.2"
   }
