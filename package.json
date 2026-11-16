@@ -40,7 +40,8 @@
     "test:rf113": "node scripts/test-rf113-panel-en-vivo.js",
     "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs",
     "auditar:dependencias": "npm audit --audit-level=high",
-    "test:rf70": "node scripts/test-rf70-revision-dependencias.mjs"
+    "test:rf70": "node scripts/test-rf70-revision-dependencias.mjs",
+    "test:rf72": "node scripts/test-rf72-alertas-seguridad.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",

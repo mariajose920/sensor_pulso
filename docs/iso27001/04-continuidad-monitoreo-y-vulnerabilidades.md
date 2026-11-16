@@ -58,7 +58,13 @@ select ocurrio_en, accion, entidad, actor_id
  order by ocurrio_en desc;
 ```
 
-**Automatización pendiente:** alerta por correo cuando aparezca un registro sospechoso (función programada o Supabase Log Drain). Decisión: **por asignar**.
+**Automatización de alertas de seguridad (RF72 · ISO 27001 A.8.16):**
+Implementado mediante el servicio de alertas de seguridad (`api/_lib/alertasSeguridad.js` y endpoint `api/seguridad/alertas.js`):
+- **Detección automática:** Identifica registros críticos (intentos masivos de inicio de sesión, bloqueo de cuenta, uso de token de ESP32 comprometido o revocado, y disparos de rate limit 429).
+- **Notificación por correo:** Despacha una alerta formal al administrador vía SMTP (`nodemailer` en `api/_lib/correo.js`).
+- **Mecanismo anti-spam (Deduplicación):** Aplica una ventana de enfriamiento (*cooldown*) de 15 minutos por incidente; los eventos repetidos dentro de la ventana se consolidan sin saturar la bandeja de entrada.
+- **Blindaje de privacidad y cero secretos:** El contenido de las alertas suprime automáticamente contraseñas, tokens JWT, hashes, claves de API y cualquier dato clínico de salud (BPM, SpO₂).
+- **Decisión humana pendiente:** La dirección receptora se parametriza mediante `ADMIN_ALERT_EMAIL` o `GMAIL_USER` (por defecto `seguridad-alertas@unach.cl`), a la espera de la designación formal del buzón institucional del oficial de seguridad.
 
 ## 4. Vulnerabilidades y dependencias (A.8.8)
 
