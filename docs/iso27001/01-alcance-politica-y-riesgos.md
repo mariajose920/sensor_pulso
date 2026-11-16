@@ -54,7 +54,7 @@ Riesgo = **probabilidad** (1 baja a 3 alta) × **impacto** (1 bajo a 3 alto). Se
 |---|---|---|---|---|---|---|
 | R1 | Acceso de una persona a datos de otra | 2 | 3 | 6 | RLS en las 49 tablas; rutas por rol; endpoints que exigen sesión y titularidad | Prueba periódica de RLS con cuentas de cada rol |
 | R2 | Filtración de la clave de cifrado de salud | 1 | 3 | 3 | Sin clave en el código ni en el navegador; falla cerrado si falta | Rotar con `CLAVE_VERSION_ACTIVA`; custodia de la clave por dos personas |
-| R3 | Cuenta de administrador comprometida | 2 | 3 | 6 | Bloqueo por intentos, política de contraseñas, correo institucional | **Exigir MFA a administradores**; revisar `perfiles.mfa_requerido` |
+| R3 | Cuenta de administrador comprometida | 2 | 3 | 6 | Bloqueo por intentos, política de contraseñas, correo institucional, MFA obligatorio en Supabase y Vercel | Implementado en RNF13 (ver `docs/RNF13-mfa-supabase-vercel.md`); revisión trimestral de cuentas y `perfiles.mfa_requerido` |
 | R4 | Pérdida de datos (borrado, error, caída de Supabase) | 2 | 3 | 6 | Respaldos del proveedor | **Probar una restauración**; ver `04-continuidad-monitoreo-y-vulnerabilidades.md` |
 | R5 | Brecha sin detectar | 2 | 3 | 6 | Auditoría inmutable | **Alertas** sobre la auditoría (ver documento 04) |
 | R6 | Dependencia con vulnerabilidad conocida | 2 | 2 | 4 | CI de validación, detección de secretos | Dependabot y `npm audit` (configurado en esta rama) |
@@ -81,7 +81,7 @@ Riesgo = **probabilidad** (1 baja a 3 alta) × **impacto** (1 bajo a 3 alto). Se
 | Incidentes con datos personales notificados | 100 % | Tabla `brechas` |
 | Dependencias con vulnerabilidad alta abiertas | 0 al cierre de cada mes | Dependabot / `npm audit` |
 | Restauración de respaldo probada | 1 vez por semestre | Acta en `04-…` |
-| Cuentas de administrador con MFA | 100 % | Revisión trimestral |
+| Cuentas de administrador con MFA | 100 % | Revisión trimestral; verificado en RNF13 (`docs/RNF13-mfa-supabase-vercel.md`) |
 
 ## 8. Revisión por la dirección (cláusula 9.3)
 

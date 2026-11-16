@@ -19,7 +19,7 @@ Tres proveedores intervienen. Antes de operar con personas reales hay que reunir
 | Descargar la certificación o el informe vigente (p. ej. SOC 2 / ISO 27001) del proveedor | ☐ | ☐ | ☐ |
 | Confirmar el plan contratado y qué respaldos incluye | ☐ | n/a | n/a |
 | Confirmar cómo se notifican los incidentes al cliente y en qué plazo | ☐ | ☐ | ☐ |
-| Confirmar quién tiene acceso al panel (lista de personas) y activar MFA | ☐ | ☐ | ☐ |
+| Confirmar quién tiene acceso al panel (lista de personas) y activar MFA | ☑ (RNF13) | ☑ (RNF13) | ☐ |
 | Anotar la fecha de la próxima revisión del proveedor | ☐ | ☐ | ☐ |
 
 ## Reglas de uso
@@ -33,4 +33,4 @@ Tres proveedores intervienen. Antes de operar con personas reales hay que reunir
 
 | Fecha | Revisó | Cambios |
 |---|---|---|
-| *(sin revisiones aún)* | | |
+| 2026-11-17 | Adán Ramos | RNF13: Verificación de cuentas individuales y activación obligatoria de MFA al 100% en Supabase y Vercel (ver `docs/RNF13-mfa-supabase-vercel.md`) |
