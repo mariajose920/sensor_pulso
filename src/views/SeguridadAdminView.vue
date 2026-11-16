@@ -222,6 +222,35 @@
 
     <!-- ============================================================ INCIDENTES -->
     <section v-else data-testid="panel-incidentes" class="panel-incidentes-grid">
+      <article class="card proc-brecha-card" data-testid="procedimiento-incidentes-panel">
+        <h2>Procedimiento de atención de incidentes de seguridad (ISO 27001)</h2>
+        <p class="ayuda">
+          Clasificación de severidades, plazos máximos de contención y resolución (SLA) y responsables asignados para la atención de eventos e incidentes.
+        </p>
+        <div class="proc-tabla-wrap">
+          <table class="proc-tabla">
+            <thead>
+              <tr>
+                <th>Nivel</th>
+                <th>Criterios de impacto</th>
+                <th>Contención</th>
+                <th>Resolución</th>
+                <th>Responsable asignado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="mat in MATRIZ_SEVERIDAD_INCIDENTES" :key="mat.severidad">
+                <td><span class="sev" :class="mat.severidad">{{ mat.nombre }}</span></td>
+                <td>{{ mat.impacto }}</td>
+                <td>{{ mat.plazoContencion }}</td>
+                <td>{{ mat.plazoResolucion }}</td>
+                <td><strong>{{ mat.responsable }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
       <div class="procedimiento-brechas-grid" data-testid="procedimiento-brechas-panel">
         <article class="card proc-brecha-card" data-testid="flujo-notificacion-brechas">
           <h2>Procedimiento de notificación de brechas</h2>
@@ -286,6 +315,50 @@
         </article>
       </div>
 
+      <article class="card simulacro-card" data-testid="registro-simulacro-incidente">
+        <div class="simulacro-header">
+          <div>
+            <h2>Simulacro de incidente de seguridad</h2>
+            <p class="ayuda">Ejercicio controlado de detección, contención técnica, análisis forense, erradicación y cierre formal con lecciones aprendidas.</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="ejecutandoSimulacroIncidente"
+            data-testid="btn-ejecutar-simulacro-incidente"
+            @click="ejecutarSimulacroIncidente"
+          >
+            {{ ejecutandoSimulacroIncidente ? 'Registrando simulacro...' : 'Registrar simulacro de incidente de seguridad' }}
+          </button>
+        </div>
+        <div class="simulacro-meta-grid">
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Fecha</span>
+            <strong data-testid="simulacro-inc-fecha">{{ simulacroIncidenteActual.fecha }}</strong>
+          </div>
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Responsable</span>
+            <strong data-testid="simulacro-inc-responsable">{{ simulacroIncidenteActual.responsable }}</strong>
+          </div>
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Severidad</span>
+            <strong data-testid="simulacro-inc-severidad" class="sev" :class="simulacroIncidenteActual.severidad">{{ simulacroIncidenteActual.severidad }}</strong>
+          </div>
+          <div class="simulacro-meta-item">
+            <span class="simulacro-meta-label">Estado</span>
+            <span class="badge-plazo ok">Probado y cerrado</span>
+          </div>
+        </div>
+        <p class="detalle"><strong>Escenario ficticio:</strong> {{ simulacroIncidenteActual.escenario }}</p>
+        <div class="pasos-simulacro-box" data-testid="simulacro-inc-pasos">
+          <strong>Pasos probados en el simulacro:</strong>
+          <ul class="pasos-simulacro-lista">
+            <li v-for="(paso, pIdx) in simulacroIncidenteActual.pasos" :key="pIdx">{{ paso }}</li>
+          </ul>
+        </div>
+        <p class="detalle" data-testid="simulacro-inc-resultado"><strong>Resultado:</strong> {{ simulacroIncidenteActual.resultado }}</p>
+      </article>
+
       <article class="card simulacro-card" data-testid="registro-simulacro-brecha">
         <div class="simulacro-header">
           <div>
@@ -335,6 +408,10 @@
           <select id="inc-sev" v-model="nuevo.severidad" class="form-input" data-testid="incidente-severidad">
             <option v-for="sv in SEVERIDADES" :key="sv" :value="sv">{{ sv }}</option>
           </select>
+          <div class="form-group-inline">
+            <label class="form-label" for="inc-resp">Responsable</label>
+            <input id="inc-resp" v-model="nuevo.responsable" class="form-input" placeholder="Adán" data-testid="incidente-responsable-input" />
+          </div>
           <label class="check"><input v-model="nuevo.afectaDatosPersonales" type="checkbox" data-testid="incidente-datos" /> Afecta datos personales</label>
         </div>
         <button type="submit" class="btn btn-primary" data-testid="incidente-crear">Registrar incidente</button>
@@ -349,9 +426,46 @@
             <option v-for="(t, v) in ESTADOS_INCIDENTE" :key="v" :value="v">{{ t }}</option>
           </select>
         </header>
-        <p class="quien">Abierto el {{ fecha(i.abierto_en) }}<template v-if="i.cerrado_en"> · cerrado el {{ fecha(i.cerrado_en) }}</template></p>
+        <p class="quien">
+          Abierto el {{ fecha(i.abierto_en) }}<template v-if="i.cerrado_en"> · cerrado el {{ fecha(i.cerrado_en) }}</template>
+          · <strong data-testid="incidente-responsable">Responsable: {{ i.responsable || 'Adán' }}</strong>
+        </p>
         <p v-if="i.descripcion" class="detalle">{{ i.descripcion }}</p>
         <p v-if="i.lecciones" class="detalle lecciones-incidente"><strong>Lecciones / Resultado:</strong> {{ i.lecciones }}</p>
+
+        <div class="acciones-cierre-incidente">
+          <button
+            v-if="i.estado !== 'cerrado'"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :data-testid="'btn-cerrar-incidente-' + i.id"
+            @click="cerrarIncidente(i)"
+          >
+            Cerrar incidente
+          </button>
+        </div>
+
+        <div v-if="i.estado === 'cerrado' || i.estado === 'resuelto' || editandoLecciones[i.id]" class="cierre-lecciones-box">
+          <label class="form-label" :for="'lecciones-' + i.id">Lecciones aprendidas / Resultado del cierre</label>
+          <textarea
+            :id="'lecciones-' + i.id"
+            v-model="leccionesTemp[i.id]"
+            class="form-input"
+            rows="2"
+            placeholder="Causa raíz, acciones correctivas aplicadas y lecciones aprendidas..."
+            :data-testid="'incidente-lecciones-input-' + i.id"
+          ></textarea>
+          <div class="acciones">
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :data-testid="'btn-guardar-lecciones-' + i.id"
+              @click="guardarLecciones(i)"
+            >
+              Guardar lecciones
+            </button>
+          </div>
+        </div>
 
         <!-- Brecha: solo cuando afecta datos personales -->
         <div v-if="i.afecta_datos_personales" class="brecha" :data-testid="'brecha-' + i.id">
@@ -390,6 +504,10 @@ import {
   PROCEDIMIENTO_NOTIFICACION_BRECHAS,
   PENDIENTES_DECISION_HUMANA_BRECHAS,
   SIMULACRO_BRECHA_REGISTRADO,
+  PROCEDIMIENTO_INCIDENTES_SEGURIDAD,
+  MATRIZ_SEVERIDAD_INCIDENTES,
+  SIMULACRO_INCIDENTE_REGISTRADO,
+  obtenerResponsableIncidente,
   generarAvisoAfectados,
   textoPlazo,
   estaSolicitudVencida,
@@ -411,11 +529,14 @@ const busqueda = ref('')
 const respuestas = reactive({})
 const incidentes = ref([])
 const brechas = reactive({})
-const nuevo = reactive({ titulo: '', descripcion: '', severidad: 'media', afectaDatosPersonales: false })
+const leccionesTemp = reactive({})
+const nuevo = reactive({ titulo: '', descripcion: '', severidad: 'media', responsable: 'Adán', afectaDatosPersonales: false })
 const basePlantilla = generarAvisoAfectados()
 const plantillaAviso = reactive({ asunto: basePlantilla.asunto, cuerpo: basePlantilla.cuerpo })
 const simulacroActual = reactive({ ...SIMULACRO_BRECHA_REGISTRADO })
 const ejecutandoSimulacro = ref(false)
+const simulacroIncidenteActual = reactive({ ...SIMULACRO_INCIDENTE_REGISTRADO })
+const ejecutandoSimulacroIncidente = ref(false)
 
 const decir = (texto, tipo = 'ok') => { aviso.value = { texto, tipo } }
 const etiquetaTipo = (v) =>
@@ -473,6 +594,7 @@ async function cargarSolicitudes() {
 async function cargarIncidentes() {
   incidentes.value = await derechosService.incidentes()
   for (const i of incidentes.value) {
+    leccionesTemp[i.id] = i.lecciones || ''
     brechas[i.id] = {
       afectadosEstimados: i.brecha?.afectados_estimados ?? '',
       datosComprometidos: i.brecha?.datos_comprometidos ?? '',
@@ -500,7 +622,7 @@ async function resolver(s, estado) {
 async function crear() {
   const r = await derechosService.crearIncidente(nuevo)
   if (!r.ok) return decir(r.error, 'error')
-  Object.assign(nuevo, { titulo: '', descripcion: '', severidad: 'media', afectaDatosPersonales: false })
+  Object.assign(nuevo, { titulo: '', descripcion: '', severidad: 'media', responsable: 'Adán', afectaDatosPersonales: false })
   decir('Incidente registrado.')
   await cargarIncidentes()
 }
@@ -509,6 +631,39 @@ async function cambiarEstado(i, estado) {
   const r = await derechosService.actualizarIncidente(i.id, { estado })
   r.ok ? decir('Estado actualizado.') : decir(r.error, 'error')
   await cargarIncidentes()
+}
+
+async function cerrarIncidente(i) {
+  const lecciones = leccionesTemp[i.id]?.trim() || i.lecciones || 'Incidente mitigado y cerrado conforme al procedimiento de seguridad.'
+  const r = await derechosService.actualizarIncidente(i.id, { estado: 'cerrado', lecciones })
+  r.ok ? decir('Incidente cerrado con lecciones registradas.') : decir(r.error, 'error')
+  await cargarIncidentes()
+}
+
+async function guardarLecciones(i) {
+  const r = await derechosService.actualizarIncidente(i.id, { lecciones: leccionesTemp[i.id] })
+  r.ok ? decir('Lecciones aprendidas actualizadas.') : decir(r.error, 'error')
+  await cargarIncidentes()
+}
+
+async function ejecutarSimulacroIncidente() {
+  ejecutandoSimulacroIncidente.value = true
+  try {
+    const r = await derechosService.ejecutarSimulacroIncidente({
+      responsable: simulacroIncidenteActual.responsable,
+      fecha: simulacroIncidenteActual.fecha,
+      severidad: simulacroIncidenteActual.severidad
+    })
+    if (r.ok) {
+      Object.assign(simulacroIncidenteActual, r.simulacro)
+      await cargarIncidentes()
+      decir('Simulacro de incidente de seguridad registrado con severidad, fecha y responsable.')
+    } else {
+      decir('No se pudo registrar el simulacro de incidente.', 'error')
+    }
+  } finally {
+    ejecutandoSimulacroIncidente.value = false
+  }
 }
 
 async function guardarBrecha(i, extra = {}) {
@@ -1058,5 +1213,41 @@ h2 {
   background: #f8fafc;
   border-left: 3px solid #2563eb;
   border-radius: 6px;
+}
+
+.pasos-simulacro-box {
+  padding: 0.6rem 0.75rem;
+  background: #f1f5f9;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.pasos-simulacro-lista {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.acciones-cierre-incidente {
+  margin-top: 0.4rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cierre-lecciones-box {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.form-group-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 </style>
