@@ -42,7 +42,8 @@
     "auditar:dependencias": "npm audit --audit-level=high",
     "test:rf70": "node scripts/test-rf70-revision-dependencias.mjs",
     "test:rf71": "node scripts/test-rf71-respaldos-restauracion.mjs",
-    "test:rf72": "node scripts/test-rf72-alertas-seguridad.mjs"
+    "test:rf72": "node scripts/test-rf72-alertas-seguridad.mjs",
+    "test:rf73": "node scripts/test-rf73-procedimiento-incidentes.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
