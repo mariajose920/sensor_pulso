@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * ============================================================================
- * sensor_pulso · Pruebas Automatizadas de RF71
- * Copias de Seguridad Automáticas y Prueba Periódica de Restauración
- * ============================================================================
- * Criterios de Aceptación:
- *   1. Está documentado dónde, cuándo y cómo se hacen las copias.
- *   2. Se restauró una copia en un entorno de pruebas y los datos coinciden.
- *   3. Lo no confirmado queda como pendiente.
- *   4. Dependencia RF116: verificación de descifrado con clave en custodia.
- * ============================================================================
- */
 
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
