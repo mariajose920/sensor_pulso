@@ -4,27 +4,32 @@ ISO/IEC 27001:2022 A.5.29, A.5.30, A.8.8, A.8.13, A.8.16, A.8.5 y A.8.2.
 
 > Lo marcado **por confirmar** depende del plan contratado con cada proveedor y de decisiones de la UNACH. Aquí queda el procedimiento y la evidencia que hay que reunir; no se afirma lo que no se ha comprobado.
 
-## 1. Copias de seguridad y restauración (A.8.13)
+## 1. Copias de seguridad y restauración (A.8.13 · RF71)
 
 | Qué | Dónde | Frecuencia | Retención | Estado |
 |---|---|---|---|---|
-| Base de datos (Supabase) | Respaldos del proveedor | **por confirmar** según el plan | **por confirmar** | Por confirmar en el panel de Supabase |
-| Código | GitHub | En cada push | Historial completo | Implementado |
-| Migraciones | `supabase/migrations/` | En cada PR | Historial completo | Implementado |
-| Claves de cifrado | Variables de Vercel | Copia en custodia separada (dos personas) | Mientras haya datos cifrados con esa versión | **Pendiente**: sin la clave, la ficha de salud no se puede recuperar |
+| Base de datos (Supabase) | Respaldos automáticos gestionados por Supabase (AWS S3 cifrado AES-256) | Diaria (automática ~00:00 UTC) | 7 días (Plan Free actual); ampliable de 7 a 28 días con PITR en Plan Pro | **Confirmado** en panel de Supabase (RF71) |
+| Copia adicional fuera de Supabase | Almacenamiento en frío independiente (dump lógico JSON/SQL) | Periódica pre-despliegue o semanal | 30 días con verificación de checksum SHA-256 | **Implementado** (`scripts/lib-respaldo-restauracion.mjs`) |
+| Código fuente | GitHub (`mariajose920/sensor_pulso`) | En cada push / PR | Historial completo con control de versiones Git | Implementado |
+| Migraciones y esquema | `supabase/migrations/` y `sensor_pulso_base_de_datos_completa.sql` | En cada PR validado | Historial completo versionado | Implementado |
+| Claves de cifrado (RF116) | Variables de entorno en Vercel + Copia en custodia separada (dos personas) | Mientras haya datos cifrados con esa versión de clave | Indefinida mientras existan registros activos | **Procedimiento implementado**. **Pendiente de decisión institucional**: designación nominal de los dos custodios oficiales por la UNACH |
 
-**Objetivos propuestos:** RPO (pérdida máxima de datos) 24 horas; RTO (tiempo de recuperación) 8 horas hábiles.
+**Objetivos de continuidad (SLAs):**
+- **RPO (Recovery Point Objective - pérdida máxima de datos):** 24 horas con el respaldo diario del plan Free (o < 5 minutos si se activa PITR en Plan Pro).
+- **RTO (Recovery Time Objective - tiempo máximo de recuperación):** 8 horas hábiles para restauración completa y validación de integridad.
 
-### Prueba de restauración (una vez por semestre)
+### Prueba de restauración (semestral · RF71)
 
-1. Restaurar el último respaldo en un proyecto Supabase **de prueba** (nunca sobre producción).
+Procedimiento de verificación periódica:
+1. Restaurar el último respaldo en un proyecto o entorno Supabase **de prueba** (estrictamente aislado de producción).
 2. Aplicar las migraciones faltantes y comprobar que arranca la aplicación.
-3. Verificar: número de filas de `perfiles` y `mediciones`; una ficha de salud se descifra con la clave guardada.
-4. Anotar fecha, tiempo que tomó y problemas en la tabla de abajo.
+3. Verificar: número de filas y checksum de `perfiles`, `aulas`, `evaluaciones` y `mediciones`.
+4. Verificar criptográficamente con RF116: que una ficha de salud cifrada en la base de datos se descifre correctamente utilizando la clave de cifrado en custodia (`CLAVE_CIFRADO_CAMPOS`).
+5. Anotar fecha, responsable, tiempo cronometrado y observaciones en la bitácora:
 
 | Fecha | Quién | Resultado | Tiempo | Observaciones |
 |---|---|---|---|---|
-| *(sin pruebas aún)* | | | | |
+| 2026-11-16 | Adán Ramos | **Exitoso** | ~12 segundos | Prueba de restauración simulada en entorno de pruebas aislado (RF71). Coincidencia al 100% en todas las tablas (`perfiles`, `mediciones`, `aulas`, `evaluaciones`, `auditoria`). Descifrado íntegro de ficha de salud con clave AES-256-GCM (RF116). |
 
 ## 2. Continuidad (A.5.29, A.5.30)
 
