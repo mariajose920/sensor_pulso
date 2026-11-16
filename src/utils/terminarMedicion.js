@@ -227,6 +227,19 @@ export function esUuidSesion(id) {
  * @param {{canal:number, paciente:object, metricas:object, calidadDispositivo?:string|null, fuente?:string,
  *          sesionId?:string|null, inicio?:Date|number|string|null, fin?:Date|number|string|null, idCliente?:string}} e
  */
+function resolverActividadIdTerminar(paciente = {}) {
+  const num = Number(paciente?.actividadId)
+  if (Number.isInteger(num) && num >= 1 && num <= 6) return num
+  const txt = String(paciente?.actividad || '').trim().toLowerCase()
+  if (!txt || txt.includes('reposo')) return 1
+  if (txt.includes('sentado')) return 2
+  if (txt.includes('caminata')) return 3
+  if (txt.includes('moderado')) return 4
+  if (txt.includes('intenso')) return 5
+  if (txt.includes('post') || txt.includes('recuperacion') || txt.includes('recuperación')) return 6
+  return null
+}
+
 export function armarRegistroTerminado({
   canal, paciente = {}, metricas = {}, calidadDispositivo = null, fuente = 'sensor',
   sesionId = null, inicio = null, fin = null, idCliente = undefined
@@ -277,6 +290,7 @@ export function armarRegistroTerminado({
       calidad,
       causaCalidad: aviso?.causaGuardable || null,
       declaracionId: paciente.declaracionId || null,
+      actividadId: resolverActividadIdTerminar(paciente),
       edad: paciente.edad || null,
       dentroDeRango,
       inicio: inicio ? new Date(inicio) : null,

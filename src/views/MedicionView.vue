@@ -779,9 +779,9 @@
             <span class="badge badge-primary">Ficha Validada</span>
           </div>
           <div class="res-pac-tags">
-            <span class="tag-item">Estrés: <strong>{{ pacienteActivo.nivelEstres }}</strong></span>
-            <span class="tag-item">Sueño: <strong>{{ pacienteActivo.sueno || 'No especificado' }}</strong></span>
-            <span class="tag-item">Cafeína: <strong>{{ pacienteActivo.cafeina || 'Ninguna' }}</strong></span>
+            <span class="tag-item">Estrés: <strong>{{ etiquetaEstresPaso5(pacienteActivo.nivelEstres) }}</strong></span>
+            <span class="tag-item">Sueño: <strong>{{ etiquetaSuenoPaso5(pacienteActivo.suenoHoras, pacienteActivo.sueno) }}</strong></span>
+            <span class="tag-item">Cafeína: <strong>{{ etiquetaCafeinaPaso5(pacienteActivo.cafeina) }}</strong></span>
             <span class="tag-item">Medicación: <strong>{{ pacienteActivo.medicacion || 'Ninguna' }}</strong></span>
             <span class="tag-item">Contexto: <strong>{{ pacienteActivo.actividadNombre || pacienteActivo.actividadPrevia || 'Reposo basal' }}</strong></span>
             <span v-if="sesionState.sesionActiva" class="tag-item" style="border-color: #bbf7d0; background: #f0fdf4;">
@@ -989,12 +989,20 @@
 
           <div v-if="resultadoPublicacionPaso5" class="alert mt-3" :class="resultadoPublicacionPaso5.ok ? 'alert-success' : 'alert-warning'" role="status">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
-              <div>
+              <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                 <strong>{{ resultadoPublicacionPaso5.titulo }}</strong>
-                <span v-if="resultadoPublicacionPaso5.detalle"> {{ resultadoPublicacionPaso5.detalle }}</span>
+                <span v-if="resultadoPublicacionPaso5.detalle" style="font-size: 0.9rem; opacity: 0.92;">{{ resultadoPublicacionPaso5.detalle }}</span>
               </div>
-              <div v-if="resultadoPublicacionPaso5.ok && resultadoPublicacionPaso5.publicada" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <div v-if="resultadoPublicacionPaso5.ok" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <router-link
+                  to="/historial"
+                  class="btn btn-secondary btn-sm"
+                  data-testid="btn-ir-historial-paso5"
+                >
+                  Ver en Historial
+                </router-link>
                 <button
+                  v-if="resultadoPublicacionPaso5.publicada"
                   type="button"
                   class="btn btn-secondary btn-sm"
                   data-testid="btn-retirar-publicacion-paso5"
@@ -1003,6 +1011,7 @@
                   Retirar Publicación Ahora
                 </button>
                 <router-link
+                  v-if="resultadoPublicacionPaso5.publicada"
                   to="/comparacion?modo=publicas"
                   class="btn btn-primary btn-sm"
                 >
@@ -1188,7 +1197,8 @@ import { sesionState } from '../services/sesionMedicionService'
 import { crearMonitorEstadisticasBpm } from '../services/bpmService'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
-import { pacienteService, estadoGuardadoFicha } from '../services/pacienteService'
+import { pacienteService, estadoGuardadoFicha, NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA } from '../services/pacienteService'
+import { normalizarActividadId, obtenerNombreActividad } from '../services/actividadesService'
 import { clasificarRitmo } from '../services/ritmoService'
 import { descargarInformeClinicoPdf } from '../services/informePdfService'
 import {
@@ -1230,6 +1240,19 @@ const quierePublicarPaso5 = ref(false)
 const confirmacionExplicitaPaso5 = ref(false)
 const tituloPublicacionPaso5 = ref('')
 const publicandoPaso5 = ref(false)
+
+function etiquetaEstresPaso5(id) {
+  return NIVELES_ESTRES.find((n) => n.id === id)?.label || id || 'No especificado'
+}
+
+function etiquetaSuenoPaso5(suenoHoras, suenoLegado) {
+  if (suenoHoras) return OPCIONES_SUENO.find((s) => s.id === suenoHoras)?.label || suenoHoras
+  return suenoLegado || 'No especificado'
+}
+
+function etiquetaCafeinaPaso5(id) {
+  return OPCIONES_CAFEINA.find((c) => c.id === id)?.label || id || 'Ninguna'
+}
 const resultadoPublicacionPaso5 = ref(null)
 const modalVistaPreviaPaso5Visible = ref(false)
 const ultimaPublicacionLocalIdPaso5 = ref(null)
@@ -1254,12 +1277,18 @@ const evalPublicacionPaso5 = computed(() => evaluarPublicacion({
   pacienteConConsentimientoPropio: false
 }))
 
+const actividadIdDesdeFicha = computed(() => {
+  const p = pacienteActivo.value
+  return normalizarActividadId(p?.actividadId || p?.actividadPrevia || 1)
+})
+
 const registroVistaPreviaPaso5 = computed(() => armarRegistroTerminado({
   canal: canalSeleccionado.value || 1,
   paciente: {
     nombre: pacienteActivo.value?.nombre || currentUserName.value || '',
     edad: pacienteActivo.value?.edad || null,
-    actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo',
+    actividad: pacienteActivo.value?.actividadNombre || obtenerNombreActividad(actividadIdDesdeFicha.value),
+    actividadId: actividadIdDesdeFicha.value,
     declaracionId: pacienteActivo.value?.id || null
   },
   metricas: {
@@ -1315,7 +1344,8 @@ async function guardarYPublicarPaso5(conPublicacion) {
       paciente: {
         nombre: pacienteActivo.value?.nombre || '',
         edad: pacienteActivo.value?.edad || null,
-        actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo',
+        actividad: pacienteActivo.value?.actividadNombre || obtenerNombreActividad(actividadIdDesdeFicha.value),
+        actividadId: actividadIdDesdeFicha.value,
         declaracionId: pacienteActivo.value?.id || null
       },
       metricas: {

@@ -439,7 +439,9 @@ export function analizarCorrelacionBpmEstresSueno({
       return {
         dia: d.dia,
         etiquetaDia: d.etiquetaDia || d.dia,
+        ultimaHoraTexto: d.ultimaHoraTexto || null,
         bpmPromedio: Number(d.bpmPromedio),
+        mediciones: Number(d.mediciones) || 1,
         puntajeEstres,
         etiquetaEstres,
         horasSueno,
