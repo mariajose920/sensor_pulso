@@ -1,16 +1,3 @@
-/**
- * ============================================================================
- * sensor_pulso · Sistema de Alertas de Seguridad Automáticas (RF72)
- * ISO/IEC 27001:2022 Control A.8.16 (Monitoreo de actividades de seguridad)
- * ============================================================================
- * Criterios de Aceptación:
- *   1. Un evento sospechoso simulado genera un correo al administrador.
- *   2. No se repite el mismo aviso muchas veces (deduplicación con ventana de enfriamiento).
- *   3. El aviso no incluye secretos ni datos de salud (filtrado y sanitización estricta).
- *   4. Pendiente de decisión humana: quién recibe los avisos (configurable por entorno).
- * ============================================================================
- */
-
 import { enviarMensajes } from './correo.js'
 import { escaparHtml } from './proteccionWeb.js'
 
@@ -273,24 +260,6 @@ export function construirMensajeAlerta(evento = {}, { suprimidos = 0, destinatar
   }
 }
 
-/**
- * Función principal para procesar y despachar una alerta de seguridad si corresponde.
- *
- * @param {object} evento - Registro o evento a evaluar
- * @param {object} [opciones]
- * @param {boolean} [opciones.forzarEnvio=false] - Para pruebas directas
- * @param {string} [opciones.destinatario] - Destinatario personalizado
- * @param {number} [opciones.cooldownMs] - Ventana de deduplicación
- * @returns {Promise<{
- *   ok: boolean,
- *   enviado: boolean,
- *   motivo?: string,
- *   destinatario?: string,
- *   suprimidos?: number,
- *   id?: string|null,
- *   error?: string
- * }>}
- */
 export async function procesarAlertaSeguridad(evento = {}, opciones = {}) {
   const esCritico = opciones.forzarEnvio || esEventoCritico(evento)
   if (!esCritico) {
