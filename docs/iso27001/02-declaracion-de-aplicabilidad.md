@@ -35,8 +35,8 @@ La columna «Evidencia» apunta a algo que se puede comprobar. Si no hay evidenc
 | 5.26 Respuesta a incidentes | Sí | Implementado | Pantalla `/admin/seguridad` |
 | 5.27 Aprender de los incidentes | Sí | Implementado | Campo «lecciones» del incidente |
 | 5.28 Recolección de evidencias | Sí | Parcial | Auditoría inmutable |
-| 5.29 Seguridad en una interrupción | Sí | Pendiente | `04-continuidad-…` |
-| 5.30 TIC para la continuidad | Sí | Pendiente | `04-continuidad-…` |
+| 5.29 Seguridad en una interrupción | Sí | Implementado | Procedimiento ante contingencia y aislamiento de entornos en pruebas de restauración (RNF15) |
+| 5.30 TIC para la continuidad | Sí | Implementado | RTO (< 4h desastre / < 15m lógico) y RPO (24h / 1h) definidos, copias fuera de Supabase y simulacro medido (RNF15) |
 | 5.31 Requisitos legales | Sí | Parcial | Ley 19.628; Ley 21.719 por revisar con asesoría jurídica |
 | 5.32 Propiedad intelectual | Sí | Por evaluar | Licencias de dependencias |
 | 5.33 Protección de registros | Sí | Implementado | Auditoría inmutable, retención automática |
@@ -80,7 +80,7 @@ La columna «Evidencia» apunta a algo que se puede comprobar. Si no hay evidenc
 | 8.10 Eliminación de información | Sí | Implementado | `aplicar_retencion()`, `eliminar_mis_datos()` |
 | 8.11 Enmascaramiento de datos | Sí | Parcial | Columnas con `enmascarar` en `clasificacion_datos` |
 | 8.12 Prevención de fuga de datos | Sí | Parcial | Exportación mínima; endpoints de datos de salud sin CORS abierto (la telemetría del ESP32 es un endpoint aparte) |
-| 8.13 Respaldos | Sí | Pendiente | `04-continuidad-…` |
+| 8.13 Respaldos | Sí | Implementado | Respaldos automáticos en Supabase, copias fuera de sitio con SHA-256 y simulación de recuperación RTO/RPO validada (RF71, RNF15) |
 | 8.14 Redundancia | Sí | Por evaluar | La da el proveedor |
 | 8.15 Registro (logs) | Sí | Implementado | Tabla `auditoria` inmutable |
 | 8.16 Monitoreo | Sí | Pendiente | Alertas sobre auditoría (`04-…`) |

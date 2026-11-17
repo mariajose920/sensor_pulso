@@ -14,11 +14,11 @@ ISO/IEC 27001:2022 A.5.29, A.5.30, A.8.8, A.8.13, A.8.16, A.8.5 y A.8.2.
 | Migraciones y esquema | `supabase/migrations/` y `sensor_pulso_base_de_datos_completa.sql` | En cada PR validado | Historial completo versionado | Implementado |
 | Claves de cifrado (RF116) | Variables de entorno en Vercel + Copia en custodia separada (dos personas) | Mientras haya datos cifrados con esa versión de clave | Indefinida mientras existan registros activos | **Procedimiento implementado**. **Pendiente de decisión institucional**: designación nominal de los dos custodios oficiales por la UNACH |
 
-**Objetivos de continuidad (SLAs):**
-- **RPO (Recovery Point Objective - pérdida máxima de datos):** 24 horas con el respaldo diario del plan Free (o < 5 minutos si se activa PITR en Plan Pro).
-- **RTO (Recovery Time Objective - tiempo máximo de recuperación):** 8 horas hábiles para restauración completa y validación de integridad.
+**Objetivos de continuidad (SLAs definidos en RNF15):**
+- **RPO (Recovery Point Objective - pérdida máxima de datos):** 24 horas con el respaldo diario de Supabase; < 1 hora mediante copias lógicas externas fuera de sitio (`respaldos_externos/`).
+- **RTO (Recovery Time Objective - tiempo máximo de recuperación tras falla):** 4 horas como umbral máximo ante contingencia total de infraestructura; < 15 minutos para restauración lógica y re-despliegue web (RNF15).
 
-### Prueba de restauración (semestral · RF71)
+### Prueba de restauración (semestral · RF71 y RNF15)
 
 Procedimiento de verificación periódica:
 1. Restaurar el último respaldo en un proyecto o entorno Supabase **de prueba** (estrictamente aislado de producción).
@@ -30,6 +30,7 @@ Procedimiento de verificación periódica:
 | Fecha | Quién | Resultado | Tiempo | Observaciones |
 |---|---|---|---|---|
 | 2026-11-16 | Adán Ramos | **Exitoso** | ~12 segundos | Prueba de restauración simulada en entorno de pruebas aislado (RF71). Coincidencia al 100% en todas las tablas (`perfiles`, `mediciones`, `aulas`, `evaluaciones`, `auditoria`). Descifrado íntegro de ficha de salud con clave AES-256-GCM (RF116). |
+| 2026-11-17 | Adán Ramos | **Exitoso** | ~12 segundos | Simulacro de falla completa y re-despliegue de la aplicación a partir de copia fuera de Supabase (RNF15). Checksum SHA-256 verificado, 100% coincidencia en datos y descifrado de salud exitoso (RF116). RTO medido ampliamente dentro del límite definido (< 15 min). |
 
 ## 2. Continuidad (A.5.29, A.5.30)
 
