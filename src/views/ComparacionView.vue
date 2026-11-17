@@ -71,7 +71,7 @@
             <line x1="2" y1="12" x2="22" y2="12"></line>
             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
           </svg>
-          Datasets Públicos (RF47)
+          Datasets Públicos
         </button>
 
         <button
@@ -85,16 +85,19 @@
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
-          Carga de Señales (RF27)
+          Carga de Señales
         </button>
       </div>
     </div>
 
     <AvisoEducativo />
 
+    <!-- ===================================================================== -->
+    <!-- MODO 1: PLANTILLA NORMAL DE REPOSO                                    -->
+    <!-- ===================================================================== -->
+    <template v-if="pestañaActiva === 'reposo'">
     <!-- Sincronización Temporal de Bioseñales Comparadas -->
     <SincronizacionSenalesPanel
-      v-if="pestañaActiva !== 'senales'"
       :bpmActual="selectedBpm"
       :bpmReferencia="72"
       :amplitudActual="selectedAmplitude"
@@ -104,7 +107,6 @@
 
     <!-- Análisis Automático de la Comparación y Explicación de Diferencias -->
     <AnalisisAutomaticoComparacionPanel
-      v-if="pestañaActiva !== 'senales'"
       :bpmActual="medicionElegida ? selectedBpm : null"
       :bpmReferencia="BPM_PLANTILLA_REPOSO"
       :senalActual="senalMedicion"
@@ -114,19 +116,6 @@
       nombreReferencia="Señal de Referencia"
     />
 
-    <!-- ===================================================================== -->
-    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS (se muestra directo arriba)     -->
-    <!-- ===================================================================== -->
-    <template v-if="pestañaActiva === 'guardadas'">
-      <ComparadorMedicionesCard
-        :currentBpm="selectedBpm"
-        :lastIntervalMs="currentIntervalMs"
-        :amplitude="selectedAmplitude"
-        :measurementName="selectedMeasurementName"
-      />
-    </template>
-
-    <!-- 1. Cargar o Ingresar Medición Tomada con el Sensor (Compartido) -->
     <MeasurementSelector
       v-model:bpm="selectedBpm"
       v-model:amplitude="selectedAmplitude"
@@ -136,10 +125,6 @@
     <!-- RNF01: en el celular en vertical los gráficos se ven pequeños; se sugiere girarlo -->
     <AvisoGirar />
 
-    <!-- ===================================================================== -->
-    <!-- MODO 1: PLANTILLA NORMAL DE REPOSO                                    -->
-    <!-- ===================================================================== -->
-    <template v-if="pestañaActiva === 'reposo'">
       <!-- Comparación de Parámetros: Medición vs Plantilla de Reposo (72 BPM) y ECG -->
       <MetricsCards
         :currentBpm="selectedBpm"
@@ -174,6 +159,18 @@
     <!-- ===================================================================== -->
     <template v-else-if="pestañaActiva === 'patologias'">
       <ComparadorPatologiasCard
+        :currentBpm="selectedBpm"
+        :lastIntervalMs="currentIntervalMs"
+        :amplitude="selectedAmplitude"
+        :measurementName="selectedMeasurementName"
+      />
+    </template>
+
+        <!-- ===================================================================== -->
+    <!-- MODO 3: MEDICIONES PROPIAS O PÚBLICAS (se muestra directo arriba)     -->
+    <!-- ===================================================================== -->
+    <template v-if="pestañaActiva === 'guardadas'">
+      <ComparadorMedicionesCard
         :currentBpm="selectedBpm"
         :lastIntervalMs="currentIntervalMs"
         :amplitude="selectedAmplitude"
@@ -230,11 +227,11 @@ const route = useRoute()
 
 // Pestaña activa: 'guardadas', 'patologias', 'reposo', 'datasets' o 'senales'
 const { isAuthenticated } = useAuth()
-const pestañaActiva = ref('guardadas')
+const pestañaActiva = ref('reposo')
 
 const etiquetaPestaña = computed(() => {
-  if (pestañaActiva.value === 'datasets') return 'Contraste con Datasets Públicos (RF47)'
-  if (pestañaActiva.value === 'senales') return 'Carga de Bioseñales Externas (RF27)'
+  if (pestañaActiva.value === 'datasets') return 'Contraste con Datasets Públicos'
+  if (pestañaActiva.value === 'senales') return 'Carga de Bioseñales Externas'
   if (pestañaActiva.value === 'guardadas') return isAuthenticated.value ? 'Comparación Histórica y Pública' : 'Comparación con la Galería Pública'
   if (pestañaActiva.value === 'patologias') return 'Patologías y Arritmias Precargadas'
   return 'Plantilla Normal de Reposo'
