@@ -1,0 +1,79 @@
+{
+  "formato": "sensor_pulso_dump",
+  "versionDump": "1.0.0",
+  "creadoEn": "2026-11-17T22:57:17.854Z",
+  "origen": "supabase_us_east_1",
+  "tipo": "copia_externa_fuera_de_supabase",
+  "resumenConteo": {
+    "perfiles": 3,
+    "aulas": 1,
+    "evaluaciones": 1,
+    "mediciones": 1,
+    "pacientes_salud": 1,
+    "auditoria": 1
+  },
+  "tablas": {
+    "perfiles": [
+      {
+        "id": "usr-admin-1",
+        "nombre": "Adán Ramos",
+        "correo": "adan.ramos@unach.cl",
+        "rol": "admin"
+      },
+      {
+        "id": "usr-docente-1",
+        "nombre": "Darío Sandoval",
+        "correo": "dario.sandoval@unach.cl",
+        "rol": "profesor"
+      },
+      {
+        "id": "usr-estudiante-1",
+        "nombre": "Estudiante UNACH",
+        "correo": "alumno@alu.unach.cl",
+        "rol": "estudiante"
+      }
+    ],
+    "aulas": [
+      {
+        "id": "aula-fisiologia-1",
+        "codigo": "FISIO-2026",
+        "nombre": "Fisiología Cardíaca",
+        "docente_id": "usr-docente-1"
+      }
+    ],
+    "evaluaciones": [
+      {
+        "id": "eval-cardio-1",
+        "titulo": "Evaluación de Bioseñales",
+        "aula_id": "aula-fisiologia-1",
+        "estado": "programada"
+      }
+    ],
+    "mediciones": [
+      {
+        "id": "med-001",
+        "usuario_id": "usr-estudiante-1",
+        "bpm_promedio": 72,
+        "spo2_promedio": 98,
+        "creado_en": "2026-11-17T12:00:00Z"
+      }
+    ],
+    "pacientes_salud": [
+      {
+        "id": "salud-001",
+        "usuario_id": "usr-estudiante-1",
+        "sobre_cifrado": "\\x53504301c421f912da17b03da4223987cd4f8381ac91d78ce0d3c68e28c0666831c84ffb7a0dcd5102e54f41d3e6b3d094f2a57ce7285fd0aea2e32a4610a680c8ff98924c717596c459af919cabb15f7e7968bbd57c3cd931d838652ec878c290b74998d1e970a0eeebde114dda1c808fe5416115477e3e"
+      }
+    ],
+    "auditoria": [
+      {
+        "id": "aud-001",
+        "accion": "RESPALDO_OFFSITE_GENERADO",
+        "actor": "Adán Ramos",
+        "fecha": "2026-11-17T12:00:00Z"
+      }
+    ]
+  },
+  "checksum": "39daa242e59f075fa22fdc7bfa4b272ebe330979f6670d7c6ec13ccc2122840d",
+  "firmaIntegridad": "SHA256:39daa242e59f075fa22fdc7bfa4b272ebe330979f6670d7c6ec13ccc2122840d"
+}
