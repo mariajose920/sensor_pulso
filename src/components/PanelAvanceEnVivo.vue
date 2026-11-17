@@ -8,6 +8,15 @@
             <span class="live-pulsing-dot"></span>
             {{ conectadoRealtime ? 'EN VIVO' : 'CONECTANDO' }}
           </span>
+          <span
+            v-if="latenciaMs !== null"
+            class="badge badge-latencia"
+            :class="claseLatencia"
+            data-testid="pill-latencia-rnf04"
+            :title="'Latencia en tiempo real: ' + latenciaMs + ' ms (RNF04)'"
+          >
+            ⚡ {{ latenciaMs }} ms
+          </span>
           <span v-if="datosAvance?.modo === 'en_vivo'" class="badge badge-modo-vivo">
             ⏱️ Modo En Vivo
           </span>
@@ -330,6 +339,7 @@ const props = defineProps({
 const emit = defineEmits(['cerrar', 'actualizado'])
 
 const datosAvance = ref(null)
+const latenciaMs = ref(null)
 const cargando = ref(false)
 const controlando = ref(false)
 const conectadoRealtime = ref(false)
@@ -338,6 +348,13 @@ const filtroEstado = ref('todos')
 const cursoSeleccionadoId = ref('')
 const busqueda = ref('')
 const feedEventos = ref([])
+
+const claseLatencia = computed(() => {
+  if (latenciaMs.value === null) return 'badge-secondary'
+  if (latenciaMs.value <= 500) return 'badge-latencia-optima'
+  if (latenciaMs.value <= 1000) return 'badge-latencia-aceptable'
+  return 'badge-latencia-alta'
+})
 
 let suscripcionRealtime = null
 let temporizadorReloj = null
@@ -454,6 +471,10 @@ const procesarActualizacionEnVivo = (nuevoEstado) => {
   datosAvance.value = nuevoEstado
   ultimoEventoEn.value = new Date()
   conectadoRealtime.value = true
+
+  if (typeof nuevoEstado._latenciaMs === 'number') {
+    latenciaMs.value = nuevoEstado._latenciaMs
+  }
 
   // Registrar en feed de eventos si cambió el contador de respuestas o conexiones
   if (previo) {
@@ -581,6 +602,35 @@ watch(() => props.evaluacionId, (nuevoId) => {
 .live-indicator-pill.live-active {
   background: #dcfce7;
   color: #15803d;
+}
+
+.badge-latencia {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+.badge-latencia-optima {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-latencia-aceptable {
+  background: #fefce8;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+
+.badge-latencia-alta {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
 }
 
 .live-pulsing-dot {

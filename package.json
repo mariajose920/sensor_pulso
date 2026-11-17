@@ -44,7 +44,8 @@
     "test:rf71": "node scripts/test-rf71-respaldos-restauracion.mjs",
     "test:rf72": "node scripts/test-rf72-alertas-seguridad.mjs",
     "test:rf73": "node scripts/test-rf73-procedimiento-incidentes.mjs",
-    "test:rnf13": "node scripts/test-rnf13-mfa-supabase-vercel.mjs"
+    "test:rnf13": "node scripts/test-rnf13-mfa-supabase-vercel.mjs",
+    "test:rnf04": "node scripts/test-rnf04-latencia-tiempo-real.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
