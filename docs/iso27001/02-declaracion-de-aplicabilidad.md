@@ -73,7 +73,7 @@ La columna «Evidencia» apunta a algo que se puede comprobar. Si no hay evidenc
 | 8.3 Restricción de acceso a la información | Sí | Implementado | RLS; endpoints con sesión y titularidad |
 | 8.4 Acceso al código fuente | Sí | Parcial | GitHub con PR hacia `develop`; **verificar** que `develop` y `main` estén protegidas (revisión obligatoria, sin push directo) |
 | 8.5 Autenticación segura | Sí | Implementado | Bloqueos y contraseñas robustas; MFA activo al 100% en proveedores (RNF13) |
-| 8.6 Gestión de la capacidad | Sí | Por evaluar | |
+| 8.6 Gestión de la capacidad | Sí | Implementado | Pruebas de carga con 100 estudiantes simultáneos, índices optimizados y coalescencia en tiempo real (RNF04) |
 | 8.7 Protección contra malware | Sí | Por evaluar | |
 | 8.8 Vulnerabilidades técnicas | Sí | Parcial | Dependabot; falta prueba de penetración |
 | 8.9 Gestión de la configuración | Sí | Parcial | `vercel.json`, migraciones versionadas |
