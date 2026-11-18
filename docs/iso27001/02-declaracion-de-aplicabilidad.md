@@ -18,8 +18,8 @@ La columna «Evidencia» apunta a algo que se puede comprobar. Si no hay evidenc
 | 5.9 Inventario de activos | Sí | Parcial | Tabla en 01 (falta dueños) |
 | 5.10 Uso aceptable de la información | Sí | Parcial | Política de privacidad y aviso educativo |
 | 5.11 Devolución de activos | Sí | Por evaluar | Tokens de ESP32: `revocar_dispositivo` |
-| 5.12 Clasificación de la información | Sí | Implementado | Tabla `clasificacion_datos` |
-| 5.13 Etiquetado de la información | Sí | Parcial | Clasificación por columna; sin etiquetas visibles |
+| 5.12 Clasificación de la información | Sí | Implementado | Tabla `clasificacion_datos` con todas las columnas clasificadas y panel en Admin → Clasificación (ver docs/RF56-clasificacion-datos.md) |
+| 5.13 Etiquetado de la información | Sí | Implementado | Etiquetas visibles de tipo de dato en la ficha, al publicar, en Mis datos y en la política de privacidad |
 | 5.14 Transferencia de información | Sí | Implementado | HTTPS/TLS, HSTS (`vercel.json`) |
 | 5.15 Control de acceso | Sí | Implementado | RLS en 49 tablas, rutas por rol |
 | 5.16 Gestión de identidades | Sí | Implementado | Correo institucional confirmado (RF96) |

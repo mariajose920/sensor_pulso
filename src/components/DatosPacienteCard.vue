@@ -32,6 +32,7 @@
           <span class="badge badge-success">
             Datos completados
           </span>
+          <EtiquetaClaseDato clase="sensible_salud" compacta />
           <span v-if="paciente.origen === 'supabase'" class="badge badge-supabase">
             ● En la nube
           </span>
@@ -183,6 +184,10 @@
           </h2>
           <p style="color: var(--color-muted); font-size: 0.85rem; margin-top: 0.25rem; margin-bottom: 0;">
             Completa los datos obligatorios del paciente y declara los factores que alteran la frecuencia cardíaca antes de medir.
+          </p>
+          <p class="nota-clase" data-testid="ficha-nota-clasificacion">
+            <EtiquetaClaseDato clase="sensible_salud" compacta />
+            Los factores de salud que declares se guardan cifrados y solo tú puedes verlos.
           </p>
         </div>
 
@@ -460,6 +465,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import EtiquetaClaseDato from './EtiquetaClaseDato.vue'
 import { useAuth } from '../composables/useAuth'
 import { calcularEdad, fechaHoyIso, textoEdad, parsearFechaIso } from '../utils/edad.js'
 import { consentimientoService, consentimientoEstado, formatearFechaHora } from '../services/consentimientoService'
@@ -761,6 +767,16 @@ defineExpose({
   padding: 1rem 0.25rem;
   color: var(--color-muted, #64748b);
   font-size: 0.9rem;
+}
+
+.nota-clase {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-muted);
 }
 
 .card-header-flex {
