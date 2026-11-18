@@ -18,8 +18,34 @@
         {{ feedbackMensaje }}
       </div>
 
+      <!-- Submenú: cada sección se muestra por separado para no mezclar toda la información -->
+      <div class="admin-tabs" role="tablist" aria-label="Secciones del panel de administración" @keydown="moverConTeclado">
+        <button
+          v-for="s in SECCIONES"
+          :id="`tab-${s.id}`"
+          :key="s.id"
+          type="button"
+          role="tab"
+          class="admin-tab"
+          :class="{ 'admin-tab--activa': seccionActiva === s.id }"
+          :aria-selected="seccionActiva === s.id"
+          :aria-controls="`panel-${s.id}`"
+          :tabindex="seccionActiva === s.id ? 0 : -1"
+          @click="seleccionarSeccion(s.id)"
+        >
+          <span class="admin-tab-titulo">{{ s.titulo }}</span>
+          <span class="admin-tab-desc">{{ s.descripcion }}</span>
+        </button>
+      </div>
+
       <!-- SECCIÓN: Gestión y Asignación de Roles -->
-      <div class="admin-section">
+      <div
+        v-if="seccionActiva === 'cuentas'"
+        id="panel-cuentas"
+        class="admin-section mt-4"
+        role="tabpanel"
+        aria-labelledby="tab-cuentas"
+      >
         <div class="section-top">
           <h2 class="section-title">Cuentas y Asignación de Roles</h2>
           <div class="search-box">
@@ -85,6 +111,12 @@
         </div>
       </div>
 
+      <div
+        v-if="seccionActiva === 'auditoria'"
+        id="panel-auditoria"
+        role="tabpanel"
+        aria-labelledby="tab-auditoria"
+      >
       <!-- SECCIÓN: Registro General de Auditoría del Sistema -->
       <RegistroAuditoriaPanel ref="panelAuditoriaGeneral" class="mt-4" />
 
@@ -152,17 +184,32 @@
           </table>
         </div>
       </div>
+      </div>
 
       <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad -->
-      <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+      <div
+        v-if="seccionActiva === 'rangos'"
+        id="panel-rangos"
+        role="tabpanel"
+        aria-labelledby="tab-rangos"
+      >
+        <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+      </div>
 
       <!-- SECCIÓN: Método de sincronización, contenidos y propuestas de profesores -->
-      <MetodoSincronizacionPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
-      <ContenidosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
-      <PropuestasPanel class="mt-4" modo="admin" />
+      <div
+        v-if="seccionActiva === 'contenidos'"
+        id="panel-contenidos"
+        role="tabpanel"
+        aria-labelledby="tab-contenidos"
+      >
+        <MetodoSincronizacionPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+        <ContenidosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+        <PropuestasPanel class="mt-4" modo="admin" />
+      </div>
 
       <!-- SECCIÓN: Primer Administrador (Arranque Inicial) -->
-      <div class="seed-card card mt-4">
+      <div v-if="seccionActiva === 'cuentas'" class="seed-card card mt-4">
         <h2 class="section-title">Inicialización del Sistema</h2>
         <p class="section-desc">
           Verificación de la cuenta raíz predeterminada en código.
@@ -309,7 +356,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import RegistroAuditoriaPanel from '../components/RegistroAuditoriaPanel.vue'
 import RangosPanel from '../components/RangosPanel.vue'
@@ -328,6 +376,47 @@ import {
 import { obtenerEtiquetaPerfil } from '../utils/roles'
 
 const { currentUserId, currentUserEmail, currentUserName, isAdmin, refrescarPerfil } = useAuth()
+
+// Submenú del panel. La sección activa se guarda en la URL (?seccion=...) para poder recargar o compartir el enlace.
+const SECCIONES = [
+  { id: 'cuentas', titulo: 'Cuentas y roles', descripcion: 'Usuarios, roles y permisos' },
+  { id: 'auditoria', titulo: 'Auditoría', descripcion: 'Registro de eventos y alertas' },
+  { id: 'rangos', titulo: 'Rangos', descripcion: 'BPM y SpO₂ por edad y actividad' },
+  { id: 'contenidos', titulo: 'Contenidos', descripcion: 'Sincronización, lecciones y propuestas' }
+]
+const IDS_SECCION = SECCIONES.map(s => s.id)
+const ruta = useRoute()
+const enrutador = useRouter()
+const seccionDesdeUrl = () => {
+  const pedida = Array.isArray(ruta.query.seccion) ? ruta.query.seccion[0] : ruta.query.seccion
+  return IDS_SECCION.includes(pedida) ? pedida : 'cuentas'
+}
+const seccionActiva = ref(seccionDesdeUrl())
+
+const seleccionarSeccion = (id) => {
+  if (!IDS_SECCION.includes(id)) return
+  seccionActiva.value = id
+  if (ruta.query.seccion !== id) {
+    enrutador.replace({ query: { ...ruta.query, seccion: id } })
+  }
+}
+
+// Flechas izquierda/derecha, Inicio y Fin para moverse entre pestañas con el teclado
+const moverConTeclado = (evento) => {
+  const teclas = { ArrowRight: 1, ArrowLeft: -1 }
+  let indice = IDS_SECCION.indexOf(seccionActiva.value)
+  if (evento.key in teclas) indice = (indice + teclas[evento.key] + IDS_SECCION.length) % IDS_SECCION.length
+  else if (evento.key === 'Home') indice = 0
+  else if (evento.key === 'End') indice = IDS_SECCION.length - 1
+  else return
+  evento.preventDefault()
+  seleccionarSeccion(IDS_SECCION[indice])
+  document.getElementById(`tab-${IDS_SECCION[indice]}`)?.focus()
+}
+
+watch(() => ruta.query.seccion, () => {
+  seccionActiva.value = seccionDesdeUrl()
+})
 
 const cuentas = ref([])
 const filtroBusqueda = ref('')
@@ -554,6 +643,66 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1.5rem;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.35rem;
+  border-bottom: 2px solid var(--color-border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.admin-tab {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  min-width: 150px;
+  padding: 0.65rem 1rem;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  background: none;
+  color: var(--color-muted);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0.5rem 0.5rem 0 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.admin-tab:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.admin-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.admin-tab-titulo {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.admin-tab-desc {
+  font-size: 0.74rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.admin-tab--activa {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  background: var(--color-bg);
+}
+
+@media (max-width: 640px) {
+  .admin-tab { min-width: 0; padding: 0.55rem 0.8rem; }
+  .admin-tab-desc { display: none; }
 }
 
 .header-desc {
