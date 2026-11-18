@@ -13,7 +13,10 @@
 | Filtrado en el servidor | Función `listar_auditoria()` (paginada, máx. 200 por consulta). Ya no hay tope de 200 eventos en el navegador. |
 | Contadores | `resumen_auditoria()` entrega los totales por categoría y de sospechosos. |
 | Detalle | «Ver detalle completo» muestra el JSON del evento (actor, IP, detalle). |
-| Exportar CSV | Exporta la página actual; la descarga queda auditada como `descarga` (`auditoria_csv`) y se neutralizan fórmulas de hoja de cálculo. |
+| Exportar Excel | Descarga un `.xlsx` con formato: hoja «Eventos» (encabezado de color, filtros automáticos, fila de títulos fija, filas sospechosas en rojo, fecha real en hora de Chile) y hoja «Resumen» (totales, por categoría y por motivo). Incluye quién lo generó y los filtros aplicados. |
+| Exportar CSV | Mismos datos en CSV separado por `;` (para Excel en español), con BOM UTF-8 y sin fórmulas peligrosas. |
+| Alcance de la exportación | Todo lo que cumple los filtros (hasta 2000 eventos, los más recientes), no solo la página visible. Cada descarga queda auditada como `descarga` (`auditoria_xlsx` o `auditoria_csv`). |
+| Pestañas del panel de administración | Cuentas y roles · Auditoría · Rangos · Contenidos. La sección activa se guarda en la URL (`/admin?seccion=auditoria`). |
 | Errores | Si la consulta falla se muestra un aviso con «Reintentar» (antes aparecía «sin eventos»). |
 
 ## Qué se marca como sospechoso (servidor, al insertar)

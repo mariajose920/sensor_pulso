@@ -4,7 +4,7 @@
 --    Los registros son inmutables (RF63): la marca se decide al insertar y no se puede cambiar después.
 -- 2. listar_auditoria(): consulta paginada y filtrada (fechas, acciones, actor, IP, texto, solo sospechosos).
 -- 3. resumen_auditoria(): totales por acción y de sospechosos para los contadores del panel.
--- 4. registrar_descarga() acepta 'auditoria_csv' para que exportar el registro también quede auditado (RF62).
+-- 4. registrar_descarga() acepta 'auditoria_csv' y 'auditoria_xlsx' para que exportar el registro también quede auditado (RF62).
 -- Las tres funciones de lectura exigen es_admin() (que incluye MFA) y no se otorgan a anon.
 
 create index if not exists auditoria_sospechoso_idx
@@ -195,10 +195,10 @@ create or replace function public.registrar_descarga(p_tipo text, p_entidad_id t
 returns void language plpgsql security definer set search_path = '' as $$
 begin
   if auth.uid() is null then raise exception 'Requiere sesión' using errcode = '42501'; end if;
-  if p_tipo not in ('informe_pdf','datos_csv','grafico_imagen','auditoria_csv') then
+  if p_tipo not in ('informe_pdf','datos_csv','grafico_imagen','auditoria_csv','auditoria_xlsx') then
     raise exception 'Tipo de descarga no válido';
   end if;
-  if p_tipo = 'auditoria_csv' and not public.es_admin() then
+  if p_tipo in ('auditoria_csv','auditoria_xlsx') and not public.es_admin() then
     raise exception 'Solo el administrador puede exportar la auditoría' using errcode = '42501';
   end if;
   perform public.registrar_auditoria('descarga', 'descargas', p_entidad_id, jsonb_build_object('tipo', p_tipo));

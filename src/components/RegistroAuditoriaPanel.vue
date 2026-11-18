@@ -19,15 +19,26 @@
         </p>
       </div>
 
-      <button
-        type="button"
-        class="btn btn-secondary btn-sm btn-refresh"
-        :disabled="exportando || eventos.length === 0"
-        title="Descarga en CSV los eventos de la página actual; la descarga queda registrada en la auditoría"
-        @click="exportarCsv"
-      >
-        {{ exportando ? 'Exportando...' : 'Exportar CSV' }}
-      </button>
+      <div class="exportar-grupo" role="group" aria-label="Exportar el registro">
+        <button
+          type="button"
+          class="btn btn-primary btn-sm btn-refresh"
+          :disabled="exportando || total === 0"
+          :title="`Descarga en Excel (con formato) los ${Math.min(total, MAX_EVENTOS_EXPORTACION)} eventos que cumplen los filtros; la descarga queda registrada en la auditoría`"
+          @click="exportar('xlsx')"
+        >
+          {{ exportando === 'xlsx' ? 'Generando...' : 'Exportar Excel' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm btn-refresh"
+          :disabled="exportando || total === 0"
+          title="Descarga los mismos eventos en CSV (separado por punto y coma, para Excel en español)"
+          @click="exportar('csv')"
+        >
+          {{ exportando === 'csv' ? 'Generando...' : 'CSV' }}
+        </button>
+      </div>
 
       <button
         type="button"
@@ -42,6 +53,16 @@
         </svg>
         {{ cargando ? 'Actualizando...' : 'Actualizar Registro' }}
       </button>
+    </div>
+
+    <!-- Resultado de la exportación: justo bajo los botones para que siempre se vea -->
+    <div
+      v-if="mensajeExportacion"
+      class="aviso-export"
+      :class="{ 'aviso-export--error': errorExportacion }"
+      :role="errorExportacion ? 'alert' : 'status'"
+    >
+      {{ mensajeExportacion }}
     </div>
 
     <!-- Barra de filtros por categoría y búsqueda -->
@@ -168,7 +189,6 @@
       No se pudo consultar el registro de auditoría: {{ errorCarga }}
       <button type="button" class="btn btn-secondary btn-sm" @click="cargarEventos">Reintentar</button>
     </div>
-    <div v-if="mensajeExportacion" class="aviso-export" role="status">{{ mensajeExportacion }}</div>
 
     <!-- Estado de carga / vacío -->
     <div v-if="cargando && eventos.length === 0" class="loading-state">
@@ -240,7 +260,25 @@
           </tr>
           <tr v-if="expandidos.has(ev.id)" class="fila-detalle">
             <td colspan="5">
-              <pre class="detalle-json">{{ detalleJson(ev) }}</pre>
+              <div class="detalle-ficha" :class="{ 'detalle-ficha--alerta': ev.sospechoso }">
+                <p class="detalle-ficha-resumen">
+                  <strong>{{ ev.etiquetaAccion }}.</strong>
+                  {{ formatearResumen(ev.resumen) }}
+                </p>
+                <p v-if="ev.motivoSospecha" class="detalle-ficha-alerta">
+                  Alerta de seguridad: {{ ev.motivoSospecha }}.
+                </p>
+                <dl class="detalle-lista">
+                  <div v-for="campo in camposDetalle(ev)" :key="campo.etiqueta" class="detalle-campo">
+                    <dt>{{ campo.etiqueta }}</dt>
+                    <dd>{{ campo.valor }}</dd>
+                  </div>
+                </dl>
+                <details class="detalle-tecnico">
+                  <summary>Ver datos técnicos (para revisión avanzada)</summary>
+                  <pre class="detalle-json">{{ detalleJson(ev) }}</pre>
+                </details>
+              </div>
             </td>
           </tr>
           </template>
@@ -274,17 +312,23 @@ import {
   ETIQUETAS_ACCION_AUDITORIA,
   TAMANOS_PAGINA_AUDITORIA,
   listarAuditoriaPaginada,
+  MAX_EVENTOS_EXPORTACION,
   resumirAuditoria,
-  exportarAuditoriaCsv
+  exportarAuditoria,
+  detalleLegible
 } from '../services/auditoriaService.js'
+import { useAuth } from '../composables/useAuth'
+
+const { currentUserName } = useAuth()
 
 const eventos = ref([])
 const total = ref(0)
 const conteos = ref({ todos: 0, sospechosos: 0 })
 const cargando = ref(false)
 const errorCarga = ref('')
-const exportando = ref(false)
+const exportando = ref('')
 const mensajeExportacion = ref('')
+const errorExportacion = ref(false)
 const expandidos = ref(new Set())
 
 const categoriaActiva = ref('todos')
@@ -384,6 +428,8 @@ function alternarDetalle(id) {
   expandidos.value = copia
 }
 
+const camposDetalle = detalleLegible
+
 function detalleJson(ev) {
   return JSON.stringify(
     {
@@ -403,16 +449,47 @@ function detalleJson(ev) {
   )
 }
 
-async function exportarCsv() {
-  exportando.value = true
+const MOTIVOS_EXPORTACION = {
+  sin_eventos: 'No hay eventos para exportar con los filtros actuales.',
+  consulta_fallida: 'No se pudo leer el registro desde el servidor.',
+  auditoria_rechazada: 'El servidor no registró la descarga en la auditoría, por eso no se entregó el archivo.',
+  sin_conexion: 'No hay conexión con el servidor.',
+  error_inesperado: 'Ocurrió un error inesperado al generar el archivo.'
+}
+
+async function exportar(formato) {
+  exportando.value = formato
   mensajeExportacion.value = ''
+  errorExportacion.value = false
   try {
-    const res = await exportarAuditoriaCsv(eventos.value)
-    mensajeExportacion.value = res.ok
-      ? 'CSV generado. La descarga quedó registrada en la auditoría.'
-      : 'No se pudo exportar: el servidor no registró la descarga en la auditoría.'
+    const res = await exportarAuditoria({
+      formato,
+      generadoPor: currentUserName.value || '',
+      filtros: {
+        categoria: categoriaActiva.value,
+        accion: accion.value,
+        desde: desde.value,
+        hasta: hasta.value,
+        actor: actor.value,
+        ip: ip.value,
+        busqueda: busqueda.value,
+        soloSospechosos: soloSospechosos.value
+      }
+    })
+    if (res.ok) {
+      const parcial = res.total > res.cantidad ? ` (los ${res.cantidad} más recientes de ${res.total})` : ''
+      mensajeExportacion.value =
+        `Archivo ${formato === 'csv' ? 'CSV' : 'Excel'} descargado con ${res.cantidad} evento(s)${parcial}. La descarga quedó registrada en la auditoría.`
+    } else {
+      errorExportacion.value = true
+      const detalle = res.error ? ` (${res.error})` : ''
+      mensajeExportacion.value = `No se pudo exportar. ${MOTIVOS_EXPORTACION[res.motivo] || ''}${detalle}`.trim()
+    }
+  } catch (err) {
+    errorExportacion.value = true
+    mensajeExportacion.value = `No se pudo exportar. ${err?.message || 'Error inesperado.'}`
   } finally {
-    exportando.value = false
+    exportando.value = ''
   }
 }
 
@@ -524,6 +601,12 @@ defineExpose({ cargarEventos })
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
   letter-spacing: 0.01em;
+}
+
+.exportar-grupo {
+  display: inline-flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 .btn-refresh {
@@ -914,12 +997,72 @@ defineExpose({ cargarEventos })
 }
 
 .fila-detalle td {
-  background: #0f172a;
-  padding: 0.6rem 0.85rem;
+  background: #f8fafc;
+  padding: 0.75rem 0.85rem;
+}
+
+.detalle-ficha {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #0284c7;
+  border-radius: 0.5rem;
+  padding: 0.85rem 1rem;
+}
+
+.detalle-ficha--alerta {
+  border-left-color: #dc2626;
+}
+
+.detalle-ficha-resumen {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.detalle-ficha-alerta {
+  margin: 0 0 0.6rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 0.4rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.detalle-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.6rem 1.25rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.detalle-campo dt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.detalle-campo dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.86rem;
+  color: #1e293b;
+  overflow-wrap: anywhere;
+}
+
+.detalle-tecnico summary {
+  cursor: pointer;
+  font-size: 0.74rem;
+  color: #64748b;
 }
 
 .detalle-json {
-  margin: 0;
+  margin: 0.4rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.4rem;
+  background: #0f172a;
   color: #e2e8f0;
   font-size: 0.74rem;
   white-space: pre-wrap;
@@ -952,6 +1095,12 @@ defineExpose({ cargarEventos })
   background: #fef2f2;
   color: #b91c1c;
   font-size: 0.85rem;
+}
+
+.aviso-export--error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .aviso-export {
