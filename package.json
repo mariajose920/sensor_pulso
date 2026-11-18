@@ -21,6 +21,7 @@
     "test:rf47": "node scripts/test-rf47-contrastar-datasets.js",
     "test:rf62": "node scripts/test-rf62-auditoria.mjs",
     "test:rf63": "node scripts/test-rf63-registros-inmutables.js",
+    "test:rf64": "node scripts/test-rf64-panel-auditoria.mjs",
     "test:rf29": "node scripts/test-rf29-analisis-comparacion.mjs",
     "test:rf112": "node scripts/test-rf112-umbrales-nivel.mjs",
     "test:rf65": "node scripts/test-rf65-validar-sanitizar.js",

@@ -22,6 +22,16 @@
       <button
         type="button"
         class="btn btn-secondary btn-sm btn-refresh"
+        :disabled="exportando || eventos.length === 0"
+        title="Descarga en CSV los eventos de la página actual; la descarga queda registrada en la auditoría"
+        @click="exportarCsv"
+      >
+        {{ exportando ? 'Exportando...' : 'Exportar CSV' }}
+      </button>
+
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm btn-refresh"
         :disabled="cargando"
         @click="cargarEventos"
       >
@@ -86,6 +96,23 @@
           <span>{{ cat.etiqueta }}</span>
           <span class="cat-count">{{ conteos[cat.id] || 0 }}</span>
         </button>
+
+        <button
+          type="button"
+          class="cat-pill cat-pill--sospechosos"
+          :class="{ 'cat-pill--activa-alerta': soloSospechosos }"
+          :aria-pressed="soloSospechosos"
+          title="Muestra solo los eventos que el sistema marcó como sospechosos"
+          @click="soloSospechosos = !soloSospechosos"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>Solo sospechosos</span>
+          <span class="cat-count">{{ conteos.sospechosos || 0 }}</span>
+        </button>
       </div>
 
       <div class="auditoria-search">
@@ -101,19 +128,59 @@
           aria-label="Buscar en el registro de auditoría"
         />
       </div>
+
+      <div class="auditoria-filtros">
+        <label class="filtro-campo">
+          <span>Desde</span>
+          <input v-model="desde" type="date" class="form-input" :max="hasta || undefined" />
+        </label>
+        <label class="filtro-campo">
+          <span>Hasta</span>
+          <input v-model="hasta" type="date" class="form-input" :min="desde || undefined" />
+        </label>
+        <label class="filtro-campo">
+          <span>Acción</span>
+          <select v-model="accion" class="form-input">
+            <option value="">Todas</option>
+            <option v-for="op in opcionesAccion" :key="op.valor" :value="op.valor">{{ op.etiqueta }}</option>
+          </select>
+        </label>
+        <label class="filtro-campo">
+          <span>Usuario o correo</span>
+          <input v-model="actor" type="search" class="form-input" placeholder="nombre o correo" maxlength="120" />
+        </label>
+        <label class="filtro-campo">
+          <span>IP</span>
+          <input v-model="ip" type="search" class="form-input" placeholder="p. ej. 190.20." maxlength="45" />
+        </label>
+        <button
+          type="button"
+          class="btn btn-secondary btn-sm"
+          :disabled="!hayFiltros"
+          @click="limpiarFiltros"
+        >
+          Limpiar filtros
+        </button>
+      </div>
     </div>
+
+    <div v-if="errorCarga" class="error-state" role="alert">
+      No se pudo consultar el registro de auditoría: {{ errorCarga }}
+      <button type="button" class="btn btn-secondary btn-sm" @click="cargarEventos">Reintentar</button>
+    </div>
+    <div v-if="mensajeExportacion" class="aviso-export" role="status">{{ mensajeExportacion }}</div>
 
     <!-- Estado de carga / vacío -->
     <div v-if="cargando && eventos.length === 0" class="loading-state">
       Cargando eventos del registro inmutable de auditoría...
     </div>
 
-    <div v-else-if="eventosFiltrados.length === 0" class="empty-state">
+    <div v-else-if="!errorCarga && eventos.length === 0" class="empty-state">
       No se encontraron eventos auditados que coincidan con el filtro seleccionado.
     </div>
 
     <!-- Tabla de Eventos Auditados -->
-    <div v-else class="table-responsive">
+    <div v-else-if="eventos.length > 0" class="table-responsive">
       <table class="auditoria-general-table">
         <colgroup>
           <col class="col-w-fecha" />
@@ -132,7 +199,8 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="ev in eventosFiltrados" :key="ev.id">
+          <template v-for="ev in eventos" :key="ev.id">
+          <tr :class="{ 'fila-sospechosa': ev.sospechoso }">
             <td class="col-fecha">
               <div class="fecha-badge">
                 <span class="fecha-dia">{{ separarFechaHora(ev.ocurrioEn).fecha }}</span>
@@ -143,6 +211,7 @@
               <span class="cat-badge" :class="claseBadgeAccion(ev)">
                 {{ ev.etiquetaAccion }}
               </span>
+              <span v-if="ev.sospechoso" class="badge-sospechoso">Sospechoso</span>
             </td>
             <td class="col-actor">
               <strong class="actor-nombre">{{ ev.actorNombre }}</strong>
@@ -156,43 +225,196 @@
             <td class="col-detalle">
               <div class="detalle-box" :class="`detalle-box--${ev.categoria}`">
                 <span class="detalle-resumen">{{ formatearResumen(ev.resumen) }}</span>
+                <span v-if="ev.motivoSospecha" class="detalle-motivo">Motivo: {{ ev.motivoSospecha }}</span>
+                <span v-if="ev.ip" class="detalle-ip">IP: <code>{{ ev.ip }}</code></span>
+                <button
+                  type="button"
+                  class="btn-detalle"
+                  :aria-expanded="expandidos.has(ev.id)"
+                  @click="alternarDetalle(ev.id)"
+                >
+                  {{ expandidos.has(ev.id) ? 'Ocultar detalle' : 'Ver detalle completo' }}
+                </button>
               </div>
             </td>
           </tr>
+          <tr v-if="expandidos.has(ev.id)" class="fila-detalle">
+            <td colspan="5">
+              <pre class="detalle-json">{{ detalleJson(ev) }}</pre>
+            </td>
+          </tr>
+          </template>
         </tbody>
       </table>
     </div>
 
     <div class="auditoria-footer">
       <span class="auditoria-footer-note">
-        Mostrando <strong>{{ eventosFiltrados.length }}</strong> de <strong>{{ eventos.length }}</strong> eventos registrados · Solo lectura (sin permisos de edición ni eliminación).
+        Mostrando <strong>{{ eventos.length }}</strong> de <strong>{{ total }}</strong> eventos que cumplen los filtros · Solo lectura (sin permisos de edición ni eliminación).
       </span>
+      <div class="paginacion">
+        <label class="paginacion-tamano">
+          Por página
+          <select v-model.number="porPagina" class="form-input">
+            <option v-for="n in TAMANOS_PAGINA_AUDITORIA" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="pagina <= 1 || cargando" @click="pagina--">Anterior</button>
+        <span>Página {{ pagina }} de {{ totalPaginas }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" :disabled="pagina >= totalPaginas || cargando" @click="pagina++">Siguiente</button>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import {
   CATEGORIAS_AUDITORIA,
-  listarEventosAuditoria,
-  filtrarEventosAuditoria,
-  contarPorCategoria
+  ETIQUETAS_ACCION_AUDITORIA,
+  TAMANOS_PAGINA_AUDITORIA,
+  listarAuditoriaPaginada,
+  resumirAuditoria,
+  exportarAuditoriaCsv
 } from '../services/auditoriaService.js'
 
 const eventos = ref([])
+const total = ref(0)
+const conteos = ref({ todos: 0, sospechosos: 0 })
 const cargando = ref(false)
+const errorCarga = ref('')
+const exportando = ref(false)
+const mensajeExportacion = ref('')
+const expandidos = ref(new Set())
+
 const categoriaActiva = ref('todos')
+const soloSospechosos = ref(false)
 const busqueda = ref('')
+const desde = ref('')
+const hasta = ref('')
+const accion = ref('')
+const actor = ref('')
+const ip = ref('')
+const pagina = ref(1)
+const porPagina = ref(TAMANOS_PAGINA_AUDITORIA[1])
 
-const conteos = computed(() => contarPorCategoria(eventos.value))
+const opcionesAccion = Object.entries(ETIQUETAS_ACCION_AUDITORIA)
+  .map(([valor, etiqueta]) => ({ valor, etiqueta }))
+  .sort((x, y) => x.etiqueta.localeCompare(y.etiqueta, 'es'))
 
-const eventosFiltrados = computed(() =>
-  filtrarEventosAuditoria(eventos.value, {
-    categoria: categoriaActiva.value,
-    busqueda: busqueda.value
-  })
+const totalPaginas = computed(() => Math.max(1, Math.ceil(total.value / porPagina.value)))
+const hayFiltros = computed(() =>
+  Boolean(busqueda.value || desde.value || hasta.value || accion.value || actor.value || ip.value ||
+    soloSospechosos.value || categoriaActiva.value !== 'todos')
 )
+
+let ultimaConsulta = 0
+let temporizador = null
+
+async function cargarEventos() {
+  const consulta = ++ultimaConsulta
+  cargando.value = true
+  errorCarga.value = ''
+  try {
+    const [lista, resumen] = await Promise.all([
+      listarAuditoriaPaginada({
+        categoria: categoriaActiva.value,
+        accion: accion.value,
+        desde: desde.value,
+        hasta: hasta.value,
+        actor: actor.value,
+        ip: ip.value,
+        busqueda: busqueda.value,
+        soloSospechosos: soloSospechosos.value,
+        pagina: pagina.value,
+        porPagina: porPagina.value
+      }),
+      resumirAuditoria({ desde: desde.value, hasta: hasta.value })
+    ])
+    if (consulta !== ultimaConsulta) return // llegó una consulta más nueva: se descarta esta
+    if (!lista.ok) {
+      errorCarga.value = lista.error
+      eventos.value = []
+      total.value = 0
+    } else {
+      eventos.value = lista.eventos
+      total.value = lista.total
+      expandidos.value = new Set()
+      // Si se pidió una página que ya no existe (p. ej. bajó el total), vuelve a la última
+      if (lista.eventos.length === 0 && lista.total > 0 && pagina.value > 1) {
+        pagina.value = totalPaginas.value
+      }
+    }
+    if (resumen.ok) conteos.value = resumen.conteos
+  } finally {
+    if (consulta === ultimaConsulta) cargando.value = false
+  }
+}
+
+// Filtros que consultan al instante y vuelven a la primera página
+watch([categoriaActiva, soloSospechosos, desde, hasta, accion, porPagina], () => {
+  if (pagina.value !== 1) pagina.value = 1
+  else cargarEventos()
+})
+// Texto libre: espera a que el administrador deje de escribir
+watch([busqueda, actor, ip], () => {
+  clearTimeout(temporizador)
+  temporizador = setTimeout(() => {
+    if (pagina.value !== 1) pagina.value = 1
+    else cargarEventos()
+  }, 350)
+})
+watch(pagina, cargarEventos)
+
+function limpiarFiltros() {
+  busqueda.value = ''
+  desde.value = ''
+  hasta.value = ''
+  accion.value = ''
+  actor.value = ''
+  ip.value = ''
+  soloSospechosos.value = false
+  categoriaActiva.value = 'todos'
+}
+
+function alternarDetalle(id) {
+  const copia = new Set(expandidos.value)
+  if (copia.has(id)) copia.delete(id)
+  else copia.add(id)
+  expandidos.value = copia
+}
+
+function detalleJson(ev) {
+  return JSON.stringify(
+    {
+      id: ev.id,
+      ocurrio_en: ev.ocurrioEn,
+      accion: ev.accion,
+      actor_id: ev.actorId,
+      actor: ev.actorCorreo,
+      entidad: ev.entidad,
+      entidad_id: ev.entidadId,
+      ip: ev.ip,
+      sospechoso: ev.sospechoso,
+      detalle: ev.detalle
+    },
+    null,
+    2
+  )
+}
+
+async function exportarCsv() {
+  exportando.value = true
+  mensajeExportacion.value = ''
+  try {
+    const res = await exportarAuditoriaCsv(eventos.value)
+    mensajeExportacion.value = res.ok
+      ? 'CSV generado. La descarga quedó registrada en la auditoría.'
+      : 'No se pudo exportar: el servidor no registró la descarga en la auditoría.'
+  } finally {
+    exportando.value = false
+  }
+}
 
 function claseBadgeAccion(ev) {
   if (ev.accion === 'login_fallido' || ev.accion === 'bloqueo_cuenta') {
@@ -225,15 +447,6 @@ function formatearResumen(texto) {
   return String(texto).replace(/\s*->\s*/g, ' → ')
 }
 
-async function cargarEventos() {
-  cargando.value = true
-  try {
-    eventos.value = await listarEventosAuditoria({ limite: 200 })
-  } finally {
-    cargando.value = false
-  }
-}
-
 function alActualizarAuditoria() {
   cargarEventos()
 }
@@ -246,6 +459,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  clearTimeout(temporizador)
   if (typeof window !== 'undefined') {
     window.removeEventListener('auditoria-actualizada', alActualizarAuditoria)
   }
@@ -608,12 +822,145 @@ defineExpose({ cargarEventos })
 }
 
 .auditoria-footer {
+  flex-wrap: wrap;
+  gap: 0.6rem;
   margin-top: 0.75rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 0.78rem;
   color: #64748b;
+}
+
+.cat-pill--sospechosos {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.cat-pill--activa-alerta {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: #ffffff;
+}
+
+.cat-pill--activa-alerta .cat-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.auditoria-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+}
+
+.filtro-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #475569;
+  min-width: 140px;
+  flex: 1 1 140px;
+}
+
+.filtro-campo .form-input {
+  font-size: 0.82rem;
+}
+
+.fila-sospechosa {
+  background: #fef2f2;
+}
+
+.fila-sospechosa:hover {
+  background: #fee2e2 !important;
+}
+
+.badge-sospechoso {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #b91c1c;
+}
+
+.detalle-motivo {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.detalle-ip {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.74rem;
+  color: #64748b;
+}
+
+.btn-detalle {
+  margin-top: 0.3rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #0369a1;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.fila-detalle td {
+  background: #0f172a;
+  padding: 0.6rem 0.85rem;
+}
+
+.detalle-json {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 0.74rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.paginacion {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.paginacion-tamano {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.error-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+.aviso-export {
+  margin-bottom: 0.85rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.5rem;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 0.82rem;
 }
 
 .loading-state,

@@ -57,7 +57,7 @@ export const CATEGORIAS_AUDITORIA = Object.freeze([
     id: 'eliminacion',
     etiqueta: 'Eliminaciones',
     etiquetaSingular: 'Eliminación',
-    acciones: ['eliminacion', 'supresion_datos', 'retiro_estudiante'],
+    acciones: ['eliminacion', 'eliminacion_aula', 'supresion_datos', 'retiro_estudiante', 'retiro_estudiantes'],
     claseBadge: 'badge-cat-eliminacion'
   }
 ])
@@ -75,7 +75,9 @@ export const ETIQUETAS_ACCION_AUDITORIA = Object.freeze({
   retiro_publicacion: 'Retiro de Publicación',
   eliminacion: 'Eliminación',
   supresion_datos: 'Supresión de Datos',
-  retiro_estudiante: 'Retiro de Estudiante'
+  retiro_estudiante: 'Retiro de Estudiante',
+  retiro_estudiantes: 'Retiro de Estudiantes',
+  eliminacion_aula: 'Eliminación de Aula'
 })
 
 /**
@@ -133,6 +135,7 @@ function construirEntidadTexto(raw, categoria) {
     if (tipo === 'informe_pdf') return 'Informe Clínico PDF'
     if (tipo === 'datos_csv') return ' Señal Fisiológica CSV'.trim()
     if (tipo === 'grafico_imagen') return 'Gráfico Comparativo PNG'
+    if (tipo === 'auditoria_csv') return 'Registro de Auditoría CSV'
     if (raw?.accion === 'exportacion_datos') return 'Portabilidad de Datos Personales (JSON)'
     return 'Archivo Exportado'
   }
@@ -250,6 +253,7 @@ export function normalizarEventoAuditoria(raw = {}) {
     detalle: Object.freeze({ ...det }),
     ip: raw.ip || det.ip || null,
     sospechoso: Boolean(raw.sospechoso),
+    motivoSospecha: det.motivo_sospecha ? String(det.motivo_sospecha) : '',
     inmutable: true
   }
 
@@ -321,12 +325,13 @@ export async function registrarEventoAuditoria({
 /**
  * Filtra una lista de eventos normalizados por categoría y texto libre de búsqueda.
  */
-export function filtrarEventosAuditoria(eventos = [], { categoria = 'todos', busqueda = '' } = {}) {
+export function filtrarEventosAuditoria(eventos = [], { categoria = 'todos', busqueda = '', soloSospechosos = false } = {}) {
   const cat = String(categoria || 'todos').toLowerCase()
   const q = String(busqueda || '').trim().toLowerCase()
 
   return eventos.filter(ev => {
     if (cat !== 'todos' && ev.categoria !== cat) return false
+    if (soloSospechosos && !ev.sospechoso) return false
     if (!q) return true
     const texto = `${ev.etiquetaCategoria} ${ev.accion} ${ev.actorNombre} ${ev.actorCorreo} ${ev.entidadTexto} ${ev.detalleTexto}`.toLowerCase()
     return texto.includes(q)
@@ -381,6 +386,158 @@ export async function listarEventosAuditoria({ categoria = 'todos', busqueda = '
 
   const filtrados = filtrarEventosAuditoria(todosOrdenados, { categoria, busqueda })
   return Object.freeze(filtrados)
+}
+
+// ----------------------------------------------------------------------------
+// PANEL DE REVISIÓN DEL ADMINISTRADOR (RF64): filtros en el servidor, paginación, resumen y CSV
+// ----------------------------------------------------------------------------
+
+export const TAMANOS_PAGINA_AUDITORIA = Object.freeze([25, 50, 100])
+
+/** Acciones de base de datos que pertenecen a una categoría (vacío si es 'todos' o no existe). */
+export function accionesDeCategoria(categoriaId) {
+  const cat = CATEGORIAS_AUDITORIA.find(c => c.id === categoriaId)
+  return cat && cat.id !== 'todos' ? [...cat.acciones] : []
+}
+
+/** Convierte 'YYYY-MM-DD' (campo de fecha) en un instante ISO local; `finDeDia` usa las 23:59:59.999. */
+export function fechaAIso(fecha, finDeDia = false) {
+  if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) return null
+  const [y, m, d] = String(fecha).split('-').map(Number)
+  const dt = finDeDia ? new Date(y, m - 1, d, 23, 59, 59, 999) : new Date(y, m - 1, d, 0, 0, 0, 0)
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString()
+}
+
+/**
+ * Traduce los filtros del panel a los parámetros de la función `listar_auditoria`.
+ * Si la fecha de inicio es posterior a la de término, se intercambian.
+ */
+export function construirParametrosListado({
+  categoria = 'todos',
+  accion = '',
+  desde = '',
+  hasta = '',
+  actor = '',
+  ip = '',
+  busqueda = '',
+  soloSospechosos = false,
+  pagina = 1,
+  porPagina = 50
+} = {}) {
+  let pDesde = fechaAIso(desde, false)
+  let pHasta = fechaAIso(hasta, true)
+  if (pDesde && pHasta && pDesde > pHasta) {
+    const hastaOriginal = fechaAIso(desde, true)
+    const desdeOriginal = fechaAIso(hasta, false)
+    pDesde = desdeOriginal
+    pHasta = hastaOriginal
+  }
+  const tamano = Math.min(200, Math.max(1, Math.trunc(Number(porPagina)) || 50))
+  const pag = Math.max(1, Math.trunc(Number(pagina)) || 1)
+  const acciones = accion ? [String(accion)] : accionesDeCategoria(categoria)
+  return {
+    p_desde: pDesde,
+    p_hasta: pHasta,
+    p_acciones: acciones.length ? acciones : null,
+    p_actor: String(actor || '').trim() || null,
+    p_ip: String(ip || '').trim() || null,
+    p_busqueda: String(busqueda || '').trim() || null,
+    p_solo_sospechosos: Boolean(soloSospechosos),
+    p_limite: tamano,
+    p_desplazamiento: (pag - 1) * tamano
+  }
+}
+
+/**
+ * Consulta una página del registro de auditoría, filtrada en el servidor (solo administrador).
+ * Devuelve { ok, eventos, total } o { ok: false, eventos: [], total: 0, error }.
+ */
+export async function listarAuditoriaPaginada(filtros = {}) {
+  try {
+    const { data, error } = await supabase.rpc('listar_auditoria', construirParametrosListado(filtros))
+    if (error) {
+      return { ok: false, eventos: [], total: 0, error: error.message || 'No se pudo consultar la auditoría' }
+    }
+    const filas = Array.isArray(data) ? data : []
+    const total = filas.length ? Number(filas[0].total) || filas.length : 0
+    return { ok: true, eventos: filas.map(normalizarEventoAuditoria), total }
+  } catch (err) {
+    return { ok: false, eventos: [], total: 0, error: err?.message || 'Sin conexión con el servidor' }
+  }
+}
+
+/** Convierte el resumen del servidor ({ total, sospechosos, por_accion }) en contadores por categoría. */
+export function resumenACategorias(resumen = {}) {
+  const porAccion = resumen?.por_accion || {}
+  const conteos = { todos: Number(resumen?.total) || 0, sospechosos: Number(resumen?.sospechosos) || 0 }
+  for (const cat of CATEGORIAS_AUDITORIA) {
+    if (cat.id === 'todos') continue
+    conteos[cat.id] = cat.acciones.reduce((acc, a) => acc + (Number(porAccion[a]) || 0), 0)
+  }
+  return conteos
+}
+
+/** Totales por categoría y de sospechosos dentro de un rango de fechas. */
+export async function resumirAuditoria({ desde = '', hasta = '' } = {}) {
+  try {
+    const { data, error } = await supabase.rpc('resumen_auditoria', {
+      p_desde: fechaAIso(desde, false),
+      p_hasta: fechaAIso(hasta, true)
+    })
+    if (error) return { ok: false, conteos: resumenACategorias({}), error: error.message }
+    return { ok: true, conteos: resumenACategorias(data || {}) }
+  } catch (err) {
+    return { ok: false, conteos: resumenACategorias({}), error: err?.message || 'Sin conexión con el servidor' }
+  }
+}
+
+/** Neutraliza fórmulas de hoja de cálculo (=, +, -, @) y escapa comillas para CSV. */
+export function celdaCsvSegura(valor) {
+  let texto = valor === null || valor === undefined ? '' : String(valor)
+  if (/^[=+\-@\t\r]/.test(texto)) texto = `'${texto}`
+  return `"${texto.replace(/"/g, '""')}"`
+}
+
+export const COLUMNAS_CSV_AUDITORIA = Object.freeze([
+  'Fecha y hora (UTC)', 'Acción', 'Categoría', 'Actor', 'Correo', 'Entidad', 'IP', 'Sospechoso', 'Motivo', 'Detalle'
+])
+
+/** Genera el CSV (con BOM para Excel) de una lista de eventos ya normalizados. */
+export function eventosACsv(eventos = []) {
+  const filas = eventos.map(ev => [
+    ev.ocurrioEn, ev.etiquetaAccion, ev.etiquetaCategoria, ev.actorNombre, ev.actorCorreo,
+    ev.entidadTexto, ev.ip || '', ev.sospechoso ? 'Sí' : 'No', ev.motivoSospecha || '', ev.detalleTexto
+  ].map(celdaCsvSegura).join(','))
+  return '﻿' + [COLUMNAS_CSV_AUDITORIA.map(celdaCsvSegura).join(','), ...filas].join('\r\n')
+}
+
+/**
+ * Descarga el CSV de los eventos indicados y deja constancia de la descarga en la auditoría (RF62).
+ * Si el servidor no puede registrar la descarga, no se entrega el archivo.
+ */
+export async function exportarAuditoriaCsv(eventos = []) {
+  if (!eventos.length) return { ok: false, motivo: 'sin_eventos' }
+  try {
+    const { error } = await supabase.rpc('registrar_descarga', { p_tipo: 'auditoria_csv', p_entidad_id: null })
+    if (error) return { ok: false, motivo: 'auditoria_rechazada', error: error.message }
+  } catch (err) {
+    return { ok: false, motivo: 'sin_conexion', error: err?.message || String(err) }
+  }
+  if (typeof document !== 'undefined' && typeof URL !== 'undefined') {
+    const blob = new Blob([eventosACsv(eventos)], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `auditoria-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('auditoria-actualizada'))
+  }
+  return { ok: true }
 }
 
 // ----------------------------------------------------------------------------
