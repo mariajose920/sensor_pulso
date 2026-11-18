@@ -10,6 +10,11 @@
       </p>
     </header>
 
+    <details class="clasificacion-ayuda" data-testid="mis-datos-clasificacion">
+      <summary>¿Cómo se clasifican y protegen mis datos?</summary>
+      <ClasesDatoTarjetas />
+    </details>
+
     <p v-if="aviso.texto" class="alerta" :class="aviso.tipo" role="status" data-testid="mis-datos-aviso">
       {{ aviso.texto }}
     </p>
@@ -589,6 +594,7 @@ import {
 } from '../services/derechosService.js'
 import { NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA } from '../services/pacienteService.js'
 import { PLAZO_RESPUESTA_DIAS } from '../data/politicaPrivacidad.js'
+import ClasesDatoTarjetas from '../components/ClasesDatoTarjetas.vue'
 
 const pestanaActiva = ref('consultar')
 const tipo = ref('')
@@ -892,6 +898,24 @@ async function eliminar() {
   color: var(--color-muted);
   margin: 0;
   line-height: 1.5;
+}
+
+/* Explicación de los tipos de datos (plegable) */
+.clasificacion-ayuda {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-surface);
+}
+.clasificacion-ayuda > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--color-primary);
+}
+.clasificacion-ayuda[open] > summary {
+  margin-bottom: 0.85rem;
 }
 
 /* Tabs de Navegación (mismo diseño que Historial) */

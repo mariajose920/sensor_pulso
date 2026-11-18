@@ -186,6 +186,17 @@
       </div>
       </div>
 
+      <!-- SECCIÓN: Clasificación de los datos (públicos, privados, sensibles de salud) -->
+      <div
+        v-if="seccionActiva === 'clasificacion'"
+        id="panel-clasificacion"
+        class="admin-section mt-4"
+        role="tabpanel"
+        aria-labelledby="tab-clasificacion"
+      >
+        <ClasificacionDatosPanel />
+      </div>
+
       <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad -->
       <div
         v-if="seccionActiva === 'rangos'"
@@ -360,6 +371,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import RegistroAuditoriaPanel from '../components/RegistroAuditoriaPanel.vue'
+import ClasificacionDatosPanel from '../components/ClasificacionDatosPanel.vue'
 import RangosPanel from '../components/RangosPanel.vue'
 import MetodoSincronizacionPanel from '../components/MetodoSincronizacionPanel.vue'
 import ContenidosPanel from '../components/ContenidosPanel.vue'
@@ -381,6 +393,7 @@ const { currentUserId, currentUserEmail, currentUserName, isAdmin, refrescarPerf
 const SECCIONES = [
   { id: 'cuentas', titulo: 'Cuentas y roles', descripcion: 'Usuarios, roles y permisos' },
   { id: 'auditoria', titulo: 'Auditoría', descripcion: 'Registro de eventos y alertas' },
+  { id: 'clasificacion', titulo: 'Clasificación', descripcion: 'Tipos de datos y su tratamiento' },
   { id: 'rangos', titulo: 'Rangos', descripcion: 'BPM y SpO₂ por edad y actividad' },
   { id: 'contenidos', titulo: 'Contenidos', descripcion: 'Sincronización, lecciones y propuestas' }
 ]
