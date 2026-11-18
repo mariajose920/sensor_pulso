@@ -230,8 +230,9 @@ main.container {
   .nav-link { font-size: 0.9rem; }
 }
 
-/* Móvil: barra superior mínima + barra inferior; ambas se ocultan al bajar */
-@media (max-width: 640px) {
+/* Móvil y tablet (hasta 1188 px): barra superior mínima + barra inferior; ambas se ocultan al bajar.
+   Así los enlaces no se despliegan en varias filas y no gastan espacio vertical. */
+@media (max-width: 1188px) {
   .navbar {
     min-height: var(--alto-barra-superior-movil);
     padding-top: max(0.25rem, env(safe-area-inset-top));
@@ -291,6 +292,13 @@ main.container {
   .btn-acceso-texto { display: none; }
   .btn-acceso { width: 44px; padding: 0; }
   .nav-brand-texto { font-size: 1rem; }
+}
+
+/* Tablet: con muchos enlaces (administrador) la barra inferior se desplaza en horizontal en vez de apretarlos */
+@media (min-width: 641px) and (max-width: 1188px) {
+  .bottom-nav { overflow-x: auto; scrollbar-width: none; }
+  .bottom-nav::-webkit-scrollbar { display: none; }
+  .bottom-link { flex: 1 0 auto; min-width: 84px; padding: 0 0.5rem; font-size: 0.75rem; }
 }
 
 @media (min-width: 641px) {
