@@ -9,6 +9,9 @@
       <p class="aviso-educativo">{{ AVISO_EDUCATIVO }}</p>
     </div>
 
+    <!-- La saturación de oxígeno medida con el sensor, también en el inicio del apartado -->
+    <Spo2MedidaResumen />
+
     <section v-if="currentUserId" class="card">
       <h2 class="seccion">Mi progreso e insignias</h2>
       <p v-if="errorProgreso" role="alert">{{ errorProgreso }}</p>
@@ -70,6 +73,7 @@
 <script setup>
 import { computed, ref, onMounted, watch } from 'vue'
 import { useAuth } from '../composables/useAuth.js'
+import Spo2MedidaResumen from '../components/Spo2MedidaResumen.vue'
 import { supabase } from '../services/supabase.js'
 import { AVISO_EDUCATIVO, CATEGORIAS, LECCIONES as LECCIONES_BASE } from '../data/lecciones.js'
 import { obtenerLeccionesPlataforma } from '../services/panelAdminService'

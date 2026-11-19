@@ -8,6 +8,8 @@
  * de ritmo, umbrales de SpO₂ y curva SpO₂ = 110 − 25·R del servicio de SpO₂).
  */
 
+import { seleccionarMedida } from '../utils/spo2Aprendizaje.js'
+
 export const CATEGORIAS = {
   fisiologia: 'Fisiología',
   sensor: 'Sensor',
@@ -512,11 +514,12 @@ export function vecinas(slug) {
 }
 
 /**
- * Valor de SpO₂ que muestra la lección (RF115) a partir del historial de la cuenta:
- * la medición más reciente que tenga SpO₂. Devuelve null si no hay ninguna.
- * @param {Array<{spo2: number|null, inicio: string, calidad?: string|null}>} items historial, de más reciente a más antigua
+ * Valor de SpO₂ que muestra la lección (RF115) a partir del historial de la cuenta: la medición más reciente hecha
+ * con el sensor y con señal de calidad aceptable (ver src/utils/spo2Aprendizaje.js). Devuelve null si no hay ninguna.
+ * Las mediciones sin dato de origen se aceptan (copias guardadas en el dispositivo antes de registrarlo).
+ * @param {Array<{spo2: number|null, inicio: string, calidad?: string|null, fuente?: string|null}>} items historial, de más reciente a más antigua
  */
 export function ultimaSpo2Medida(items = []) {
-  const m = items.find((x) => x && x.spo2 !== null && x.spo2 !== undefined && Number.isFinite(Number(x.spo2)))
-  return m ? { spo2: Number(m.spo2), fecha: m.inicio, calidad: m.calidad || null } : null
+  const { medida } = seleccionarMedida(items, { permitirSinFuente: true })
+  return medida ? { spo2: medida.spo2, fecha: medida.fecha, calidad: medida.calidad } : null
 }

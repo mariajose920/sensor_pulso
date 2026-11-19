@@ -420,7 +420,7 @@ export async function listarHistorial({ pagina = 0, fuente = null } = {}) {
     if (pagina === 0 && !fuente) {
       for (const m of items.slice(0, 10)) {
         await guardarMedicionVista({
-          id: m.id, fecha: m.inicio, actividad: m.actividad, bpm: m.bpm, spo2: m.spo2,
+          id: m.id, fecha: m.inicio, actividad: m.actividad, fuente: m.fuente, bpm: m.bpm, spo2: m.spo2,
           ritmo: m.ritmo, calidad: m.calidad, dentroDeRango: m.dentroDeRango
         })
       }
@@ -432,7 +432,7 @@ export async function listarHistorial({ pagina = 0, fuente = null } = {}) {
     }
     const vistas = await listarMedicionesVistas()
     const items = vistas.map((v) => ({
-      id: v.id, inicio: v.fecha, fuente: null, canal: null, actividad: v.actividad || null,
+      id: v.id, inicio: v.fecha, fuente: v.fuente || null, canal: null, actividad: v.actividad || null,
       bpm: v.bpm ?? null, spo2: v.spo2 ?? null, hrv: null, ritmo: v.ritmo || null,
       calidad: v.calidad || null, causaCalidad: null, dentroDeRango: v.dentroDeRango ?? null, duracionS: null
     }))
