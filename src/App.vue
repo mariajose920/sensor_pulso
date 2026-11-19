@@ -3,7 +3,7 @@
     <a href="#contenido" class="saltar-contenido">Saltar al contenido</a>
 
     <!-- Barra superior. En móvil queda solo la marca y el acceso; los enlaces pasan a la barra inferior. -->
-    <header class="navbar" :class="{ oculto }" @focusin="mostrar">
+    <header class="navbar">
       <router-link to="/" class="nav-brand" aria-label="sensor_pulso, ir al inicio">
         <span aria-hidden="true">🫀</span> <span class="nav-brand-texto">sensor_pulso</span>
       </router-link>
@@ -57,7 +57,7 @@
     </footer>
 
     <!-- Barra inferior (solo móvil): íconos con texto, fácil de tocar con el pulgar. -->
-    <nav class="bottom-nav" :class="{ oculto }" aria-label="Navegación principal" @focusin="mostrar">
+    <nav class="bottom-nav" aria-label="Navegación principal">
       <router-link
         v-for="e in enlaces"
         :key="e.to"
@@ -89,7 +89,6 @@ import { useRoute } from 'vue-router'
 import { ENLACES_SOLO_CON_SESION, motivoDeRuta } from './utils/accesoSinSesion'
 import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
-import { useScrollDirection } from './composables/useScrollDirection.js'
 import { useAuth } from './composables/useAuth'
 import { ref } from 'vue'
 import AvisoInactividadModal from './components/AvisoInactividadModal.vue'
@@ -145,8 +144,6 @@ const enlaces = computed(() => {
   return lista
 })
 
-// Se ocultan al bajar y reaparecen al subir. El estilo solo se aplica en móvil (ver @media).
-const { oculto, mostrar } = useScrollDirection()
 </script>
 
 <style scoped>
@@ -232,7 +229,7 @@ main.container {
   .nav-link { font-size: 0.9rem; }
 }
 
-/* Móvil y tablet (hasta 1188 px): barra superior mínima + barra inferior; ambas se ocultan al bajar.
+/* Móvil y tablet (hasta 1188 px): barra superior mínima + barra inferior; ambas siempre visibles.
    Así los enlaces no se despliegan en varias filas y no gastan espacio vertical. */
 @media (max-width: 1188px) {
   .navbar {
@@ -241,7 +238,6 @@ main.container {
     padding-left: max(0.75rem, env(safe-area-inset-left));
     padding-right: max(0.75rem, env(safe-area-inset-right));
   }
-  .navbar.oculto { transform: translateY(-100%); }
   .nav-links { display: none; }
   .nav-brand { flex: 1; min-width: 0; font-size: 1.1rem; }
   .btn-acceso { padding: 0 0.75rem; }
@@ -260,7 +256,6 @@ main.container {
     padding-right: env(safe-area-inset-right);
     transition: transform 0.2s ease;
   }
-  .bottom-nav.oculto { transform: translateY(100%); }
 
   .bottom-link {
     flex: 1;

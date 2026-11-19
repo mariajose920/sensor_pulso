@@ -113,19 +113,19 @@ async function revisarPagina(page, tam, ruta) {
 }
 
 async function revisarComportamientos(browser) {
-  // Móvil vertical: menú que se oculta al bajar, aviso de girar y tabla con "Ver más"
+  // Móvil vertical: menú siempre visible al desplazar, aviso de girar y tabla con "Ver más"
   let page = await browser.newPage()
   await page.setViewport({ width: 375, height: 812, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
   await page.goto(BASE + '/comparacion', { waitUntil: 'networkidle0' })
 
   if (!(await page.$('.aviso-girar'))) registrar('movil-375', '/comparacion', 'falta el aviso para girar el celular')
 
-  const oculto = (sel) => page.$eval(sel, (el) => el.classList.contains('oculto'))
   await page.evaluate(() => window.scrollTo(0, 900)); await new Promise((r) => setTimeout(r, 400))
   await page.evaluate(() => window.scrollTo(0, 1400)); await new Promise((r) => setTimeout(r, 400))
-  if (!(await oculto('.navbar')) || !(await oculto('.bottom-nav'))) registrar('movil-375', '/comparacion', 'el menú no se oculta al bajar')
+  const visible = (sel) => page.$eval(sel, (el) => { const r = el.getBoundingClientRect(); return r.height > 0 && r.top >= -1 && r.bottom <= innerHeight + 1 })
+  if (!(await visible('.navbar')) || !(await visible('.bottom-nav'))) registrar('movil-375', '/comparacion', 'el menú desaparece al bajar')
   await page.evaluate(() => window.scrollTo(0, 1100)); await new Promise((r) => setTimeout(r, 400))
-  if ((await oculto('.navbar')) || (await oculto('.bottom-nav'))) registrar('movil-375', '/comparacion', 'el menú no reaparece al subir')
+  if (!(await visible('.navbar')) || !(await visible('.bottom-nav'))) registrar('movil-375', '/comparacion', 'el menú desaparece al subir')
 
   const vistas = await page.evaluate(() => ({
     movil: getComputedStyle(document.querySelector('.tabla-movil')).display !== 'none',

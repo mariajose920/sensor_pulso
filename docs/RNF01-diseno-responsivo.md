@@ -8,7 +8,7 @@ Requerimiento: *la plataforma debe verse y usarse bien en computador, tablet y m
 |---|---|
 | Tamaños | 4 puntos de corte: **400 px**, **640 px**, **1024 px** y **1400 px** (móvil muy pequeño, móvil, tablet, computador y pantalla muy ancha). Están en `src/style.css` y en `src/utils/breakpoints.js`. |
 | Menú | **Barra inferior** con 5 íconos y texto en móvil (hasta 640 px). En tablet y computador, los enlaces van en la barra superior. |
-| Espacio | En móvil, la barra superior y la inferior **se ocultan al bajar** y reaparecen al subir, al llegar arriba o al final. |
+| Espacio | En móvil, la barra superior y la inferior **quedan siempre visibles**, también al bajar o subir. |
 | Gráficos | Alto proporcional al ancho (entre 240 px y 380 px). En móvil vertical aparece un **aviso para girar el celular**, que se puede cerrar. |
 | Tablas | En móvil se muestran solo el criterio y la medición; el botón **Ver más** despliega hacia abajo el resto. En tablet y computador, la tabla completa. |
 | Tacto | Botones y campos de **44 px** de alto como mínimo en pantallas táctiles, y letra de **16 px** en los campos. |
@@ -17,8 +17,7 @@ Requerimiento: *la plataforma debe verse y usarse bien en computador, tablet y m
 
 - `index.html`: viewport (`viewport-fit=cover`) y color del tema.
 - `src/style.css` (sección *RNF01*): puntos de corte, alto de gráficos, áreas de toque y reglas para móvil.
-- `src/App.vue`: barra superior, barra inferior y ocultamiento al bajar.
-- `src/composables/useScrollDirection.js`: detecta si se baja o se sube.
+- `src/App.vue`: barra superior, barra inferior fijas, sin ocultarse.
 - `src/composables/useMediaQuery.js` y `src/components/AvisoGirar.vue`: aviso para girar el celular.
 - `src/components/TemplateComparator.vue`: tabla completa y versión móvil con *Ver más*.
 - `src/components/OscilloscopeCanvas.vue`: el lienzo sigue el tamaño de su contenedor (`ResizeObserver`).
@@ -35,7 +34,7 @@ Compila la web, la abre con el Chrome o Edge instalado (o el de `CHROME_PATH`) e
 1. no haya desplazamiento horizontal,
 2. se vea la barra correcta (inferior en móvil, enlaces arriba en tablet y PC),
 3. botones y campos midan al menos 44 px en móvil,
-4. la tabla, el aviso de girar y el menú que se oculta funcionen.
+4. la tabla, el aviso de girar y el menú que siempre se ve funcionen.
 
 Guarda una captura de cada página en `pruebas-responsivas/` (no se sube a git). Si algo falla, termina con error y lista los problemas.
 
@@ -46,7 +45,7 @@ Hazla en un **celular**, una **tablet** y un **computador**, y en al menos dos n
 **Celular (vertical)**
 - [ ] No hay que deslizar hacia los lados en ninguna página (Inicio, Medición, Comparación, Aulas, Aprendizaje, Acceso).
 - [ ] La barra inferior se ve completa y cada ícono se toca sin errar.
-- [ ] Al bajar, las barras se ocultan; al subir un poco, reaparecen.
+- [ ] Al bajar y al subir, la barra superior (marca y acceso) y la inferior siguen visibles.
 - [ ] En Comparación aparece el aviso de girar el celular, y *Entendido* lo cierra.
 - [ ] En la tabla, *Ver más* abre el detalle hacia abajo y *Ver menos* lo cierra.
 - [ ] Al escribir en un campo, la pantalla no hace zoom sola.
