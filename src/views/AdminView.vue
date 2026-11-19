@@ -58,6 +58,10 @@
           </div>
         </div>
 
+        <div class="privacidad-barra">
+          <BotonRevelarDatos :control="revelarCuentas" />
+        </div>
+
         <div v-if="cargandoLista" class="loading-state">
           Cargando cuentas registradas...
         </div>
@@ -79,10 +83,13 @@
             <tbody>
               <tr v-for="cuenta in cuentasFiltradas" :key="cuenta.id">
                 <td>
-                  <strong>{{ cuenta.nombre || 'Sin nombre registrado' }}</strong>
+                  <strong v-if="cuenta.nombre">
+                    <DatoEnmascarado :valor="cuenta.nombre" tipo="nombre" :revelado="revelarCuentas.revelado.value || cuenta.id === currentUserId" />
+                  </strong>
+                  <strong v-else>Sin nombre registrado</strong>
                   <span v-if="cuenta.id === currentUserId" class="self-tag">(Tú)</span>
                 </td>
-                <td><code>{{ cuenta.correo }}</code></td>
+                <td><code><DatoEnmascarado :valor="cuenta.correo" tipo="correo" :revelado="revelarCuentas.revelado.value || cuenta.id === currentUserId" /></code></td>
                 <td>
                   <span class="badge" :class="claseBadge(cuenta)">
                     {{ etiquetaCuenta(cuenta) }}
@@ -134,6 +141,10 @@
           </button>
         </div>
 
+        <div class="privacidad-barra">
+          <BotonRevelarDatos :control="revelarHistorialRoles" />
+        </div>
+
         <div v-if="cargandoAuditoria" class="loading-state">
           Cargando registro de auditoría...
         </div>
@@ -159,12 +170,12 @@
                   <span class="fecha-badge">{{ formatearFechaHora(item.ocurrio_en) }}</span>
                 </td>
                 <td>
-                  <strong>{{ item.actor_nombre }}</strong>
-                  <div class="sub-correo"><code>{{ item.actor_correo }}</code></div>
+                  <strong><DatoEnmascarado :valor="item.actor_nombre" tipo="nombre" :revelado="revelarHistorialRoles.revelado.value" /></strong>
+                  <div class="sub-correo"><code><DatoEnmascarado :valor="item.actor_correo" tipo="correo" :revelado="revelarHistorialRoles.revelado.value" /></code></div>
                 </td>
                 <td>
-                  <strong>{{ item.usuario_nombre }}</strong>
-                  <div class="sub-correo"><code>{{ item.usuario_correo }}</code></div>
+                  <strong><DatoEnmascarado :valor="item.usuario_nombre" tipo="nombre" :revelado="revelarHistorialRoles.revelado.value" /></strong>
+                  <div class="sub-correo"><code><DatoEnmascarado :valor="item.usuario_correo" tipo="correo" :revelado="revelarHistorialRoles.revelado.value" /></code></div>
                 </td>
                 <td>
                   <span class="badge" :class="claseBadgeRol(item.rol_antes)">{{ etiquetaRol(item.rol_antes) }}</span>
@@ -372,6 +383,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import RegistroAuditoriaPanel from '../components/RegistroAuditoriaPanel.vue'
 import ClasificacionDatosPanel from '../components/ClasificacionDatosPanel.vue'
+import DatoEnmascarado from '../components/DatoEnmascarado.vue'
+import BotonRevelarDatos from '../components/BotonRevelarDatos.vue'
+import { useRevelarDatos } from '../composables/useRevelarDatos.js'
 import RangosPanel from '../components/RangosPanel.vue'
 import MetodoSincronizacionPanel from '../components/MetodoSincronizacionPanel.vue'
 import ContenidosPanel from '../components/ContenidosPanel.vue'
@@ -430,6 +444,10 @@ const moverConTeclado = (evento) => {
 watch(() => ruta.query.seccion, () => {
   seccionActiva.value = seccionDesdeUrl()
 })
+
+// Datos personales de otras personas: enmascarados por defecto; mostrarlos queda registrado en la auditoría
+const revelarCuentas = useRevelarDatos('Cuentas y roles')
+const revelarHistorialRoles = useRevelarDatos('Historial de cambios de rol')
 
 const cuentas = ref([])
 const filtroBusqueda = ref('')
@@ -656,6 +674,14 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1.5rem;
+}
+
+.privacidad-barra {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: var(--color-bg);
 }
 
 .admin-tabs {

@@ -20,6 +20,7 @@
     "test:rf27": "node scripts/test-rf27-cargar-senales.js",
     "test:rf47": "node scripts/test-rf47-contrastar-datasets.js",
     "test:rf56": "node scripts/test-rf56-clasificacion-datos.mjs",
+    "test:rf61": "node scripts/test-rf61-enmascaramiento.mjs",
     "test:rf62": "node scripts/test-rf62-auditoria.mjs",
     "test:rf63": "node scripts/test-rf63-registros-inmutables.js",
     "test:rf64": "node scripts/test-rf64-panel-auditoria.mjs",

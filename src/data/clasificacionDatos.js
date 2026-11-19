@@ -6,6 +6,7 @@
  * `clasificacion_datos` de la base (ver supabase/migrations/20261119000100_rf56_clasificacion_datos.sql).
  *
  * Solo se describe lo que la plataforma ya hace; lo que está en preparación no se presenta como hecho.
+ * El enmascaramiento (cómo se muestran los datos de otras personas) lo aplica src/utils/enmascarar.js.
  */
 
 export const CLASES_DATO = Object.freeze({
@@ -76,6 +77,13 @@ export const TRATAMIENTOS = Object.freeze([
     publico: 'Cualquier persona, con o sin sesión.',
     privado: 'Su titular. Un profesor ve solo lo de su aula y el administrador lo necesario para gestionar la plataforma.',
     sensible_salud: 'Su titular. El profesor ve solo los resultados de las evaluaciones que asignó; la ficha declarada solo la ve su titular.'
+  }),
+  Object.freeze({
+    id: 'visualizacion',
+    titulo: 'Cómo se muestra',
+    publico: 'Se muestra completo, sin enmascarar.',
+    privado: 'A quien no es su titular, el correo, el nombre y la IP se le muestran enmascarados (por ejemplo a***@unach.cl). El administrador puede mostrarlos por un minuto y queda registrado.',
+    sensible_salud: 'Igual que lo privado, y la ficha declarada nunca se muestra a otras personas.'
   }),
   Object.freeze({
     id: 'proteccion',

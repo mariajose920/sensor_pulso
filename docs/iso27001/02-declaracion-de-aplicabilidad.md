@@ -78,7 +78,7 @@ La columna «Evidencia» apunta a algo que se puede comprobar. Si no hay evidenc
 | 8.8 Vulnerabilidades técnicas | Sí | Parcial | Dependabot; falta prueba de penetración |
 | 8.9 Gestión de la configuración | Sí | Parcial | `vercel.json`, migraciones versionadas |
 | 8.10 Eliminación de información | Sí | Implementado | `aplicar_retencion()`, `eliminar_mis_datos()` |
-| 8.11 Enmascaramiento de datos | Sí | Parcial | Columnas con `enmascarar` en `clasificacion_datos` |
+| 8.11 Enmascaramiento de datos | Sí | Implementado | Correo, nombre e IP de otras personas se muestran enmascarados en las pantallas del administrador y del profesor y en las exportaciones; mostrarlos queda en la auditoría (ver docs/RF61-enmascaramiento-datos.md) |
 | 8.12 Prevención de fuga de datos | Sí | Parcial | Exportación mínima; endpoints de datos de salud sin CORS abierto (la telemetría del ESP32 es un endpoint aparte) |
 | 8.13 Respaldos | Sí | Implementado | Respaldos automáticos en Supabase, copias fuera de sitio con SHA-256 y simulación de recuperación RTO/RPO validada (RF71, RNF15) |
 | 8.14 Redundancia | Sí | Por evaluar | La da el proveedor |

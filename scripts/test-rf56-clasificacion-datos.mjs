@@ -93,9 +93,9 @@ probar('3. Lo que se promete coincide con lo que existe (cifrado por campo, publ
   assert.match(migracionBase, /\('intentos_login',\s*90,\s*'borrar'\)/)
   assert.match(t.conservacion.sensible_salud, /365 días/)
   assert.match(t.conservacion.privado, /90 días/)
-  // Lo que todavía no existe no se presenta como hecho
-  const todo = JSON.stringify(TRATAMIENTOS)
-  assert.doesNotMatch(todo, /enmascar/i, 'el enmascaramiento aún no está implementado: no debe prometerse')
+  // El enmascaramiento ya existe (src/utils/enmascarar.js): puede describirse, pero no para datos públicos
+  assert.match(t.visualizacion.privado, /enmascarad/i)
+  assert.doesNotMatch(t.visualizacion.publico, /enmascarad/i)
 })
 
 // ------------------------------------------------------------ migración y catálogo

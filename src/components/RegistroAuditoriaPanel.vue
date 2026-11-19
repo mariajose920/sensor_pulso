@@ -55,6 +55,11 @@
       </button>
     </div>
 
+    <!-- Datos personales: enmascarados por defecto; mostrarlos queda registrado -->
+    <div class="auditoria-privacidad">
+      <BotonRevelarDatos :control="revelar" />
+    </div>
+
     <!-- Resultado de la exportación: justo bajo los botones para que siempre se vea -->
     <div
       v-if="mensajeExportacion"
@@ -234,19 +239,19 @@
               <span v-if="ev.sospechoso" class="badge-sospechoso">Sospechoso</span>
             </td>
             <td class="col-actor">
-              <strong class="actor-nombre">{{ ev.actorNombre }}</strong>
-              <div v-if="ev.actorCorreo" class="actor-correo">
-                <code>{{ ev.actorCorreo }}</code>
+              <strong class="actor-nombre">{{ vista(ev).actorNombre }}</strong>
+              <div v-if="vista(ev).actorCorreo" class="actor-correo">
+                <code>{{ vista(ev).actorCorreo }}</code>
               </div>
             </td>
             <td class="col-entidad">
-              <span class="entidad-pill">{{ ev.entidadNombre }}</span>
+              <span class="entidad-pill">{{ vista(ev).entidad }}</span>
             </td>
             <td class="col-detalle">
               <div class="detalle-box" :class="`detalle-box--${ev.categoria}`">
-                <span class="detalle-resumen">{{ formatearResumen(ev.resumen) }}</span>
+                <span class="detalle-resumen">{{ formatearResumen(vista(ev).resumen) }}</span>
                 <span v-if="ev.motivoSospecha" class="detalle-motivo">Motivo: {{ ev.motivoSospecha }}</span>
-                <span v-if="ev.ip" class="detalle-ip">IP: <code>{{ ev.ip }}</code></span>
+                <span v-if="vista(ev).ip" class="detalle-ip">IP: <code>{{ vista(ev).ip }}</code></span>
                 <button
                   type="button"
                   class="btn-detalle"
@@ -263,7 +268,7 @@
               <div class="detalle-ficha" :class="{ 'detalle-ficha--alerta': ev.sospechoso }">
                 <p class="detalle-ficha-resumen">
                   <strong>{{ ev.etiquetaAccion }}.</strong>
-                  {{ formatearResumen(ev.resumen) }}
+                  {{ formatearResumen(vista(ev).resumen) }}
                 </p>
                 <p v-if="ev.motivoSospecha" class="detalle-ficha-alerta">
                   Alerta de seguridad: {{ ev.motivoSospecha }}.
@@ -315,8 +320,12 @@ import {
   MAX_EVENTOS_EXPORTACION,
   resumirAuditoria,
   exportarAuditoria,
-  detalleLegible
+  detalleLegible,
+  vistaEventoAuditoria
 } from '../services/auditoriaService.js'
+import BotonRevelarDatos from './BotonRevelarDatos.vue'
+import { enmascararTextoLibre } from '../utils/enmascarar.js'
+import { useRevelarDatos } from '../composables/useRevelarDatos.js'
 import { useAuth } from '../composables/useAuth'
 
 const { currentUserName } = useAuth()
@@ -428,21 +437,27 @@ function alternarDetalle(id) {
   expandidos.value = copia
 }
 
-const camposDetalle = detalleLegible
+// Datos personales: enmascarados salvo que el administrador los haya mostrado (queda registrado en la auditoría)
+const revelar = useRevelarDatos('Registro de auditoría')
+const enmascarar = computed(() => !revelar.revelado.value)
+
+const vista = (ev) => vistaEventoAuditoria(ev, { enmascarar: enmascarar.value })
+const camposDetalle = (ev) => detalleLegible(ev, { enmascarar: enmascarar.value })
 
 function detalleJson(ev) {
+  const v = vista(ev)
   return JSON.stringify(
     {
       id: ev.id,
       ocurrio_en: ev.ocurrioEn,
       accion: ev.accion,
       actor_id: ev.actorId,
-      actor: ev.actorCorreo,
+      actor: v.actorCorreo,
       entidad: ev.entidad,
-      entidad_id: ev.entidadId,
-      ip: ev.ip,
+      entidad_id: enmascarar.value ? enmascararTextoLibre(ev.entidadId) : ev.entidadId,
+      ip: v.ip,
       sospechoso: ev.sospechoso,
-      detalle: ev.detalle
+      detalle: v.detalle
     },
     null,
     2
@@ -465,6 +480,7 @@ async function exportar(formato) {
     const res = await exportarAuditoria({
       formato,
       generadoPor: currentUserName.value || '',
+      enmascarar: enmascarar.value,
       filtros: {
         categoria: categoriaActiva.value,
         accion: accion.value,
@@ -601,6 +617,14 @@ defineExpose({ cargarEventos })
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
   letter-spacing: 0.01em;
+}
+
+.auditoria-privacidad {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.55rem;
+  background: #f8fafc;
 }
 
 .exportar-grupo {

@@ -16,6 +16,13 @@
 
 import { supabase } from './supabase.js'
 import { construirXlsx, ESTILO_XLSX, letraColumna, serialExcel } from '../utils/exportarXlsx.js'
+import {
+  enmascararCorreo,
+  enmascararIp,
+  enmascararNombre,
+  enmascararObjeto,
+  enmascararTextoLibre
+} from '../utils/enmascarar.js'
 
 export const CATEGORIAS_AUDITORIA = Object.freeze([
   { id: 'todos', etiqueta: 'Todos', acciones: [] },
@@ -44,7 +51,7 @@ export const CATEGORIAS_AUDITORIA = Object.freeze([
     id: 'descarga',
     etiqueta: 'Descargas',
     etiquetaSingular: 'Descarga',
-    acciones: ['descarga', 'exportacion_datos'],
+    acciones: ['descarga', 'exportacion_datos', 'revelacion_datos'],
     claseBadge: 'badge-cat-descarga'
   },
   {
@@ -72,6 +79,7 @@ export const ETIQUETAS_ACCION_AUDITORIA = Object.freeze({
   cambio_rangos: 'Cambio de Rangos',
   descarga: 'Descarga',
   exportacion_datos: 'Exportación de Datos',
+  revelacion_datos: 'Datos Personales Mostrados',
   publicacion: 'Publicación',
   retiro_publicacion: 'Retiro de Publicación',
   eliminacion: 'Eliminación',
@@ -275,7 +283,7 @@ export const ACCIONES_AUDITADAS_POR_SERVIDOR = Object.freeze([
  * Acciones del navegador que sí se envían a la función `registrar_evento_cliente` del servidor (RF62).
  * Deben coincidir con la lista cerrada de esa función en la migración 20261114000100_rf62_auditoria_cliente.sql.
  */
-export const ACCIONES_AUDITADAS_DESDE_CLIENTE = Object.freeze(['eliminacion', 'eliminacion_aula', 'cambio_permisos'])
+export const ACCIONES_AUDITADAS_DESDE_CLIENTE = Object.freeze(['eliminacion', 'eliminacion_aula', 'cambio_permisos', 'revelacion_datos'])
 
 /**
  * Registra un evento de auditoría (RF62) a través del servidor.
@@ -617,19 +625,53 @@ function camposDeDetalle(detalle = {}, prefijo = '') {
 }
 
 /**
+ * Lo que se muestra de un evento: con los datos personales (nombre, correo, IP) tal cual o enmascarados (RF61).
+ * Sirve a la tabla, a la ficha de detalle y a las exportaciones, para que todas apliquen la misma regla.
+ */
+export function vistaEventoAuditoria(ev, { enmascarar = false } = {}) {
+  const actor = describirActor(ev)
+  const det = ev.detalle || {}
+  const entidadReal = String(ev.entidadTexto || '').trim()
+  if (!enmascarar) {
+    return {
+      actorNombre: actor.nombre,
+      actorCorreo: actor.correo,
+      entidad: entidadReal,
+      resumen: String(ev.resumen || ''),
+      ip: ev.ip || '',
+      detalle: det
+    }
+  }
+  const hayUsuarioAfectado = Boolean(det.usuario_nombre || det.usuario_correo)
+  const entidad = hayUsuarioAfectado
+    ? [enmascararNombre(det.usuario_nombre), det.usuario_correo ? `(${enmascararCorreo(det.usuario_correo)})` : '']
+      .filter(Boolean).join(' ')
+    : enmascararTextoLibre(entidadReal)
+  return {
+    actorNombre: enmascararNombre(actor.nombre),
+    actorCorreo: enmascararCorreo(actor.correo),
+    entidad,
+    resumen: enmascararTextoLibre(ev.resumen),
+    ip: ev.ip ? enmascararIp(ev.ip) : '',
+    detalle: enmascararObjeto(det)
+  }
+}
+
+/**
  * Ficha en texto de un evento para el panel: quién, cuándo, qué pasó y los datos extra,
  * con etiquetas y valores legibles (sin mostrar el JSON crudo).
+ * Con `enmascarar` los datos personales salen enmascarados (RF61).
  */
-export function detalleLegible(ev) {
-  const actor = describirActor(ev)
+export function detalleLegible(ev, { enmascarar = false } = {}) {
+  const vista = vistaEventoAuditoria(ev, { enmascarar })
   const base = [
     { etiqueta: 'Fecha y hora', valor: formatearFechaLocal(ev.ocurrioEn) || '—' },
-    { etiqueta: 'Realizado por', valor: actor.correo ? `${actor.nombre} (${actor.correo})` : (actor.nombre || '—') },
+    { etiqueta: 'Realizado por', valor: vista.actorCorreo ? `${vista.actorNombre} (${vista.actorCorreo})` : (vista.actorNombre || '—') },
     { etiqueta: 'Categoría', valor: ev.etiquetaCategoria },
-    { etiqueta: 'Entidad afectada', valor: String(ev.entidadTexto || '—').trim() }
+    { etiqueta: 'Entidad afectada', valor: vista.entidad || '—' }
   ]
-  if (ev.ip) base.push({ etiqueta: 'Dirección IP', valor: ev.ip })
-  const extras = camposDeDetalle(ev.detalle)
+  if (vista.ip) base.push({ etiqueta: 'Dirección IP', valor: vista.ip })
+  const extras = camposDeDetalle(vista.detalle)
   const cierre = [{ etiqueta: 'N.º de registro', valor: String(ev.id) }]
   return [...base, ...extras, ...cierre]
 }
@@ -650,8 +692,9 @@ export const COLUMNAS_EXPORTACION = Object.freeze([
 ])
 
 /** Un evento normalizado convertido a los valores legibles de cada columna. */
-export function filaExportacion(ev) {
-  const actor = describirActor(ev)
+export function filaExportacion(ev, { enmascarar = false } = {}) {
+  const vista = vistaEventoAuditoria(ev, { enmascarar })
+  const actor = { nombre: vista.actorNombre, correo: vista.actorCorreo }
   return {
     fecha: ev.ocurrioEn,
     fechaTexto: formatearFechaLocal(ev.ocurrioEn),
@@ -659,10 +702,11 @@ export function filaExportacion(ev) {
     accion: ev.etiquetaAccion,
     usuario: actor.nombre,
     correo: actor.correo,
-    entidad: String(ev.entidadTexto || '').trim(),
+    entidad: vista.entidad,
     // La IP ya tiene su propia columna: se quita del texto para no repetirla
-    detalle: String(ev.detalleTexto || '').replace(/\s*->\s*/g, ' → ').replace(/\s*·\s*IP:\s*\S+\s*$/, ''),
-    ip: ev.ip || '',
+    detalle: (enmascarar ? enmascararTextoLibre(ev.detalleTexto) : String(ev.detalleTexto || ''))
+      .replace(/\s*->\s*/g, ' → ').replace(/\s*·\s*IP:\s*\S+\s*$/, ''),
+    ip: vista.ip,
     sospechoso: ev.sospechoso,
     motivo: ev.motivoSospecha || '',
     id: ev.id
@@ -680,10 +724,10 @@ export function celdaCsvSegura(valor) {
  * CSV pensado para Excel en español: separador «;», BOM UTF-8, fecha en hora de Chile y
  * títulos legibles. (Con coma como separador, Excel en español lo abre todo en una sola columna.)
  */
-export function eventosACsv(eventos = []) {
+export function eventosACsv(eventos = [], { enmascarar = false } = {}) {
   const encabezado = COLUMNAS_EXPORTACION.map(c => celdaCsvSegura(c.titulo)).join(';')
   const filas = eventos.map(ev => {
-    const f = filaExportacion(ev)
+    const f = filaExportacion(ev, { enmascarar })
     return [f.fechaTexto, f.categoria, f.accion, f.usuario, f.correo, f.entidad, f.detalle, f.ip,
       f.sospechoso ? 'Sí' : 'No', f.motivo, f.id].map(celdaCsvSegura).join(';')
   })
@@ -747,7 +791,7 @@ export function resumirEventosExportados(eventos = []) {
  * Libro de Excel con dos hojas: «Eventos» (tabla con filtros y filas sospechosas en rojo) y «Resumen».
  * Devuelve los bytes del .xlsx.
  */
-export function eventosAXlsx(eventos = [], { filtros = {}, generadoPor = '', generadoEn = new Date(), truncadoDe = 0 } = {}) {
+export function eventosAXlsx(eventos = [], { filtros = {}, generadoPor = '', generadoEn = new Date(), truncadoDe = 0, enmascarar = false } = {}) {
   const E = ESTILO_XLSX
   const columnas = COLUMNAS_EXPORTACION
   const ultima = letraColumna(columnas.length - 1)
@@ -764,14 +808,15 @@ export function eventosAXlsx(eventos = [], { filtros = {}, generadoPor = '', gen
     }] },
     { alto: 32, celdas: [{
       v: `Filtros aplicados: ${describirFiltros(filtros)}` +
-        (truncadoDe > eventos.length ? `  ·  Se exportan los ${eventos.length} más recientes de ${truncadoDe}.` : ''),
+        (truncadoDe > eventos.length ? `  ·  Se exportan los ${eventos.length} más recientes de ${truncadoDe}.` : '') +
+        (enmascarar ? '  ·  Datos personales enmascarados.' : '  ·  Datos personales SIN enmascarar: manejar con cuidado.'),
       e: E.SUBTITULO
     }] },
     { alto: 8, celdas: [] },
     { alto: 30, celdas: columnas.map(c => ({ v: c.titulo, e: E.ENCABEZADO })) }
   ]
   for (const ev of eventos) {
-    const f = filaExportacion(ev)
+    const f = filaExportacion(ev, { enmascarar })
     const alerta = f.sospechoso
     const partes = partesFechaLocal(f.fecha)
     filasEventos.push({
@@ -888,6 +933,8 @@ export async function exportarAuditoria({
   formato = 'xlsx',
   filtros = {},
   generadoPor = '',
+  // true: los datos personales salen enmascarados (RF61). El panel lo activa salvo que el administrador los haya mostrado.
+  enmascarar = false,
   // Se pueden reemplazar para probar el flujo completo sin conexión ni navegador
   rpc = (nombre, args) => supabase.rpc(nombre, args),
   obtener = obtenerEventosParaExportar,
@@ -910,9 +957,9 @@ export async function exportarAuditoria({
     }
 
     if (formato === 'csv') {
-      descargar(eventosACsv(lote.eventos), 'text/csv;charset=utf-8', nombreArchivoExportacion('csv'))
+      descargar(eventosACsv(lote.eventos, { enmascarar }), 'text/csv;charset=utf-8', nombreArchivoExportacion('csv'))
     } else {
-      const bytes = eventosAXlsx(lote.eventos, { filtros, generadoPor, truncadoDe: lote.total })
+      const bytes = eventosAXlsx(lote.eventos, { filtros, generadoPor, truncadoDe: lote.total, enmascarar })
       descargar(
         bytes,
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

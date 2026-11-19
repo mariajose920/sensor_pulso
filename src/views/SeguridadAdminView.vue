@@ -116,6 +116,10 @@
         </div>
       </div>
 
+      <div class="privacidad-barra-solicitudes">
+        <BotonRevelarDatos :control="revelarTitulares" />
+      </div>
+
       <p v-if="!solicitudesFiltradas.length" class="vacio card">
         No hay solicitudes que coincidan con el filtro seleccionado.
       </p>
@@ -163,7 +167,12 @@
 
           <!-- Solo lo necesario para responder: quién pide y qué pide -->
           <p class="quien">
-            <strong>Titular:</strong> {{ s.perfil?.nombre || 'Sin nombre' }} · {{ s.perfil?.correo || 'Sin correo' }}
+            <strong>Titular:</strong>
+            <DatoEnmascarado v-if="s.perfil?.nombre" :valor="s.perfil.nombre" tipo="nombre" :revelado="revelarTitulares.revelado.value" />
+            <template v-else>Sin nombre</template>
+            ·
+            <DatoEnmascarado v-if="s.perfil?.correo" :valor="s.perfil.correo" tipo="correo" :revelado="revelarTitulares.revelado.value" />
+            <template v-else>Sin correo</template>
           </p>
 
           <p v-if="s.detalle" class="detalle recuadro-detalle">
@@ -515,6 +524,12 @@ import {
   resumirSolicitudesAdmin
 } from '../services/derechosService.js'
 import { PLAZO_RESPUESTA_DIAS } from '../data/politicaPrivacidad.js'
+import DatoEnmascarado from '../components/DatoEnmascarado.vue'
+import BotonRevelarDatos from '../components/BotonRevelarDatos.vue'
+import { useRevelarDatos } from '../composables/useRevelarDatos.js'
+
+// Titulares de las solicitudes: enmascarados por defecto; mostrarlos queda registrado en la auditoría
+const revelarTitulares = useRevelarDatos('Solicitudes de derechos')
 
 const PESTANAS = [
   { id: 'solicitudes', texto: 'Solicitudes de derechos' },
@@ -729,6 +744,14 @@ async function ejecutarSimulacro() {
 </script>
 
 <style scoped>
+.privacidad-barra-solicitudes {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: var(--color-bg);
+}
+
 .seguridad-admin {
   max-width: 980px;
   margin: 0 auto;

@@ -181,7 +181,7 @@
                   <strong>{{ est.nombre }}</strong>
                 </td>
                 <td>
-                  <code class="email-code">{{ est.correo }}</code>
+                  <code class="email-code"><DatoEnmascarado :valor="est.correo" tipo="correo" /></code>
                 </td>
                 <td>
                   <span 
@@ -599,7 +599,7 @@
                         </div>
                         <div class="student-name-group">
                           <strong class="student-name">{{ intento.estudiante_nombre }}</strong>
-                          <span class="student-email">{{ intento.estudiante_correo }}</span>
+                          <span class="student-email"><DatoEnmascarado :valor="intento.estudiante_correo" tipo="correo" /></span>
                         </div>
                       </div>
                     </td>
@@ -692,7 +692,7 @@
                 Revisión de Respuestas y Calificación
               </h3>
               <p class="modal-subtitle" style="margin: 0.2rem 0 0 0;">
-                Estudiante: <strong>{{ intentoVerRespuestas.estudiante_nombre }}</strong> ({{ intentoVerRespuestas.estudiante_correo }})
+                Estudiante: <strong>{{ intentoVerRespuestas.estudiante_nombre }}</strong> (<DatoEnmascarado :valor="intentoVerRespuestas.estudiante_correo" tipo="correo" />)
               </p>
             </div>
           </div>
@@ -822,7 +822,7 @@
                 Bioseñal Fotopletismográfica (PPG)
               </h3>
               <p class="modal-subtitle" style="margin: 0.2rem 0 0 0;">
-                Estudiante: <strong>{{ intentoVerMedicion.estudiante_nombre }}</strong> ({{ intentoVerMedicion.estudiante_correo }})
+                Estudiante: <strong>{{ intentoVerMedicion.estudiante_nombre }}</strong> (<DatoEnmascarado :valor="intentoVerMedicion.estudiante_correo" tipo="correo" />)
               </p>
             </div>
           </div>
@@ -1028,7 +1028,7 @@
               style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9;"
             >
               <div>
-                <strong>{{ inv.correo }}</strong>
+                <strong><DatoEnmascarado :valor="inv.correo" tipo="correo" /></strong>
                 <small style="display: block; color: #94a3b8;">
                   {{ formatearFecha(inv.enviada_en || inv.intentado_en) }}
                   <span v-if="inv.error_detalle" style="color: #ef4444; display: block;">{{ inv.error_detalle }}</span>
@@ -1099,7 +1099,7 @@
             />
             <div>
               <strong>{{ est.nombre }}</strong>
-              <p><code>{{ est.correo }}</code></p>
+              <p><code><DatoEnmascarado :valor="est.correo" tipo="correo" /></code></p>
             </div>
           </label>
         </div>
@@ -1123,7 +1123,7 @@
 
         <div class="retiro-lista-box" style="max-height: 160px; overflow-y: auto; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem;">
           <div v-for="est in estudiantesARetirar" :key="est.usuario_id" style="padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem;">
-            <strong>{{ est.nombre }}</strong> <span style="color: #64748b;">({{ est.correo }})</span>
+            <strong>{{ est.nombre }}</strong> <span style="color: #64748b;">(<DatoEnmascarado :valor="est.correo" tipo="correo" />)</span>
           </div>
         </div>
 
@@ -1293,7 +1293,7 @@
                 />
                 <div>
                   <strong>{{ est.nombre }}</strong>
-                  <p><code>{{ est.correo }}</code></p>
+                  <p><code><DatoEnmascarado :valor="est.correo" tipo="correo" /></code></p>
                 </div>
               </label>
             </div>
@@ -1322,6 +1322,7 @@ import PanelAvanceEnVivo from '../components/PanelAvanceEnVivo.vue'
 import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import DatoEnmascarado from '../components/DatoEnmascarado.vue'
 import { useAuth } from '../composables/useAuth'
 import {
   eliminarEvaluacion,
