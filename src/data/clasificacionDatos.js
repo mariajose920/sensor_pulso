@@ -104,7 +104,7 @@ export const TRATAMIENTOS = Object.freeze([
     titulo: 'Cuánto tiempo se conserva',
     publico: 'Mientras el contenido esté vigente.',
     privado: 'Mientras exista la cuenta. Los registros técnicos de acceso se eliminan a los 90 días.',
-    sensible_salud: 'Hasta 365 días para la ficha declarada y las lecturas, o antes si su titular los elimina.'
+    sensible_salud: 'Hasta 365 días para las lecturas, la señal y la ficha declarada; el resumen de la medición se anonimiza a los 2 años. Su titular puede eliminarlos antes.'
   }),
   Object.freeze({
     id: 'derechos',

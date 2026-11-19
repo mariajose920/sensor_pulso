@@ -6,7 +6,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { leerEsquemaDeMigraciones, esColumnaTecnica } from './lib-esquema-sql.mjs'
 
@@ -46,7 +46,12 @@ function leerFilas(sql) {
   }
   return filas
 }
-const filasCatalogo = leerFilas(migracion)
+// El catálogo se completa también en migraciones posteriores (p. ej. columnas nuevas de otros requerimientos)
+const posteriores = readdirSync(resolve(process.cwd(), 'supabase/migrations'))
+  .filter(f => f.endsWith('.sql') && f > '20261119000100_rf56_clasificacion_datos.sql')
+  .map(f => leer('supabase/migrations/' + f))
+  .join('\n')
+const filasCatalogo = leerFilas(migracion + '\n' + posteriores)
 const claveFila = f => `${f.tabla}.${f.columna}`
 const porClave = new Map(filasCatalogo.map(f => [claveFila(f), f]))
 

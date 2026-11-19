@@ -15,6 +15,7 @@
  */
 
 import { supabase } from './supabase.js'
+import { nombreTabla } from '../data/clasificacionDatos.js'
 import { construirXlsx, ESTILO_XLSX, letraColumna, serialExcel } from '../utils/exportarXlsx.js'
 import {
   enmascararCorreo,
@@ -44,7 +45,7 @@ export const CATEGORIAS_AUDITORIA = Object.freeze([
     id: 'cambio_rangos',
     etiqueta: 'Cambios de Rangos',
     etiquetaSingular: 'Cambio de Rangos',
-    acciones: ['cambio_rangos'],
+    acciones: ['cambio_rangos', 'cambio_retencion'],
     claseBadge: 'badge-cat-rangos'
   },
   {
@@ -65,7 +66,7 @@ export const CATEGORIAS_AUDITORIA = Object.freeze([
     id: 'eliminacion',
     etiqueta: 'Eliminaciones',
     etiquetaSingular: 'Eliminación',
-    acciones: ['eliminacion', 'eliminacion_aula', 'supresion_datos', 'retiro_estudiante', 'retiro_estudiantes'],
+    acciones: ['eliminacion', 'eliminacion_aula', 'supresion_datos', 'retiro_estudiante', 'retiro_estudiantes', 'retencion'],
     claseBadge: 'badge-cat-eliminacion'
   }
 ])
@@ -86,7 +87,9 @@ export const ETIQUETAS_ACCION_AUDITORIA = Object.freeze({
   supresion_datos: 'Supresión de Datos',
   retiro_estudiante: 'Retiro de Estudiante',
   retiro_estudiantes: 'Retiro de Estudiantes',
-  eliminacion_aula: 'Eliminación de Aula'
+  eliminacion_aula: 'Eliminación de Aula',
+  retencion: 'Retención de Datos',
+  cambio_retencion: 'Cambio de Retención'
 })
 
 /**
@@ -133,6 +136,7 @@ function construirEntidadTexto(raw, categoria) {
     return raw?.entidad_id ? `Perfil #${String(raw.entidad_id).slice(0, 8)}` : 'Cuenta de Usuario'
   }
   if (categoria === 'cambio_rangos') {
+    if (raw?.accion === 'cambio_retencion') return `Retención: ${nombreTabla(raw?.entidad_id)}`
     const despues = det.despues || det.antes || det
     if (despues?.edad_min !== undefined && despues?.edad_max !== undefined) {
       return `Rango (${despues.edad_min}-${despues.edad_max} años)`
@@ -154,6 +158,7 @@ function construirEntidadTexto(raw, categoria) {
     return 'Galería Pública Anónima'
   }
   if (categoria === 'eliminacion') {
+    if (raw?.accion === 'retencion') return 'Política de retención'
     const tabla = raw?.entidad || 'registro'
     const idCorto = raw?.entidad_id ? ` #${String(raw.entidad_id).slice(0, 8)}` : ''
     if (tabla === 'mediciones') return `Medición${idCorto}`
@@ -196,6 +201,15 @@ function construirDetalleTexto(raw, categoria) {
   }
 
   if (categoria === 'cambio_rangos') {
+    if (raw?.accion === 'cambio_retencion') {
+      const a = det.antes || {}
+      const d = det.despues || {}
+      const cambios = []
+      if (a.dias !== d.dias) cambios.push(`plazo ${a.dias} → ${d.dias} días`)
+      if (a.activa !== d.activa) cambios.push(d.activa ? 'política activada' : 'política desactivada')
+      if (a.accion !== d.accion) cambios.push(`acción ${a.accion} → ${d.accion}`)
+      return `Retención de ${nombreTabla(raw?.entidad_id)}: ${cambios.join(', ') || 'sin cambios'}`
+    }
     const op = det.operacion || 'ACTUALIZACIÓN'
     const r = det.despues || det.antes || det
     if (r?.bpm_min !== undefined && r?.bpm_max !== undefined) {
@@ -219,6 +233,10 @@ function construirDetalleTexto(raw, categoria) {
   }
 
   if (categoria === 'eliminacion') {
+    if (raw?.accion === 'retencion') {
+      const origen = det.origen === 'manual' ? 'manual (pedida por el administrador)' : 'automática'
+      return `Retención ${origen}: ${Number(det.filas) || 0} registro(s) eliminados o anonimizados`
+    }
     if (raw?.accion === 'supresion_datos') {
       return 'Eliminación completa de mediciones y fichas declaradas solicitada por el titular'
     }
