@@ -395,6 +395,25 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* Responsivo: el selector nunca puede ser más ancho que la tarjeta. */
+.sync-toggle-pill { max-width: 100%; }
+@media (max-width: 640px) {
+  .sync-header-left { min-width: 0; flex-basis: 100%; }
+  .sync-toggle-pill {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border-radius: 0.9rem;
+  }
+  .sync-toggle-btn {
+    white-space: normal;
+    text-align: center;
+    min-height: 44px;
+    border-radius: 0.7rem;
+  }
+  .sync-osc-legend { top: 8px; right: 8px; padding: 0.3rem 0.5rem; font-size: 0.68rem; }
+}
+
 .sync-toggle-btn--active {
   background: #002b49;
   color: #ffffff;
