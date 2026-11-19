@@ -93,6 +93,9 @@
           </div>
         </div>
 
+        <!-- Alojamiento fuera de Chile (aviso aparte del texto versionado del consentimiento) -->
+        <AvisoAlojamiento compacto />
+
         <!-- Declaración Expresa -->
         <div class="declaracion-caja">
           <p class="declaracion-texto">
@@ -134,6 +137,7 @@
 </template>
 
 <script setup>
+import AvisoAlojamiento from './AvisoAlojamiento.vue'
 import { ref, watch, onMounted } from 'vue'
 import {
   consentimientoService,

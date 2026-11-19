@@ -196,6 +196,12 @@ const routes = [
 
 const router = createRouter({
   history: createWebHistory(),
+  // Solo se desplaza cuando el enlace trae ancla (p. ej. /privacidad#alojamiento-datos); lo demás queda como estaba
+  scrollBehavior(to, from, guardada) {
+    if (guardada) return guardada
+    if (to.hash) return { el: to.hash, top: 80, behavior: 'smooth' }
+    return false
+  },
   routes
 })
 

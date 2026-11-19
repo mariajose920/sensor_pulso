@@ -10,6 +10,8 @@
       </p>
     </header>
 
+    <AvisoAlojamiento compacto />
+
     <details class="clasificacion-ayuda" data-testid="mis-datos-clasificacion">
       <summary>¿Cómo se clasifican y protegen mis datos?</summary>
       <ClasesDatoTarjetas />
@@ -595,6 +597,7 @@ import {
 import { NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA } from '../services/pacienteService.js'
 import { PLAZO_RESPUESTA_DIAS } from '../data/politicaPrivacidad.js'
 import ClasesDatoTarjetas from '../components/ClasesDatoTarjetas.vue'
+import AvisoAlojamiento from '../components/AvisoAlojamiento.vue'
 
 const pestanaActiva = ref('consultar')
 const tipo = ref('')

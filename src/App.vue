@@ -51,6 +51,7 @@
       <p class="footer-aviso" data-testid="aviso-pie">{{ AVISO_EDUCATIVO_CORTO }}</p>
       <p>
         <router-link to="/privacidad" data-testid="enlace-privacidad">Política de privacidad</router-link>
+        · <router-link :to="RUTA_ALOJAMIENTO" data-testid="enlace-alojamiento">Alojamiento de datos fuera de Chile</router-link>
         <template v-if="isAuthenticated"> · <router-link to="/mis-datos" data-testid="enlace-mis-datos">Mis datos y derechos</router-link></template>
       </p>
     </footer>
@@ -82,6 +83,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { AVISO_EDUCATIVO_CORTO } from './data/avisoEducativo.js'
+import { RUTA_ALOJAMIENTO } from './data/alojamiento.js'
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ENLACES_SOLO_CON_SESION, motivoDeRuta } from './utils/accesoSinSesion'

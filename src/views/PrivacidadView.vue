@@ -24,6 +24,9 @@
         </div>
       </section>
 
+      <!-- Alojamiento fuera de Chile y base legal (explicación completa; el texto vive en src/data/alojamiento.js) -->
+      <AvisoAlojamiento :con-sesion="isAuthenticated" />
+
       <!-- Cómo se clasifican y tratan los datos (explicación; no forma parte del texto versionado de la política) -->
       <section id="clasificacion-datos" class="clasificacion-bloque" data-testid="politica-clasificacion">
         <h2>Cómo clasificamos y tratamos tus datos</h2>
@@ -43,6 +46,7 @@
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
 import ClasesDatoTarjetas from '../components/ClasesDatoTarjetas.vue'
+import AvisoAlojamiento from '../components/AvisoAlojamiento.vue'
 import { useAuth } from '../composables/useAuth'
 import { POLITICA_VERSION, POLITICA_VIGENTE_DESDE, SECCIONES, canalContacto } from '../data/politicaPrivacidad.js'
 

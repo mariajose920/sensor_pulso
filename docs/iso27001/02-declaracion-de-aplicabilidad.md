@@ -29,7 +29,7 @@ La columna «Evidencia» apunta a algo que se puede comprobar. Si no hay evidenc
 | 5.20 Acuerdos con proveedores | Sí | Pendiente | `05-proveedores.md` |
 | 5.21 Cadena de suministro TIC | Sí | Parcial | Dependabot, `package-lock.json`, `npm ci` |
 | 5.22 Seguimiento de proveedores | Sí | Pendiente | `05-proveedores.md` |
-| 5.23 Servicios en la nube | Sí | Parcial | Alojamiento declarado en la política de privacidad |
+| 5.23 Servicios en la nube | Sí | Parcial | Aviso de alojamiento fuera de Chile y su base legal en el inicio de sesión, el consentimiento, la política, Mis datos y el pie de página (ver docs/RF95-aviso-alojamiento.md). Faltan los acuerdos de tratamiento (DPA) con cada proveedor |
 | 5.24 Planificación de incidentes | Sí | Implementado | `03-procedimiento-incidentes-y-brechas.md` |
 | 5.25 Evaluación de eventos | Sí | Implementado | Severidad y «afecta datos personales» en cada incidente |
 | 5.26 Respuesta a incidentes | Sí | Implementado | Pantalla `/admin/seguridad` |

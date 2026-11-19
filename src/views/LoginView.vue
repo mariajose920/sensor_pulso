@@ -61,6 +61,9 @@
       <!-- RF75: Aviso educativo obligatorio -->
       <AvisoEducativo compacto />
 
+      <!-- Alojamiento de los datos fuera de Chile: se informa antes de pedir el consentimiento -->
+      <AvisoAlojamiento compacto />
+
       <!-- Casilla obligatoria de Política de Privacidad (RF88) -->
       <div class="politica-check-box mb-4">
         <label class="acepta-politica" style="display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.88rem; cursor: pointer;">
@@ -73,9 +76,7 @@
           <span>
             He leído y acepto la
             <router-link to="/privacidad" data-testid="enlace-privacidad-login" target="_blank" style="color: #0284c7; text-decoration: underline;">
-              política de privacidad
-            </router-link>
-            y el tratamiento de datos institucionales.
+              política de privacidad</router-link>, el tratamiento de datos institucionales y {{ FRASE_ACEPTACION }}.
           </span>
         </label>
         <p v-if="!aceptaPolitica" class="text-muted-xs" style="color: #dc2626; margin: 0.35rem 0 0 1.6rem;">
@@ -159,6 +160,8 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import AvisoAlojamiento from '../components/AvisoAlojamiento.vue'
+import { FRASE_ACEPTACION } from '../data/alojamiento.js'
 import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
