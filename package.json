@@ -20,6 +20,7 @@
     "test:rf27": "node scripts/test-rf27-cargar-senales.js",
     "test:rf47": "node scripts/test-rf47-contrastar-datasets.js",
     "test:rf56": "node scripts/test-rf56-clasificacion-datos.mjs",
+    "test:rf115": "node scripts/test-rf115-spo2-aprendizaje.mjs",
     "test:rf95": "node scripts/test-rf95-aviso-alojamiento.mjs",
     "test:rf60": "node scripts/test-rf60-politica-retencion.mjs",
     "test:rf61": "node scripts/test-rf61-enmascaramiento.mjs",

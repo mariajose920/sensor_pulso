@@ -9,7 +9,7 @@ const ALMACEN = 'mediciones_vistas'
 const MAXIMO = 10
 const DIAS = 30
 
-const CAMPOS_PERMITIDOS = ['id', 'fecha', 'actividad', 'bpm', 'spo2', 'ritmo', 'calidad', 'dentroDeRango']
+const CAMPOS_PERMITIDOS = ['id', 'fecha', 'actividad', 'fuente', 'bpm', 'spo2', 'ritmo', 'calidad', 'dentroDeRango']
 
 function abrir() {
   return new Promise((resolver, rechazar) => {
