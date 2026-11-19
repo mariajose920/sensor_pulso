@@ -15,7 +15,7 @@
 | Registro | Cambios de contenido | Cambios de rol, descargas y eliminaciones | Descargas, publicaciones y eliminaciones (auditoría inmutable) |
 
 Los textos están en `src/data/clasificacionDatos.js` (única fuente para la política, «Mis datos» y el panel).
-Solo se describe lo que la plataforma ya hace; el enmascaramiento (RF61) está marcado en el catálogo pero no se promete como hecho.
+Solo se describe lo que la plataforma ya hace. El enmascaramiento (RF61) ya está implementado: ver docs/RF61-enmascaramiento-datos.md.
 
 ## Qué se hizo
 
@@ -48,4 +48,4 @@ Solo se describe lo que la plataforma ya hace; el enmascaramiento (RF61) está m
 
 - Reclasificar columnas desde la interfaz (hoy se hace en Supabase; el administrador puede editar la tabla).
 - Auditar los cambios de clasificación en el registro de auditoría.
-- Enmascarar los datos personales en pantallas (RF61) y aplicar la retención automática (RF60).
+- Aplicar la retención automática (RF60).

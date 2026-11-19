@@ -103,10 +103,11 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   registrarEventoAuditoria({
     accion: 'descarga',
     entidad: 'descargas',
-    entidadId: nombreArchivo,
+    entidadId: 'informe_pdf',
     entidadNombre: 'Informe Clínico PDF',
     detalle: { tipo: 'informe_pdf' },
-    resumen: `Archivo exportado: informe_pdf (${paciente?.nombre || 'Participante'} · ${resultados?.bpm || 74} BPM)`
+    // La auditoría no guarda el nombre del paciente (RF61): solo qué se descargó
+    resumen: 'Archivo exportado: informe_pdf'
   })
   return nombreArchivo
 }

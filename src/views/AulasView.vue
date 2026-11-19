@@ -285,7 +285,7 @@
           <div v-else class="estudiantes-aula-lista">
             <label v-for="e in estudiantesDelAula" :key="e.usuario_id" class="estudiante-fila">
               <input type="checkbox" v-model="seleccionRetiro" :value="e.usuario_id" data-testid="estudiante-retiro" />
-              <span>{{ e.nombre }} <small>{{ e.correo }}</small></span>
+              <span>{{ e.nombre }} <small><DatoEnmascarado :valor="e.correo" tipo="correo" /></small></span>
             </label>
           </div>
           <button v-if="seleccionRetiro.length" type="button" class="btn btn-danger btn-sm" :disabled="retirando"
@@ -315,7 +315,7 @@
               style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9;"
             >
               <div>
-                <strong>{{ inv.correo }}</strong>
+                <strong><DatoEnmascarado :valor="inv.correo" tipo="correo" /></strong>
                 <small style="display: block; color: #94a3b8;">
                   {{ formatearFechaInvitacion(inv.enviada_en || inv.intentado_en) }}
                   <span v-if="inv.error_detalle" style="color: #ef4444; display: block;">{{ inv.error_detalle }}</span>
@@ -403,7 +403,7 @@
             <input type="checkbox" :value="est.usuario_id" v-model="estudiantesSeleccionados" />
             <div>
               <strong>{{ est.nombre }}</strong>
-              <p><code>{{ est.correo }}</code></p>
+              <p><code><DatoEnmascarado :valor="est.correo" tipo="correo" /></code></p>
             </div>
           </label>
         </div>
@@ -422,6 +422,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import DatoEnmascarado from '../components/DatoEnmascarado.vue'
 import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { useAuth } from '../composables/useAuth'
 import { 

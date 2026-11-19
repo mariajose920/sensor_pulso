@@ -234,7 +234,7 @@
                 </div>
                 <div class="student-name-group">
                   <strong class="student-name">{{ est.nombre }}</strong>
-                  <span class="student-email">{{ est.correo }}</span>
+                  <span class="student-email"><DatoEnmascarado :valor="est.correo" tipo="correo" /></span>
                 </div>
               </div>
             </td>
@@ -310,6 +310,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import DatoEnmascarado from './DatoEnmascarado.vue'
 import { obtenerAvanceEnVivo, suscribirAvanceEnVivo } from '../services/panelEnVivoService.js'
 import { controlarEvaluacionEnVivo } from '../services/evaluacionesService.js'
 
