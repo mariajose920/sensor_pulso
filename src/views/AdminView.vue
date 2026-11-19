@@ -208,6 +208,17 @@
         <ClasificacionDatosPanel />
       </div>
 
+      <!-- SECCIÓN: Política de retención (cuánto tiempo se conservan los datos) -->
+      <div
+        v-if="seccionActiva === 'retencion'"
+        id="panel-retencion"
+        class="admin-section mt-4"
+        role="tabpanel"
+        aria-labelledby="tab-retencion"
+      >
+        <RetencionPanel />
+      </div>
+
       <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad -->
       <div
         v-if="seccionActiva === 'rangos'"
@@ -383,6 +394,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import RegistroAuditoriaPanel from '../components/RegistroAuditoriaPanel.vue'
 import ClasificacionDatosPanel from '../components/ClasificacionDatosPanel.vue'
+import RetencionPanel from '../components/RetencionPanel.vue'
 import DatoEnmascarado from '../components/DatoEnmascarado.vue'
 import BotonRevelarDatos from '../components/BotonRevelarDatos.vue'
 import { useRevelarDatos } from '../composables/useRevelarDatos.js'
@@ -408,6 +420,7 @@ const SECCIONES = [
   { id: 'cuentas', titulo: 'Cuentas y roles', descripcion: 'Usuarios, roles y permisos' },
   { id: 'auditoria', titulo: 'Auditoría', descripcion: 'Registro de eventos y alertas' },
   { id: 'clasificacion', titulo: 'Clasificación', descripcion: 'Tipos de datos y su tratamiento' },
+  { id: 'retencion', titulo: 'Retención', descripcion: 'Cuánto tiempo se guardan los datos' },
   { id: 'rangos', titulo: 'Rangos', descripcion: 'BPM y SpO₂ por edad y actividad' },
   { id: 'contenidos', titulo: 'Contenidos', descripcion: 'Sincronización, lecciones y propuestas' }
 ]

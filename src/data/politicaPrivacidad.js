@@ -5,7 +5,8 @@
  * ambos digan lo mismo. Son datos puros (sin pantalla ni red) para poder probarlos con Node y
  * leerlos sin conexión (RNF03).
  *
- * Los plazos de conservación replican `politicas_retencion` (supabase/migrations/…0800_datos_iniciales.sql)
+ * Los plazos de conservación replican `politicas_retencion` (supabase/migrations/…0800_datos_iniciales.sql y
+ * …20261121000100_rf60_politica_retencion.sql)
  * y el consentimiento informado (consentimientoService.js). Si cambia uno, hay que cambiar los otros:
  * la prueba scripts/test-rf88-privacidad.mjs lo revisa.
  *
@@ -78,8 +79,13 @@ export const SECCIONES = [
     titulo: '5. Cuánto tiempo los conservamos',
     lista: [
       'Mediciones (lecturas de la señal): hasta 12 meses; después se borran automáticamente.',
+      'Señal completa de cada medición y alertas fuera de rango: hasta 12 meses; después se borran automáticamente.',
+      'Resumen de cada medición: hasta 24 meses; después se anonimiza, es decir, se desvincula de tu cuenta y queda solo para estadísticas. Las comparaciones guardadas se borran a los 24 meses.',
+      'Lo que publiques en la galería (siempre anonimizado) se conserva mientras no lo retires.',
       'Ficha declarada de salud: hasta 12 meses; después se borra automáticamente.',
       'Intentos de inicio de sesión: 90 días.',
+      'Bloqueos temporales de cuenta: 30 días después de que vencen.',
+      'Invitaciones a aulas: 6 meses.',
       'Contadores técnicos de peticiones: 2 días.',
       'Registro de auditoría: se conserva para poder demostrar qué pasó ante un incidente; no contiene tus mediciones.',
       'Puedes pedir la eliminación antes de esos plazos (derecho de supresión).'
