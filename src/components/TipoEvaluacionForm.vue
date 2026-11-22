@@ -58,7 +58,7 @@
       </div>
       <button v-if="!bloqueado && modelValue.ejercicios.length < MAX_EJERCICIOS_MIXTA" type="button"
               class="btn btn-secondary" data-testid="agregar-ejercicio" @click="agregar">
-        ➕ Agregar otro ejercicio
+        <IconoUi name="plus" /> Agregar otro ejercicio
       </button>
     </template>
 

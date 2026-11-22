@@ -13,22 +13,22 @@
             class="badge badge-latencia"
             :class="claseLatencia"
             data-testid="pill-latencia-rnf04"
-            :title="'Latencia en tiempo real: ' + latenciaMs + ' ms (RNF04)'"
+            :title="'Latencia en tiempo real: ' + latenciaMs + ' ms'"
           >
-            ⚡ {{ latenciaMs }} ms
+            <IconoUi name="zap" /> {{ latenciaMs }} ms
           </span>
           <span v-if="datosAvance?.modo === 'en_vivo'" class="badge badge-modo-vivo">
-            ⏱️ Modo En Vivo
+            <IconoUi name="clock" /> Modo En Vivo
           </span>
           <span class="badge" :class="badgeEstadoClass">
             {{ estadoTexto }}
           </span>
         </div>
         <h2 class="live-panel-title">
-          ⚡ Monitoreo de Avance en Tiempo Real
+          <IconoUi name="zap" /> Monitoreo de Avance en Tiempo Real
         </h2>
         <p class="live-panel-sub">
-          Visualiza las respuestas emitidas y los estudiantes conectados sin recargar la página (RF113).
+          Visualiza las respuestas emitidas y los estudiantes conectados sin recargar la página.
         </p>
       </div>
 
@@ -42,7 +42,7 @@
           @click="ejecutarControl('iniciar')"
           data-testid="btn-iniciar-evaluacion-en-vivo"
         >
-          ▶ Iniciar Evaluación en Vivo
+          <IconoUi name="play" /> Iniciar Evaluación en Vivo
         </button>
 
         <button
@@ -53,7 +53,7 @@
           @click="ejecutarControl('cerrar')"
           data-testid="btn-cerrar-evaluacion-en-vivo"
         >
-          ⏹ Cerrar Evaluación en Vivo
+          <IconoUi name="stop" /> Cerrar Evaluación en Vivo
         </button>
 
         <button
@@ -63,7 +63,7 @@
           @click="forzarActualizacion"
           title="Actualizar métricas manualmente"
         >
-          🔄 {{ cargando ? 'Actualizando…' : 'Refrescar' }}
+          <IconoUi name="refresh" /> {{ cargando ? 'Actualizando…' : 'Refrescar' }}
         </button>
 
         <button
@@ -73,7 +73,7 @@
           @click="$emit('cerrar')"
           title="Cerrar panel en vivo"
         >
-          ✕
+          <IconoUi name="x" />
         </button>
       </div>
     </div>
@@ -91,9 +91,9 @@
           <span class="kpi-total">/ {{ datosAvance?.total_asignados || 0 }} asignados</span>
         </div>
         <div class="kpi-footer-detail">
-          <span>🟡 {{ datosAvance?.en_progreso || 0 }} respondiendo</span>
+          <span><IconoUi name="dot-yellow" /> {{ datosAvance?.en_progreso || 0 }} respondiendo</span>
           <span class="kpi-sep">•</span>
-          <span>✅ {{ datosAvance?.finalizados || 0 }} entregaron</span>
+          <span><IconoUi name="check-circle" /> {{ datosAvance?.finalizados || 0 }} entregaron</span>
         </div>
       </div>
 
@@ -101,7 +101,7 @@
       <div class="live-kpi-card kpi-respuestas" data-testid="kpi-respuestas">
         <div class="kpi-top">
           <span class="kpi-title">Contador de Respuestas</span>
-          <span class="kpi-icon">📝</span>
+          <span class="kpi-icon"><IconoUi name="edit" /></span>
         </div>
         <div class="kpi-main-val">
           <span class="kpi-number" data-testid="contador-respuestas">{{ datosAvance?.total_respuestas || 0 }}</span>
@@ -116,7 +116,7 @@
       <div class="live-kpi-card kpi-avance" data-testid="kpi-avance-global">
         <div class="kpi-top">
           <span class="kpi-title">Avance Global del Aula</span>
-          <span class="kpi-icon">📊</span>
+          <span class="kpi-icon"><IconoUi name="chart" /></span>
         </div>
         <div class="kpi-main-val">
           <span class="kpi-number" data-testid="porcentaje-avance">{{ datosAvance?.porcentaje_avance_global || 0 }}%</span>
@@ -133,7 +133,7 @@
       <div class="live-kpi-card kpi-tiempo">
         <div class="kpi-top">
           <span class="kpi-title">Tiempo y Sincronización</span>
-          <span class="kpi-icon">⏱️</span>
+          <span class="kpi-icon"><IconoUi name="clock" /></span>
         </div>
         <div class="kpi-main-val">
           <span class="kpi-tiempo-val">{{ textoTiempoRestante }}</span>
@@ -173,7 +173,7 @@
           :class="{ active: filtroEstado === 'conectados' }"
           @click="filtroEstado = 'conectados'"
         >
-          🟢 Conectados ({{ totalConectadosFiltro }})
+          <IconoUi name="dot-green" /> Conectados ({{ totalConectadosFiltro }})
         </button>
         <button
           type="button"
@@ -181,7 +181,7 @@
           :class="{ active: filtroEstado === 'en_progreso' }"
           @click="filtroEstado = 'en_progreso'"
         >
-          🟡 En Progreso ({{ totalEnProgresoFiltro }})
+          <IconoUi name="dot-yellow" /> En Progreso ({{ totalEnProgresoFiltro }})
         </button>
         <button
           type="button"
@@ -189,7 +189,7 @@
           :class="{ active: filtroEstado === 'finalizados' }"
           @click="filtroEstado = 'finalizados'"
         >
-          ✅ Entregados ({{ totalFinalizadosFiltro }})
+          <IconoUi name="check-circle" /> Entregados ({{ totalFinalizadosFiltro }})
         </button>
       </div>
 
@@ -255,9 +255,9 @@
             <td>
               <span class="badge-estado-alumno" :class="'estado-' + est.estado">
                 {{ {
-                  no_iniciado: '⚪ Sin Iniciar',
-                  en_progreso: '🟡 Rindiendo',
-                  finalizado: '✅ Entregado'
+                  no_iniciado: 'Sin Iniciar',
+                  en_progreso: 'Rindiendo',
+                  finalizado: 'Entregado'
                 }[est.estado] || est.estado }}
               </span>
             </td>
@@ -265,7 +265,7 @@
             <!-- Contador de Respuestas Guardadas (RF113) -->
             <td>
               <span class="respuestas-chip" data-testid="respuestas-estudiante">
-                📝 {{ est.respuestas_guardadas || 0 }} / {{ est.total_preguntas || datosAvance?.total_preguntas || 0 }}
+                <IconoUi name="edit" /> {{ est.respuestas_guardadas || 0 }} / {{ est.total_preguntas || datosAvance?.total_preguntas || 0 }}
               </span>
             </td>
 
@@ -297,7 +297,7 @@
 
     <!-- FEED DE ACTIVIDAD EN TIEMPO REAL -->
     <div v-if="feedEventos.length > 0" class="live-activity-feed">
-      <h4 class="feed-title">📡 Registro de Actividad en Vivo:</h4>
+      <h4 class="feed-title"><IconoUi name="radio" /> Registro de Actividad en Vivo:</h4>
       <ul class="feed-list">
         <li v-for="(ev, idx) in feedEventos.slice(0, 5)" :key="idx" class="feed-item">
           <span class="feed-time">{{ ev.hora }}</span>

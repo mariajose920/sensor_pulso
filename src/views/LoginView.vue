@@ -16,7 +16,7 @@
 
       <!-- Alerta de Bloqueo Temporal (RF50) -->
       <div v-if="cuentaBloqueada" class="alert alert-error bloqueo-banner">
-        <div class="bloqueo-icono">🔒</div>
+        <div class="bloqueo-icono"><IconoUi name="lock" /></div>
         <div>
           <strong>Acceso Bloqueado Temporalmente</strong>
           <p class="mt-1">
@@ -111,7 +111,7 @@
           @click="mostrarDemo = !mostrarDemo"
           class="btn-toggle-demo"
         >
-          <span>{{ mostrarDemo ? '▲ Ocultar accesos de prueba rápida' : '⚡ Usar accesos directos de prueba' }}</span>
+          <span>{{ mostrarDemo ? '▲ Ocultar accesos de prueba rápida' : 'Usar accesos directos de prueba' }}</span>
         </button>
 
         <div v-if="mostrarDemo" class="demo-buttons-grid mt-2">
@@ -124,7 +124,7 @@
             class="btn-demo-item"
             :disabled="loading"
           >
-            🛡️ Probar como Administrador (admin.general@unach.cl)
+            <IconoUi name="shield" /> Probar como Administrador (admin.general@unach.cl)
           </button>
           <button
             type="button"
@@ -132,7 +132,7 @@
             class="btn-demo-item"
             :disabled="loading"
           >
-            👨‍🏫 Probar como Profesor (profesor.prueba@unach.cl)
+            <IconoUi name="user" /> Probar como Profesor (profesor.prueba@unach.cl)
           </button>
         </div>
       </div>
@@ -151,7 +151,7 @@
           </div>
         </div>
         <small class="domain-note">
-          ⚠️ Por políticas de seguridad, las cuentas personales (@gmail.com) no están autorizadas.
+          <IconoUi name="alert" /> Por políticas de seguridad, las cuentas personales (@gmail.com) no están autorizadas.
         </small>
       </div>
     </div>

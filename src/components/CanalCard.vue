@@ -7,27 +7,27 @@
     <div class="card-top">
       <div class="canal-badge-group">
         <span class="canal-badge">Canal {{ canalData.canal }}</span>
-        <span v-if="esMiCanal" class="badge-mi-canal">⭐ Mi Canal</span>
+        <span v-if="esMiCanal" class="badge-mi-canal"><IconoUi name="star" /> Mi Canal</span>
       </div>
       <CalidadSenalBadge :nivel="canalData.calidad || 'buena'" :causas="canalData.causasCalidad || []" />
     </div>
 
     <div v-if="asignadoA" class="assigned-user-tag font-mono">
-      👤 {{ asignadoA }}
+      <IconoUi name="user" /> {{ asignadoA }}
     </div>
     <div v-else class="free-user-tag">
-      🟢 Canal Libre (RF12)
+      <IconoUi name="dot-green" /> Canal Libre
     </div>
 
     <div class="metrics-row">
       <div class="metric">
-        <span class="metric-icon">❤️</span>
+        <span class="metric-icon"><IconoUi name="heart" /></span>
         <span class="metric-num">{{ canalData.bpm ? canalData.bpm.toFixed(1) : '--' }}</span>
         <span class="metric-unit">BPM</span>
       </div>
 
       <div class="metric">
-        <span class="metric-icon">🫁</span>
+        <span class="metric-icon"><IconoUi name="lungs" /></span>
         <span class="metric-num">{{ canalData.spo2 ? canalData.spo2.toFixed(1) : '--' }}</span>
         <span class="metric-unit">% SpO₂</span>
       </div>

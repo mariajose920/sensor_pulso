@@ -1,7 +1,7 @@
 <template>
   <div class="rangos-container">
     <div class="card">
-      <h1 class="card-title">📏 Rangos de referencia</h1>
+      <h1 class="card-title"><IconoUi name="ruler" /> Rangos de referencia</h1>
       <p class="header-desc">
         Rangos de BPM y SpO₂ por actividad y edad. Puedes ajustarlos para tu cuenta o proponer un cambio para todos.
       </p>

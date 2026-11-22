@@ -1,7 +1,7 @@
 <template>
   <div v-if="mostrarAviso" class="modal-backdrop">
     <div class="modal-card">
-      <div class="inactividad-icono">⏱️</div>
+      <div class="inactividad-icono"><IconoUi name="clock" /></div>
       <h3 class="modal-title">Sesión a punto de expirar</h3>
       <p class="modal-subtitle">
         No se ha detectado actividad reciente. Por tu seguridad, tu sesión se cerrará automáticamente en:

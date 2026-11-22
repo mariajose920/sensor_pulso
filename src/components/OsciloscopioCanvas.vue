@@ -7,7 +7,7 @@
         <span class="scope-title">
           Osciloscopio PPG en Tiempo Real · Canal {{ canal }}
         </span>
-        <span v-if="pausado" class="badge-paused">⏸️ CONGELADO</span>
+        <span v-if="pausado" class="badge-paused"><IconoUi name="pause" /> CONGELADO</span>
         <span v-else-if="activo" class="badge-live">● EN VIVO</span>
       </div>
 
@@ -64,7 +64,7 @@
           @click="togglePausa"
           :title="pausado ? 'Reanudar gráfica en tiempo real' : 'Congelar traza para inspección minuciosa'"
         >
-          {{ pausado ? '▶️ Reanudar' : '⏸️ Congelar' }}
+          {{ pausado ? 'Reanudar' : 'Congelar' }}
         </button>
       </div>
     </div>
@@ -86,23 +86,23 @@
 
         <label class="toggle-trace" title="Aplicar filtro digital pasa-bajas para atenuar ruido">
           <input type="checkbox" v-model="filtroActivo" />
-          <span class="filter-icon">⚡</span>
+          <span class="filter-icon"><IconoUi name="zap" /></span>
           <span>Filtro DSP</span>
         </label>
 
         <label class="toggle-trace" title="Detectar y etiquetar sístole y muesca dícrota en la onda">
           <input type="checkbox" v-model="mostrarMarcadores" />
-          <span class="marker-icon">🏷️</span>
+          <span class="marker-icon"><IconoUi name="tag" /></span>
           <span>Morfología</span>
         </label>
       </div>
 
       <div class="export-actions">
         <button type="button" class="btn-export" @click="capturarGraficaPng" title="Descargar imagen PNG de la onda actual">
-          📸 Capturar PNG
+          <IconoUi name="camera" /> Capturar PNG
         </button>
         <button type="button" class="btn-export" @click="descargarCsv" title="Exportar datos numéricos a CSV">
-          💾 Exportar CSV
+          <IconoUi name="save" /> Exportar CSV
         </button>
       </div>
     </div>
@@ -117,7 +117,7 @@
 
       <!-- Overlay si no hay señal conectada ni simulada -->
       <div v-if="!activo && muestrasIr.length === 0" class="no-signal-overlay">
-        <p>⚠️ Esperando paquetes WiFi del ESP32...</p>
+        <p><IconoUi name="alert" /> Esperando paquetes WiFi del ESP32...</p>
         <small>Enciende el ESP32 o activa la transmisión de prueba para graficar en tiempo real</small>
       </div>
 

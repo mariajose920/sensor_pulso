@@ -301,7 +301,7 @@
             <div>
               <h2 class="panel-title">Evaluaciones y Controles Prácticos</h2>
               <p class="panel-desc">
-                {{ isAdmin || isProfesor ? 'Asigna y administra evaluaciones al aula, por cursos o estudiantes individuales (RF104).' : 'Evaluaciones asignadas para ti en este espacio académico.' }}
+                {{ isAdmin || isProfesor ? 'Asigna y administra evaluaciones al aula, por cursos o estudiantes individuales.' : 'Evaluaciones asignadas para ti en este espacio académico.' }}
               </p>
             </div>
             <!-- Botón de asignación rápida para el Docente -->
@@ -310,7 +310,7 @@
               @click="abrirModalAsignar()" 
               class="btn btn-primary"
             >
-              🎯 Asignar Evaluación
+              <IconoUi name="target" /> Asignar Evaluación
             </button>
           </div>
 
@@ -344,13 +344,13 @@
                   
                   <!-- Badge del Alcance RF104 -->
                   <span class="badge-asignacion" :class="'badge-asig-' + (ev.asignaciones && ev.asignaciones.length ? ev.asignaciones[0].alcance : 'ninguno')">
-                    🎯 {{ obtenerTextoAsignacion(ev) }}
+                    <IconoUi name="target" /> {{ obtenerTextoAsignacion(ev) }}
                   </span>
 
                   <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
                 <p v-if="ev.modo === 'en_vivo' && ev.abre_en && ev.estado === 'programada'" class="eval-inicio-auto" data-testid="inicio-automatico-aviso">
-                  ⏱ Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
+                  <IconoUi name="clock" /> Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
                   (no hace falta iniciarla en vivo)
                 </p>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
@@ -385,10 +385,10 @@
                   @click="abrirPanelEnVivo(ev)" 
                   class="btn-eval-accion"
                   style="flex: 2; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-weight: 700;"
-                  title="Ver respuestas y estudiantes conectados en tiempo real (RF113)"
+                  title="Ver respuestas y estudiantes conectados en tiempo real"
                   data-testid="btn-abrir-panel-en-vivo"
                 >
-                  <span>⚡ Monitoreo en Vivo</span>
+                  <span><IconoUi name="zap" /> Monitoreo en Vivo</span>
                 </button>
 
                 <!-- Botón Docente 1: Ver Desempeño (RF117) -->
@@ -412,7 +412,7 @@
                   style="flex: 1; background: #f8fafc; color: #0284c7; border: 1px solid #bae6fd;"
                   title="Configurar a quién se asigna esta evaluación"
                 >
-                  <span>🎯 Asignar</span>
+                  <span><IconoUi name="target" /> Asignar</span>
                 </button>
 
                 <!-- Botón Docente: eliminar la evaluación (con sus asignaciones y resultados) -->
@@ -426,7 +426,7 @@
                   title="Eliminar esta evaluación y sus asignaciones"
                   @click="confirmarEliminarEvaluacionAsignada(ev)"
                 >
-                  <span>🗑️ Eliminar</span>
+                  <span><IconoUi name="trash" /> Eliminar</span>
                 </button>
 
                 <button
@@ -1151,7 +1151,7 @@
     <!-- ======================================================== -->
     <div v-if="modalAsignarEvaluacionAbierto" class="modal-backdrop" @click.self="modalAsignarEvaluacionAbierto = false">
       <div class="modal-card modal-card-lg">
-        <h3 class="modal-title">🎯 Asignar Evaluación al Aula</h3>
+        <h3 class="modal-title"><IconoUi name="target" /> Asignar Evaluación al Aula</h3>
         <p class="modal-subtitle">
           Configura a quiénes estará dirigida esta evaluación en <strong>{{ aula?.nombre }}</strong>.
         </p>
@@ -1228,7 +1228,7 @@
               <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'aula' }">
                 <input type="radio" value="aula" v-model="alcanceSeleccionado" name="alcance" />
                 <div class="alcance-info">
-                  <strong>🏫 Toda el Aula</strong>
+                  <strong><IconoUi name="building" /> Toda el Aula</strong>
                   <p>Todos los estudiantes activos inscritos en esta aula tendrán acceso.</p>
                 </div>
               </label>
@@ -1236,7 +1236,7 @@
               <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'curso' }">
                 <input type="radio" value="curso" v-model="alcanceSeleccionado" name="alcance" />
                 <div class="alcance-info">
-                  <strong>👥 Por Curso / Sección</strong>
+                  <strong><IconoUi name="users" /> Por Curso / Sección</strong>
                   <p>Solo los estudiantes inscritos en una sección específica podrán rendirla.</p>
                 </div>
               </label>
@@ -1244,7 +1244,7 @@
               <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'estudiante' }">
                 <input type="radio" value="estudiante" v-model="alcanceSeleccionado" name="alcance" />
                 <div class="alcance-info">
-                  <strong>👤 Estudiantes Específicos</strong>
+                  <strong><IconoUi name="user" /> Estudiantes Específicos</strong>
                   <p>Selecciona manualmente uno o varios estudiantes concretos del aula.</p>
                 </div>
               </label>
@@ -1298,7 +1298,7 @@
               </label>
             </div>
             <small v-if="estudiantesAsignacionIds.length" style="color: #0284c7; font-weight: 600; display: block; margin-top: 0.35rem;">
-              ✓ {{ estudiantesAsignacionIds.length }} estudiante(s) seleccionado(s)
+              <IconoUi name="check" /> {{ estudiantesAsignacionIds.length }} estudiante(s) seleccionado(s)
             </small>
           </div>
 

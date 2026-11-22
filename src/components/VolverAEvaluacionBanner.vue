@@ -1,7 +1,7 @@
 <template>
   <aside v-if="evaluacionId" class="volver-evaluacion" role="note" data-testid="volver-a-evaluacion">
     <div class="volver-texto">
-      <span class="volver-icono" aria-hidden="true">📋</span>
+      <span class="volver-icono" aria-hidden="true"><IconoUi name="clipboard" /></span>
       <span>
         Estás haciendo un ejercicio de la evaluación
         <strong v-if="titulo">«{{ titulo }}»</strong><template v-else>de tu aula</template>.

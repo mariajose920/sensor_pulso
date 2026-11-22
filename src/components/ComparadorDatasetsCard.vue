@@ -4,7 +4,7 @@
     <div class="card-head-bar">
       <div>
         <div class="head-badge-row">
-          <span class="badge-rf47">RF47 · BENCHMARK BIOMÉDICO</span>
+          <span class="badge-rf47">BENCHMARK BIOMÉDICO</span>
           <span class="badge-acreditado">Repositorios Internacionales Acreditados</span>
         </div>
         <h3 class="card-title">
@@ -148,7 +148,7 @@
             class="link-repositorio"
             title="Abrir repositorio científico oficial"
           >
-            Repositorio Oficial PhysioNet / Dataset ↗
+            Repositorio Oficial PhysioNet / Dataset <IconoUi name="arrow-up-right" />
           </a>
         </div>
       </div>

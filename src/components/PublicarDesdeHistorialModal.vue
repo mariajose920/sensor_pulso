@@ -11,7 +11,7 @@
     >
       <div class="modal-header">
         <h2 id="pub-hist-titulo" class="modal-title" tabindex="-1" ref="tituloEl">Publicar medición</h2>
-        <button type="button" class="btn-close" aria-label="Cerrar" :disabled="trabajando" @click="intentarCerrar">✕</button>
+        <button type="button" class="btn-close" aria-label="Cerrar" :disabled="trabajando" @click="intentarCerrar"><IconoUi name="x" /></button>
       </div>
 
       <div class="modal-body">

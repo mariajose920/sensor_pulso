@@ -4,7 +4,7 @@
     <div class="view-header">
       <div>
         <div class="badge-tag">Seguridad ISO 27001 · Control de Acceso A.8.2</div>
-        <h1 class="view-title">🔐 Gestión de Dispositivos ESP32 (RF54)</h1>
+        <h1 class="view-title">Gestión de Dispositivos ESP32</h1>
         <p class="view-subtitle">
           Cada microcontrolador ESP32 cuenta con un token criptográfico propio. En la base de datos sólo se almacena su hash SHA-256. El administrador puede revocar tokens en cualquier momento.
         </p>
@@ -12,7 +12,7 @@
 
       <div class="header-actions">
         <button class="btn btn-primary" @click="mostrarModalCrear = true">
-          ➕ Registrar Nuevo ESP32
+          <IconoUi name="plus" /> Registrar Nuevo ESP32
         </button>
       </div>
     </div>
@@ -23,7 +23,7 @@
     <!-- Estadísticas Generales -->
     <div class="stats-grid">
       <div class="card stat-card">
-        <span class="stat-icon">📡</span>
+        <span class="stat-icon"><IconoUi name="radio" /></span>
         <div class="stat-info">
           <span class="stat-val">{{ dispositivosState.lista.length }}</span>
           <span class="stat-label">Dispositivos Registrados</span>
@@ -31,7 +31,7 @@
       </div>
 
       <div class="card stat-card">
-        <span class="stat-icon">✅</span>
+        <span class="stat-icon"><IconoUi name="check-circle" /></span>
         <div class="stat-info">
           <span class="stat-val text-success">{{ totalActivos }}</span>
           <span class="stat-label">Tokens Activos</span>
@@ -39,7 +39,7 @@
       </div>
 
       <div class="card stat-card">
-        <span class="stat-icon">🚫</span>
+        <span class="stat-icon"><IconoUi name="ban" /></span>
         <div class="stat-info">
           <span class="stat-val text-danger">{{ totalRevocados }}</span>
           <span class="stat-label">Tokens Revocados</span>
@@ -47,7 +47,7 @@
       </div>
 
       <div class="card stat-card">
-        <span class="stat-icon">🟢</span>
+        <span class="stat-icon"><IconoUi name="dot-green" /></span>
         <div class="stat-info">
           <span class="stat-val text-info">{{ totalEnLinea }}</span>
           <span class="stat-label">En Línea (Últimos 5 min)</span>
@@ -59,10 +59,10 @@
     <div v-if="dispositivosState.ultimoTokenGenerado" class="card token-alert-card">
       <div class="token-alert-header">
         <div class="token-alert-title">
-          <span class="alert-icon">⚠️</span>
+          <span class="alert-icon"><IconoUi name="alert" /></span>
           <h3>¡Nuevo Token ESP32 Generado con Éxito!</h3>
         </div>
-        <button class="btn-close" @click="dispositivosState.ultimoTokenGenerado = null">✕</button>
+        <button class="btn-close" @click="dispositivosState.ultimoTokenGenerado = null"><IconoUi name="x" /></button>
       </div>
 
       <p class="token-alert-warning">
@@ -81,7 +81,7 @@
             :value="dispositivosState.ultimoTokenGenerado.token" 
           />
           <button class="btn btn-secondary btn-copy" @click="copiarToken(dispositivosState.ultimoTokenGenerado.token)">
-            {{ copiado ? '✅ ¡Copiado!' : '📋 Copiar Token' }}
+            {{ copiado ? '¡Copiado!' : 'Copiar Token' }}
           </button>
         </div>
       </div>
@@ -97,7 +97,7 @@
       <div class="table-header">
         <h2 class="section-title">Dispositivos y Estado de Tokens</h2>
         <button class="btn btn-secondary btn-sm" @click="cargarDispositivos" :disabled="dispositivosState.cargando">
-          🔄 Actualizar Lista
+          <IconoUi name="refresh" /> Actualizar Lista
         </button>
       </div>
 
@@ -153,7 +153,7 @@
                     class="btn btn-danger btn-xs" 
                     @click="iniciarRevocacion(d)"
                   >
-                    🚫 Revocar Token
+                    <IconoUi name="ban" /> Revocar Token
                   </button>
                   <span v-else class="text-muted text-xs font-semibold">Invalidad</span>
                 </div>
@@ -166,7 +166,7 @@
 
     <!-- Probador y Verificador de Tokens en Vivo (RF54) -->
     <div class="card tester-card">
-      <h2 class="section-title">🧪 Verificador de Estado de Token (Auditoría RF54)</h2>
+      <h2 class="section-title">Verificador de Estado de Token (Auditoría)</h2>
       <p class="section-description">
         Ingresa un token para validar si el backend autoriza la conexión del ESP32 o si ha sido revocado.
       </p>
@@ -176,21 +176,23 @@
           type="text" 
           v-model="tokenAProbar" 
           class="form-control font-mono" 
-          placeholder="Ingresa un token (ej. esp_8f93...)" 
+          aria-label="Token del dispositivo ESP32"
+          placeholder="Pega el token del dispositivo"
+          spellcheck="false"
         />
         <button class="btn btn-primary" @click="probarToken" :disabled="verificando || !tokenAProbar">
-          {{ verificando ? 'Verificando...' : '🔍 Verificar Validez' }}
+          {{ verificando ? 'Verificando...' : 'Verificar Validez' }}
         </button>
       </div>
 
       <div v-if="resultadoVerificacion" class="verification-box alert" :class="resultadoVerificacion.valido ? 'alert-success' : 'alert-danger'">
         <div v-if="resultadoVerificacion.valido">
-          <h4>✅ Token Válido y Autorizado</h4>
+          <h4><IconoUi name="check-circle" /> Token Válido y Autorizado</h4>
           <p>Dispositivo: <strong>{{ resultadoVerificacion.dispositivo }}</strong> (ID: {{ resultadoVerificacion.dispositivoId }})</p>
           <small>El ESP32 tiene permitido transmitir telemetría médica vía WiFi.</small>
         </div>
         <div v-else>
-          <h4>🚫 Token Rechazado</h4>
+          <h4><IconoUi name="ban" /> Token Rechazado</h4>
           <p><strong>Causa:</strong> {{ resultadoVerificacion.error }}</p>
           <small>Cualquier petición con este token será rechazada con HTTP 403 / 401.</small>
         </div>
@@ -201,8 +203,8 @@
     <div v-if="mostrarModalCrear" class="modal-backdrop">
       <div class="modal-box card">
         <div class="modal-header">
-          <h3>➕ Registrar Nuevo ESP32</h3>
-          <button class="btn-close" @click="mostrarModalCrear = false">✕</button>
+          <h3><IconoUi name="plus" /> Registrar Nuevo ESP32</h3>
+          <button class="btn-close" @click="mostrarModalCrear = false"><IconoUi name="x" /></button>
         </div>
 
         <div class="modal-body">
@@ -217,7 +219,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Número de Canales Sensores (RF08):</label>
+            <label class="form-label">Número de Canales Sensores:</label>
             <select class="form-control" v-model="nuevoDispositivo.canales">
               <option :value="1">1 Canal (Sensor único)</option>
               <option :value="2">2 Canales</option>
@@ -242,8 +244,8 @@
     <div v-if="dispositivoARevocar" class="modal-backdrop">
       <div class="modal-box card">
         <div class="modal-header">
-          <h3 class="text-danger">🚫 Revocar Token de ESP32</h3>
-          <button class="btn-close" @click="dispositivoARevocar = null">✕</button>
+          <h3 class="text-danger"><IconoUi name="ban" /> Revocar Token de ESP32</h3>
+          <button class="btn-close" @click="dispositivoARevocar = null"><IconoUi name="x" /></button>
         </div>
 
         <div class="modal-body">
@@ -252,8 +254,8 @@
             <strong>{{ dispositivoARevocar.nombre }}</strong>?
           </p>
           <div class="alert alert-warning" style="margin: 1rem 0; font-size: 0.85rem;">
-            ⚠️ Esta acción es <strong>inmediata e irreversible</strong>. El ESP32 perderá acceso por WiFi, 
-            sus sesiones activas se finalizarán automáticamente y se registrará un evento de seguridad (RF72).
+            <IconoUi name="alert" /> Esta acción es <strong>inmediata e irreversible</strong>. El ESP32 perderá acceso por WiFi, 
+            sus sesiones activas se finalizarán automáticamente y se registrará un evento de seguridad.
           </div>
 
           <div class="form-group">
@@ -448,7 +450,13 @@ onMounted(() => {
 }
 
 .stat-icon {
-  font-size: 2rem;
+  font-size: 1.75rem;
+  display: inline-flex;
+}
+
+#app .dispositivos-view :deep(svg.icono-ui) {
+  width: 1em;
+  height: 1em;
 }
 
 .stat-info {
@@ -662,6 +670,24 @@ onMounted(() => {
   display: flex;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.tester-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  font-size: 1rem;
+}
+
+.tester-form input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .tester-form { flex-direction: column; }
 }
 
 .verification-box {

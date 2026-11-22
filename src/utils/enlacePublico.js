@@ -38,7 +38,7 @@ export async function compartirEnlace({ url, titulo = 'Medición pública' }, na
   if (!url) return 'manual'
   if (nav && typeof nav.share === 'function') {
     try {
-      await nav.share({ title: titulo, text: 'Medición pública anónima de sensor_pulso', url })
+      await nav.share({ title: titulo, text: 'Medición pública anónima de Sensor de Pulso', url })
       return 'compartido'
     } catch (e) {
       if (e && e.name === 'AbortError') return 'cancelado'

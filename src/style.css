@@ -337,3 +337,14 @@ img, svg, canvas, video {
     scroll-behavior: auto !important;
   }
 }
+
+:is(button, .btn, .badge-primary) .icono-ui {
+  color: inherit;
+}
+
+/* Los iconos de la interfaz comparten una cuadrícula SVG de 24 unidades. */
+#app svg[viewBox="0 0 24 24"] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}

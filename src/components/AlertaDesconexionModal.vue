@@ -11,12 +11,12 @@
         </div>
         <div class="titulo-wrap">
           <div class="alerta-badges">
-            <span class="badge badge-rf10">RF10 · Cierre Automático</span>
+            <span class="badge badge-rf10">Cierre Automático</span>
             <span 
               class="badge" 
               :class="vigilanteState.alertaModal.motivo === 'perdida_comunicacion' ? 'badge-wifi' : 'badge-sensor'"
             >
-              {{ vigilanteState.alertaModal.motivo === 'perdida_comunicacion' ? '📡 Pérdida de Comunicación WiFi' : '🔌 Sensor Desconectado' }}
+              {{ vigilanteState.alertaModal.motivo === 'perdida_comunicacion' ? 'Pérdida de Comunicación WiFi' : 'Sensor Desconectado' }}
             </span>
           </div>
           <h3 id="alerta-desconexion-titulo" class="alerta-titulo">
@@ -48,7 +48,7 @@
 
         <!-- Recomendación Técnica -->
         <div class="recomendacion-box">
-          <div class="rec-icon">💡</div>
+          <div class="rec-icon"><IconoUi name="bulb" /></div>
           <div class="rec-text">
             <strong>Recomendación técnica para reanudar:</strong>
             <p v-if="vigilanteState.alertaModal.motivo === 'perdida_comunicacion'">
@@ -75,7 +75,7 @@
           class="btn btn-primary" 
           @click="onIniciarNuevaSesion"
         >
-          <span>▶ Iniciar Nueva Sesión</span>
+          <span><IconoUi name="play" /> Iniciar Nueva Sesión</span>
         </button>
       </div>
     </div>

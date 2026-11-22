@@ -78,7 +78,7 @@ export const CONSENTIMIENTO_BASE = {
   finalidad: 'Actividad educativa de laboratorio: medir, visualizar, analizar y comparar la frecuencia cardíaca y saturación de oxígeno mediante fotopletismografía (PPG).',
   advertenciaMedica: 'Esta plataforma web y el dispositivo ESP32 son herramientas estrictamente didácticas y educativas. <strong>No son un dispositivo médico certificado, no entregan diagnósticos ni sustituyen la evaluación de un profesional de la salud.</strong>',
   datosRecogidos: 'Señal de pulso fotopletismográfica (infrarroja y roja), frecuencia cardíaca (BPM), saturación de oxígeno (% SpO₂), variabilidad R-R, edad, nombre y factores fisiológicos declarados (estrés, sueño, medicación, cafeína, actividad previa y condición de salud).',
-  responsable: 'Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.',
+  responsable: 'Equipo del proyecto Sensor de Pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.',
   plazoConservacion: 'Hasta 12 meses desde la última medición académica, salvo solicitud previa de eliminación por parte del titular (Derecho de Supresión).',
   textoLegal: 'Consiento de forma previa, expresa, informada y específica la captura y procesamiento de mis datos fisiológicos con fines estrictamente académicos. Entiendo que puedo revocar este consentimiento en cualquier momento.'
 }

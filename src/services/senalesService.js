@@ -339,7 +339,7 @@ function estimarBpmDesdeMuestras(muestras, hz) {
 export function generarCsvPlantillaEjemplo() {
   const senal = generarCurvaFisiologicaRealista({ bpm: 75.0, spo2: 98.5, duracionS: 6, frecuenciaHz: 50, dicrotaFuerte: true })
   const lineas = [
-    '# sensor_pulso · Plantilla CSV de Bioseñal PPG (RF27)',
+    '# Sensor de Pulso · Plantilla CSV de Bioseñal PPG (RF27)',
     '# Frecuencia de muestreo: 50 Hz (20 ms entre muestras)',
     '# Parametros de referencia: 75 BPM, 98.5% SpO2',
     'indice,tiempo_ms,ir,rojo'

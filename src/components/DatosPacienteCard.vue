@@ -148,7 +148,7 @@
             ○ Consentimiento pendiente (saltará al medir / conectar)
           </span>
           <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
-            Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+            Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong>
           </span>
         </div>
         <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
@@ -157,7 +157,7 @@
             class="btn btn-secondary btn-sm"
             style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;"
             @click="emit('abrir-consentimiento')"
-            title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
+            title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación"
           >
             Ver términos
           </button>
@@ -167,7 +167,7 @@
             class="btn btn-secondary btn-sm"
             style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
             @click="revocarConsentimientoPrueba"
-            title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+            title="Permite reiniciar el consentimiento para volver a probar el popup de consentimiento"
           >
             Reiniciar consentimiento
           </button>
@@ -402,8 +402,12 @@
         <!-- Privacidad y Protección de Datos (RF116 / RF117) -->
         <div class="privacidad-box">
           <small>
-            La información médica declarada se almacena cifrada (AES-256-GCM) en base de datos bajo control de acceso de nivel de fila (RLS). En tránsito se protege mediante HTTPS/TLS 1.3 (RF55). Para fines <strong>pedagógicos</strong>, en las vistas compartidas solo se exponen nombre y rangos etarios.
+            Los datos de salud que ingresas en esta ficha se cifran al enviarlos y al guardarlos. Solo las personas autorizadas pueden acceder a ellos. En las vistas compartidas para actividades educativas, los demás participantes solo ven tu nombre y tu rango de edad.
           </small>
+          <details>
+            <summary><small>Cómo protegemos tus datos</small></summary>
+            <small>La conexión usa HTTPS/TLS 1.3 para proteger los datos durante el envío. Los datos de salud declarados se guardan cifrados con AES-256-GCM. Las políticas de seguridad por fila (RLS) controlan quién puede acceder a cada registro.</small>
+          </details>
           <div style="margin-top: 0.5rem; pt: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem;">
             <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
           <div style="display: flex; align-items: center; gap: 0.4rem;">
@@ -419,7 +423,7 @@
                 ○ Consentimiento pendiente (saltará al medir / conectar)
               </span>
               <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
-                Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+                Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong>
               </span>
             </div>
             <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
@@ -428,7 +432,7 @@
               class="btn btn-secondary btn-sm"
               style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;"
               @click="emit('abrir-consentimiento')"
-              title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
+              title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación"
             >
               Ver términos
             </button>
@@ -438,7 +442,7 @@
               class="btn btn-secondary btn-sm"
               style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
               @click="revocarConsentimientoPrueba"
-              title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+              title="Permite reiniciar el consentimiento para volver a probar el popup de consentimiento"
             >
               Reiniciar consentimiento
             </button>

@@ -4,8 +4,9 @@
 
     <!-- Barra superior. En móvil queda solo la marca y el acceso; los enlaces pasan a la barra inferior. -->
     <header class="navbar">
-      <router-link to="/" class="nav-brand" aria-label="sensor_pulso, ir al inicio">
-        <span aria-hidden="true">🫀</span> <span class="nav-brand-texto">sensor_pulso</span>
+      <router-link to="/" class="nav-brand" aria-label="Sensor de Pulso, ir al inicio">
+        <span class="nav-brand-emblema" aria-hidden="true"><IconoUi name="activity" /></span>
+        <span class="nav-brand-texto">Sensor de Pulso</span>
       </router-link>
 
       <nav class="nav-links" aria-label="Navegación principal">
@@ -19,20 +20,18 @@
         >{{ e.texto }}</router-link>
       </nav>
 
-      <!-- Estado de sesión (RF02) -->
-            <!-- Estado de sesión (RF02 y RF51) -->
-      <template v-if="isAuthenticated">
-        <span class="user-chip">👤 {{ currentUserName }} <small>({{ roleLabel }})</small></span>
-        <button 
-          type="button" 
-          class="btn btn-secondary btn-acceso btn-otras-sesiones" 
-          @click="manejarCerrarOtrasSesiones" 
-          title="Cerrar las demás sesiones abiertas en otros navegadores o dispositivos"
-        >
-          Otras Sesiones
-        </button>
-        <button type="button" class="btn btn-secondary btn-acceso" @click="manejarLogout">Salir</button>
-      </template>
+      <details v-if="isAuthenticated" ref="menuCuenta" class="cuenta"
+        @keydown.esc="cerrarMenuConFoco"
+        @focusout="alSalirDelMenu">
+        <summary class="user-chip" title="Opciones de cuenta">
+          <IconoUi name="user" /> {{ currentUserName }} <small>({{ roleLabel }})</small>
+        </summary>
+        <div class="cuenta-opciones">
+          <router-link to="/mis-datos" @click="cerrarMenu">Mis datos y derechos</router-link>
+          <button type="button" @click="manejarCerrarOtrasSesiones">Cerrar otras sesiones</button>
+          <button type="button" @click="manejarLogout">Salir</button>
+        </div>
+      </details>
       <router-link v-else to="/login" class="btn btn-secondary btn-acceso" aria-label="Acceso">
         <NavIcon name="usuario" class="solo-movil" />
         <span class="btn-acceso-texto">Acceso</span>
@@ -47,13 +46,14 @@
     </main>
 
     <footer class="footer">
-      <p>sensor_pulso — Plataforma Educativa de Monitoreo de Frecuencia Cardíaca y SpO₂ (UNACH)</p>
+      <p><strong>Sensor de Pulso</strong> · Universidad Adventista de Chile (UNACH)</p>
       <p class="footer-aviso" data-testid="aviso-pie">{{ AVISO_EDUCATIVO_CORTO }}</p>
-      <p>
+      <nav class="footer-enlaces" aria-label="Privacidad y derechos">
         <router-link to="/privacidad" data-testid="enlace-privacidad">Política de privacidad</router-link>
-        · <router-link :to="RUTA_ALOJAMIENTO" data-testid="enlace-alojamiento">Alojamiento de datos fuera de Chile</router-link>
+        <span aria-hidden="true">·</span>
+        <router-link :to="RUTA_ALOJAMIENTO" data-testid="enlace-alojamiento">Alojamiento de datos fuera de Chile</router-link>
         <template v-if="isAuthenticated"> · <router-link to="/mis-datos" data-testid="enlace-mis-datos">Mis datos y derechos</router-link></template>
-      </p>
+      </nav>
     </footer>
 
     <!-- Barra inferior (solo móvil): íconos con texto, fácil de tocar con el pulgar. -->
@@ -84,13 +84,13 @@
 import { useRouter } from 'vue-router'
 import { AVISO_EDUCATIVO_CORTO } from './data/avisoEducativo.js'
 import { RUTA_ALOJAMIENTO } from './data/alojamiento.js'
-import { computed, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ENLACES_SOLO_CON_SESION, motivoDeRuta } from './utils/accesoSinSesion'
 import EstadoPwa from './components/EstadoPwa.vue'
 import NavIcon from './components/NavIcon.vue'
 import { useAuth } from './composables/useAuth'
-import { ref } from 'vue'
+
 import AvisoInactividadModal from './components/AvisoInactividadModal.vue'
 
 const enlacesBase = [
@@ -104,8 +104,26 @@ const enlacesBase = [
 ]
 
 const router = useRouter()
+const menuCuenta = ref(null)
+function cerrarMenu() {
+  if (menuCuenta.value) menuCuenta.value.open = false
+}
+function cerrarMenuConFoco() {
+  cerrarMenu()
+  menuCuenta.value?.querySelector('summary')?.focus()
+}
+function alSalirDelMenu(evento) {
+  if (!menuCuenta.value?.contains(evento.relatedTarget)) cerrarMenu()
+}
+function alPulsarFuera(evento) {
+  if (!menuCuenta.value?.contains(evento.target)) cerrarMenu()
+}
+onMounted(() => document.addEventListener('pointerdown', alPulsarFuera))
+onUnmounted(() => document.removeEventListener('pointerdown', alPulsarFuera))
+watch(() => router.currentRoute.value.fullPath, cerrarMenu)
 
 const manejarLogout = async () => {
+  cerrarMenu()
   await logout()
   router.push('/')
 }
@@ -121,6 +139,7 @@ watch(isAuthenticated, (conSesion) => {
 })
 const mensajeOtrasSesiones = ref('')
 const manejarCerrarOtrasSesiones = async () => {
+  cerrarMenuConFoco()
   const res = await cerrarOtrasSesiones()
   mensajeOtrasSesiones.value = res.message
   setTimeout(() => {
@@ -159,9 +178,50 @@ main.container {
   width: 100%;
 }
 
+.nav-brand-emblema {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
+  flex-shrink: 0;
+}
+
+.nav-brand-emblema :deep(.icono-ui) {
+  margin-right: 0;
+  color: #ffffff;
+}
+
+.nav-brand-texto {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
 .footer-aviso {
   margin-top: 0.35rem;
-  font-weight: 600;
+}
+
+.footer-enlaces {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+}
+
+.footer-enlaces a {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .footer-enlaces { flex-direction: column; gap: 0; }
+  .footer-enlaces a { padding: 0.5rem; }
+  .footer-enlaces span { display: none; }
 }
 
 .footer {
@@ -179,6 +239,7 @@ main.container {
 }
 
 .user-chip {
+  text-decoration: none;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text);
@@ -306,12 +367,33 @@ main.container {
   .navbar, .bottom-nav { transition: none; }
 }
 
-.btn-otras-sesiones {
-  margin-right: 0.35rem;
-  font-size: 0.8rem;
-  padding: 0.4rem 0.65rem;
+.cuenta { position: relative; }
+.cuenta summary { cursor: pointer; }
+.cuenta-opciones {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: max-content;
+  padding: 0.3rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-surface);
+  box-shadow: 0 6px 20px rgb(15 23 42 / 12%);
 }
-
+.cuenta-opciones > * {
+  padding: 0.65rem 0.9rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cuenta-opciones > :is(:hover, :focus-visible) { background: var(--color-bg); }
 .toast-flotante {
   position: fixed;
   bottom: 1.5rem;

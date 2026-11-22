@@ -11,7 +11,7 @@
           </p>
         </div>
         <span class="badge badge-usuario" style="font-size: 0.8rem;">
-          Rama: rf41-simulador-senal
+          Simulador interactivo
         </span>
       </div>
     </div>
@@ -310,7 +310,7 @@
           class="btn btn-primary"
           style="font-size: 0.8rem; padding: 0.35rem 0.85rem; text-decoration: none;"
         >
-          Transferir esta Simulación a Comparación (RF24) &rarr;
+          Transferir esta Simulación a Comparación &rarr;
         </router-link>
       </div>
     </div>

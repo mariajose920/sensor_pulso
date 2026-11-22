@@ -226,7 +226,7 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
   doc.text('UNIVERSIDAD ADVENTISTA DE CHILE', margin, y + 13.5 * MM_POR_PT)
   y += 5.5
   fuente('normal', 9, COLOR.suave)
-  doc.text('Facultad de Ingeniería y Negocios · sensor_pulso', margin, y + 9 * MM_POR_PT)
+  doc.text('Facultad de Ingeniería y Negocios · Sensor de Pulso', margin, y + 9 * MM_POR_PT)
 
   const fechaStr = new Date().toLocaleDateString('es-CL', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -427,7 +427,7 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
       contentWidth - 30
     )
     doc.text(pie, margin, pageHeight - 11)
-    doc.text('sensor_pulso · UNACH', pageWidth - margin, pageHeight - 11, { align: 'right' })
+    doc.text('Sensor de Pulso · UNACH', pageWidth - margin, pageHeight - 11, { align: 'right' })
     doc.text(`Página ${p} de ${total}`, pageWidth - margin, pageHeight - 7, { align: 'right' })
   }
 

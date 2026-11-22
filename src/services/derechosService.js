@@ -183,10 +183,10 @@ export function obtenerResponsableIncidente(incidente) {
 }
 
 export const PLANTILLA_AVISO_AFECTADOS = {
-  asunto: 'Aviso importante de seguridad sobre tus datos en sensor pulso',
+  asunto: 'Aviso importante de seguridad sobre tus datos en Sensor de Pulso',
   cuerpo: `Estimado/a [Nombre o titular],
 
-Te informamos que el [fecha de detección] identificamos un incidente de seguridad en la plataforma sensor pulso que pudo afectar la privacidad de algunos de tus datos.
+Te informamos que el [fecha de detección] identificamos un incidente de seguridad en la plataforma Sensor de Pulso que pudo afectar la privacidad de algunos de tus datos.
 
 1. Qué ocurrió:
 [Explicación clara y sin tecnicismos de lo sucedido].
@@ -207,7 +207,7 @@ Te informamos que el [fecha de detección] identificamos un incidente de segurid
 Si tienes dudas, necesitas más información o deseas ejercer tus derechos de acceso, rectificación, supresión, oposición o portabilidad, puedes escribirnos al canal de contacto publicado en /privacidad o ingresar a la sección «Mis datos» dentro de la plataforma.
 
 Atentamente,
-Equipo responsable de privacidad — sensor pulso (UNACH)
+Equipo responsable de privacidad — Sensor de Pulso (UNACH)
 [Nombre del contacto oficial — pendiente de confirmación UNACH]`
 }
 
@@ -224,7 +224,7 @@ export function generarAvisoAfectados({
   const asunto = PLANTILLA_AVISO_AFECTADOS.asunto
   const cuerpo = `Estimado/a ${nombreTitular},
 
-Te informamos que el ${fechaDeteccion} identificamos un incidente de seguridad en la plataforma sensor pulso que pudo afectar la privacidad de algunos de tus datos.
+Te informamos que el ${fechaDeteccion} identificamos un incidente de seguridad en la plataforma Sensor de Pulso que pudo afectar la privacidad de algunos de tus datos.
 
 1. Qué ocurrió:
 ${queOcurrio}.
@@ -245,7 +245,7 @@ ${medidasTomadas}.
 Si tienes dudas, necesitas más información o deseas ejercer tus derechos de acceso, rectificación, supresión, oposición o portabilidad, puedes escribirnos al ${canalContacto} o ingresar a la sección «Mis datos» dentro de la plataforma.
 
 Atentamente,
-Equipo responsable de privacidad — sensor pulso (UNACH)
+Equipo responsable de privacidad — Sensor de Pulso (UNACH)
 [Nombre del contacto oficial — pendiente de confirmación UNACH]`
 
   return {
@@ -676,7 +676,7 @@ export const derechosService = {
         const fichaLocal = await deps.pacienteService.obtenerDeclaracionActiva().catch(() => null)
         exportacion = {
           generado_en: crudo.generado_en || new Date().toISOString(),
-          aviso: 'Estos son tus datos en la plataforma sensor pulso (UNACH). Contiene datos de salud: guárdalo en un lugar seguro.',
+          aviso: 'Estos son tus datos en la plataforma Sensor de Pulso (UNACH). Contiene datos de salud: guárdalo en un lugar seguro.',
           perfil: crudo.perfil
             ? {
                 correo: crudo.perfil.correo,
@@ -871,7 +871,7 @@ export const derechosService = {
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(8.8)
         doc.setTextColor(...COLOR.suave)
-        doc.text('Facultad de Ingeniería y Negocios · Plataforma Educativa sensor_pulso', margin, y + 2.8)
+        doc.text('Facultad de Ingeniería y Negocios · Plataforma Educativa Sensor de Pulso', margin, y + 2.8)
         y += 5.5
 
         doc.setFont('helvetica', 'bold')
@@ -891,7 +891,7 @@ export const derechosService = {
         doc.text('AVISO DE PRIVACIDAD Y USO PERSONAL:', margin + 3.5, y + 3.8)
         doc.setFont('helvetica', 'normal')
         doc.text(
-          'Este documento reúne los datos personales y de salud registrados por el titular en sensor_pulso. Conservar en un lugar seguro.',
+          'Este documento reúne los datos personales y de salud registrados por el titular en Sensor de Pulso. Conservar en un lugar seguro.',
           margin + 3.5,
           y + 7.6
         )
@@ -1034,7 +1034,7 @@ export const derechosService = {
         if (solicitudesLista.length === 0) {
           dibujarGrillaDosColumnas([
             ['Solicitudes registradas', 'Sin solicitudes formales adicionales'],
-            ['Canal de atención', 'Sección Mis datos y derechos en sensor_pulso']
+            ['Canal de atención', 'Sección Mis datos y derechos en Sensor de Pulso']
           ])
         } else {
           const colSol = [48, 40, 58, 38]
@@ -1092,7 +1092,7 @@ export const derechosService = {
         doc.setFontSize(7.8)
         doc.setTextColor(...COLOR.suave)
         doc.text(
-          'sensor_pulso · Universidad Adventista de Chile (UNACH) — Documento de uso exclusivo del titular de los datos.',
+          'Sensor de Pulso · Universidad Adventista de Chile (UNACH) — Documento de uso exclusivo del titular de los datos.',
           margin,
           pageHeight - 8.5
         )

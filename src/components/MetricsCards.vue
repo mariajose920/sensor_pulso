@@ -34,7 +34,7 @@
 
     <!-- Metrica 3: Diagnostico Comparativo (RF24) -->
     <div class="card" style="margin-bottom: 0; padding: 1rem;">
-      <div style="font-size: 0.8rem; color: var(--color-muted); font-weight: 500;">Estado Fisiologico (RF24)</div>
+      <div style="font-size: 0.8rem; color: var(--color-muted); font-weight: 500;">Estado Fisiologico</div>
       <div style="margin-top: 0.5rem;">
         <span
           class="badge"

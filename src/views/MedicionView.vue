@@ -83,7 +83,7 @@
         :tabindex="pasoActual >= paso.numero ? 0 : -1"
       >
         <div class="stepper-circulo">
-          <span v-if="pasoActual > paso.numero">✓</span>
+          <span v-if="pasoActual > paso.numero"><IconoUi name="check" /></span>
           <span v-else>{{ paso.numero }}</span>
         </div>
         <div class="stepper-etiquetas">
@@ -109,7 +109,7 @@
       <div v-if="consentimientoVigente" class="alert alert-success" style="margin: 1rem 0;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
           <div>
-            <strong>✓ Consentimiento Vigente Registrado</strong>
+            <strong><IconoUi name="check" /> Consentimiento Vigente Registrado</strong>
             <div style="font-size: 0.85rem; color: #166534; margin-top: 2px;">
               Versión {{ consentimientoEstado.version }} autorizada el 
               <strong>{{ consentimientoEstado.fechaHoraTexto || 'recientemente' }}</strong>.
@@ -167,7 +167,7 @@
           <div class="pilar-num">3</div>
           <div class="pilar-content">
             <h4>Responsable del Tratamiento</h4>
-            <p>Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios. Custodiado con cifrado TLS y políticas RLS en PostgreSQL.</p>
+            <p>Equipo del proyecto Sensor de Pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios. Custodiado con cifrado TLS y políticas RLS en PostgreSQL.</p>
           </div>
         </div>
 
@@ -203,7 +203,7 @@
           :disabled="!puedeAvanzarPaso1"
           @click="confirmarPaso1"
         >
-          <span>Aceptar y Pasar a Datos del Paciente</span> ➔
+          <span>Aceptar y Pasar a Datos del Paciente</span> <IconoUi name="arrow-right" />
         </button>
       </div>
     </section>
@@ -234,10 +234,10 @@
       <!-- Botones de Acción Paso 2 -->
       <div class="step-nav-actions">
         <button type="button" class="btn btn-secondary" @click="pasoActual = 1">
-          ⬅ Volver al Consentimiento
+          <IconoUi name="arrow-left" /> Volver al Consentimiento
         </button>
         <button type="button" class="btn btn-primary btn-lg" @click="confirmarPaso2">
-          <span>Guardar Ficha y Pasar al Reposo de 1 Minuto </span> ➔
+          <span>Guardar Ficha y Pasar al Reposo de 1 Minuto </span> <IconoUi name="arrow-right" />
         </button>
       </div>
     </section>
@@ -248,7 +248,7 @@
     <section v-else-if="pasoActual === 3" class="wizard-step-card card anim-fade" aria-labelledby="paso3-titulo">
       <div class="step-intro">
         <span class="step-badge">Paso 3 de 5 · Estabilización Hemodinámica</span>
-        <h2 id="paso3-titulo" class="step-heading">Período de Reposo Cardiovascular Basal (1 Minuto)</h2>
+        <h2 id="paso3-titulo" class="step-heading">Descansa un minuto</h2>
         <p class="step-desc">
           Según las directrices de la <strong>American Heart Association (AHA)</strong>, para registrar una frecuencia cardíaca basal fidedigna el participante debe descansar al menos 1 minuto en calma, evitando taquicardias reactivas por deambulación o nerviosismo.
         </p>
@@ -265,28 +265,25 @@
                 cx="70" 
                 cy="70" 
                 r="62" 
-                :stroke-dasharray="circunferenciaTimer"
-                :stroke-dashoffset="offsetTimer"
+                v-show="segundosRestantesReposo < SEGUNDOS_REPOSO_TOTAL"
+                pathLength="60"
+                stroke-dasharray="60"
+                :stroke-dashoffset="segundosRestantesReposo"
               />
             </svg>
             <div class="timer-center-text">
               <span class="timer-numeros">{{ tiempoFormateado }}</span>
-              <span class="timer-label">{{ reposoCompletado ? 'Completado' : reposoEnCurso ? 'En reposo...' : 'Listo' }}</span>
+              <span class="timer-label">{{ reposoCompletado ? 'Finalizado' : reposoEnCurso ? 'En reposo' : reposoPausado ? 'En pausa' : 'Listo' }}</span>
             </div>
           </div>
 
           <!-- Guía Visual de Respiración Rítmica -->
           <div class="respiracion-guia-centrada">
-            <div class="pulmon-pulso-icon" :class="{ 'anim-pulsar': reposoEnCurso }">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-              </svg>
-            </div>
             <div class="respiracion-texto-centrado">
-              <strong v-if="reposoCompletado" class="color-exito">Fisiología basal estabilizada (AHA)</strong>
+              <strong v-if="reposoCompletado" class="color-exito">Puedes continuar a la medición</strong>
               <strong v-else-if="reposoEnCurso" class="color-progreso">Inhala suavemente... Exhala despacio...</strong>
-              <strong v-else>Presiona iniciar para comenzar el reposo de 1 minuto</strong>
-              <p>Respirar rítmicamente activa el nervio vago y estabiliza el intervalo R-R antes de medir.</p>
+              <strong v-else-if="reposoPausado">Reanuda el temporizador cuando estés listo</strong>
+              <strong v-else>Cuando estés listo, inicia el temporizador</strong>
             </div>
           </div>
 
@@ -298,7 +295,7 @@
               class="btn btn-primary btn-lg"
               @click="iniciarReposo"
             >
-              Iniciar Reposo (60 s)
+              {{ reposoPausado ? 'Reanudar reposo' : 'Iniciar reposo' }}
             </button>
 
             <button 
@@ -708,7 +705,7 @@
             <code>firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino</code>.
           </p>
           <div class="firmware-code-box">
-            <pre><code>// 1. Configurar WiFi y Token de Dispositivo (RF54)
+            <pre><code>// 1. Configurar WiFi y Token de Dispositivo
 #define WIFI_SSID "TU_RED_WIFI"
 #define WIFI_PASS "TU_PASSWORD"
 #define DISPOSITIVO_TOKEN "esp_demotoken_unach_2026_rf05"
@@ -745,10 +742,10 @@
       <!-- Botones de Acción Paso 4 -->
       <div class="step-nav-actions" style="margin-top: 1.5rem;">
         <button type="button" class="btn btn-secondary" @click="pasoActual = 3">
-          ⬅ Volver al Reposo (Paso 3)
+          <IconoUi name="arrow-left" /> Volver al Reposo (Paso 3)
         </button>
         <button type="button" class="btn btn-success btn-lg" @click="finalizarMedicionYVerResultados">
-          <span>Finalizar Medición y Ver Resultados (Paso 5)</span> ➔
+          <span>Finalizar Medición y Ver Resultados (Paso 5)</span> <IconoUi name="arrow-right" />
         </button>
       </div>
     </section>
@@ -882,7 +879,7 @@
             <div class="porque-fuente">
               Fuente médica oficial: 
               <a :href="clasificacionRitmo.enlaceFuente" target="_blank" rel="noopener">
-                {{ clasificacionRitmo.fuenteOficial }} ↗
+                {{ clasificacionRitmo.fuenteOficial }} <IconoUi name="arrow-up-right" />
               </a>
             </div>
           </div>
@@ -1639,11 +1636,7 @@ const reposoEnCurso = ref(false)
 const reposoCompletado = ref(false)
 let timerReposoInterval = null
 
-const circunferenciaTimer = 2 * Math.PI * 54
-const offsetTimer = computed(() => {
-  const fraccion = (SEGUNDOS_REPOSO_TOTAL - segundosRestantesReposo.value) / SEGUNDOS_REPOSO_TOTAL
-  return circunferenciaTimer * (1 - fraccion)
-})
+const reposoPausado = ref(false)
 
 const tiempoFormateado = computed(() => {
   const m = Math.floor(segundosRestantesReposo.value / 60)
@@ -1652,13 +1645,14 @@ const tiempoFormateado = computed(() => {
 })
 
 function iniciarReposo() {
+  reposoPausado.value = false
   reposoEnCurso.value = true
   if (timerReposoInterval) clearInterval(timerReposoInterval)
 
+  const fin = Date.now() + segundosRestantesReposo.value * 1000
   timerReposoInterval = setInterval(() => {
-    if (segundosRestantesReposo.value > 0) {
-      segundosRestantesReposo.value--
-    } else {
+    segundosRestantesReposo.value = Math.max(0, Math.ceil((fin - Date.now()) / 1000))
+    if (segundosRestantesReposo.value === 0) {
       clearInterval(timerReposoInterval)
       timerReposoInterval = null
       reposoEnCurso.value = false
@@ -1668,6 +1662,7 @@ function iniciarReposo() {
 }
 
 function pausarReposo() {
+  reposoPausado.value = true
   reposoEnCurso.value = false
   if (timerReposoInterval) {
     clearInterval(timerReposoInterval)
@@ -1677,12 +1672,14 @@ function pausarReposo() {
 
 function reiniciarReposo() {
   pausarReposo()
+  reposoPausado.value = false
   segundosRestantesReposo.value = SEGUNDOS_REPOSO_TOTAL
   reposoCompletado.value = false
 }
 
 function omitirReposoLaboratorio() {
   pausarReposo()
+  reposoPausado.value = false
   segundosRestantesReposo.value = 0
   reposoCompletado.value = true
 }
@@ -2823,31 +2820,6 @@ onBeforeUnmount(() => {
   margin: 0 auto 1.5rem auto;
   max-width: 520px;
   width: 100%;
-}
-
-.pulmon-pulso-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  color: #0284c7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 0.75rem auto;
-  transition: transform 0.4s ease, box-shadow 0.4s ease;
-}
-
-.pulmon-pulso-icon.anim-pulsar {
-  animation: pulsarRespira 4s infinite ease-in-out;
-  box-shadow: 0 0 0 12px rgba(2, 132, 199, 0.15);
-}
-
-@keyframes pulsarRespira {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.35); }
-  50% { transform: scale(1.22); box-shadow: 0 0 0 14px rgba(2, 132, 199, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
 }
 
 .respiracion-texto-centrado {

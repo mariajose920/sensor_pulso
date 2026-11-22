@@ -2,7 +2,7 @@
   <div class="bpm-card-container card">
     <div class="bpm-card-header">
       <div class="header-title-box">
-        <div class="tag-badge">RF07 · Frecuencia Cardíaca en Tiempo Real</div>
+        <div class="tag-badge">Frecuencia Cardíaca en Tiempo Real</div>
         <h3 class="card-main-title">Monitor de Frecuencia Cardíaca (BPM)</h3>
       </div>
 
@@ -108,7 +108,7 @@
           @click="mostrarExplicacion = !mostrarExplicacion"
           title="Ver cómo se obtiene el BPM"
         >
-          🔬 ¿Cómo se calcula?
+          <IconoUi name="flask" /> ¿Cómo se calcula?
         </button>
       </div>
     </div>
@@ -117,7 +117,7 @@
     <div v-if="mostrarExplicacion" class="educational-panel alert alert-info">
       <div class="educational-header">
         <strong>Fisiología e ingeniería de la medición</strong>
-        <button type="button" class="btn-close-sm" @click="mostrarExplicacion = false">✕</button>
+        <button type="button" class="btn-close-sm" @click="mostrarExplicacion = false"><IconoUi name="x" /></button>
       </div>
       <ExplicacionResultados tipo="bpm" :bpm="bpm" />
     </div>

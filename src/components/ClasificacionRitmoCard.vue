@@ -5,7 +5,7 @@
       <div>
         <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
           <h2 class="card-title" style="margin: 0; font-size: 1.15rem;">
-            Simulación de diagnóstico del ritmo cardíaco (RF18)
+            Simulación de diagnóstico del ritmo cardíaco
           </h2>
           <span class="badge badge-subtle font-mono" style="font-size: 0.72rem;">
             AHA & Mayo Clinic
@@ -83,7 +83,7 @@
 
         <!-- Correlación con Factores de la Ficha del Paciente (RF03) -->
         <div v-if="clasificacion.correlacionFactores && clasificacion.correlacionFactores.length > 0" class="factores-correlacion-box">
-          <span class="factores-titulo">Influencia de Factores Declarados en Ficha (RF03):</span>
+          <span class="factores-titulo">Influencia de Factores Declarados en Ficha:</span>
           <ul class="factores-lista">
             <li v-for="(factor, idx) in clasificacion.correlacionFactores" :key="idx">
               {{ factor }}
@@ -100,7 +100,7 @@
             rel="noopener noreferrer"
             class="fuente-link"
           >
-            {{ clasificacion.fuenteOficial }} ↗
+            {{ clasificacion.fuenteOficial }} <IconoUi name="arrow-up-right" />
           </a>
         </div>
       </div>
@@ -142,7 +142,7 @@
         <div style="border-top: 1px dashed #cbd5e1; padding-top: 0.5rem; font-size: 0.75rem; color: #64748b; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
           <span>Referencia: {{ ritmoSeleccionado.fuenteOficial }}</span>
           <a :href="ritmoSeleccionado.enlaceFuente" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline;">
-            Consultar guía clínica ↗
+            Consultar guía clínica <IconoUi name="arrow-up-right" />
           </a>
         </div>
       </div>
