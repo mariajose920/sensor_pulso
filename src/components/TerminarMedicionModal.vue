@@ -16,7 +16,7 @@
           <h2 id="terminar-titulo" class="modal-title" tabindex="-1" ref="tituloEl">Terminar medición</h2>
           <span class="version-tag">Canal {{ registro.resumen.canal }}<template v-if="registro.resumen.paciente"> · {{ registro.resumen.paciente }}</template></span>
         </div>
-        <button type="button" class="btn-close" aria-label="Cerrar" :disabled="trabajando" @click="intentarCerrar">✕</button>
+        <button type="button" class="btn-close" aria-label="Cerrar" :disabled="trabajando" @click="intentarCerrar"><IconoUi name="x" /></button>
       </div>
 
       <div id="terminar-descripcion" class="modal-body">

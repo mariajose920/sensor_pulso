@@ -6,7 +6,7 @@
     :role="aviso.nivel === 'mala' ? 'alert' : 'status'"
   >
     <p class="aviso-titulo">
-      <span aria-hidden="true">{{ aviso.nivel === 'mala' ? '⛔' : '⚠️' }}</span>
+      <span aria-hidden="true">{{ aviso.nivel === 'mala' ? '' : '' }}</span>
       Calidad {{ aviso.nivel }}: {{ aviso.titulo }}
     </p>
     <p class="aviso-texto">{{ aviso.explicacion }}</p>

@@ -5,9 +5,9 @@
       <div class="banco-header-row">
         <div>
           <h3 class="banco-titulo">
-            🏦 Nuevo ítem en el Banco de Preguntas
+            <IconoUi name="building" /> Nuevo ítem en el Banco de Preguntas
             <span class="badge" :class="origenBanco === 'supabase' ? 'badge-bd' : 'badge-local-item'">
-              {{ origenBanco === 'supabase' ? '☁️ Conectado a Supabase' : '💾 Modo demo local' }}
+              {{ origenBanco === 'supabase' ? 'Conectado a Supabase' : 'Modo demo local' }}
             </span>
           </h3>
           <p class="banco-subtitulo">
@@ -120,7 +120,7 @@
               :disabled="!puedeCompartir"
               data-testid="banco-check-compartir"
             />
-            <span>🌐 Compartir en el banco común (visible para otros docentes)</span>
+            <span><IconoUi name="globe" /> Compartir en el banco común (visible para otros docentes)</span>
           </label>
           <small v-if="!puedeCompartir" class="texto-permiso">
             Tu cuenta no tiene habilitado el permiso «Compartir en banco» (solicítalo al administrador).
@@ -151,7 +151,7 @@
             :class="{ activo: alcance === 'personal' }"
             @click="cambiarAlcance('personal')"
           >
-            🔒 Mi Banco Personal
+            <IconoUi name="lock" /> Mi Banco Personal
           </button>
           <button
             type="button"
@@ -159,7 +159,7 @@
             :class="{ activo: alcance === 'compartido' }"
             @click="cambiarAlcance('compartido')"
           >
-            🌐 Banco Compartido
+            <IconoUi name="globe" /> Banco Compartido
           </button>
         </div>
 
@@ -179,12 +179,12 @@
           <div class="item-banco-top">
             <div class="badges-row">
               <span class="badge" :class="p.compartida ? 'badge-shared' : 'badge-private'">
-                {{ p.compartida ? '🌐 Compartida' : '🔒 Personal' }}
+                {{ p.compartida ? 'Compartida' : 'Personal' }}
               </span>
               <span class="badge badge-meta">{{ etiquetaTipo(p.tipo) }}</span>
               <span class="badge badge-meta">{{ p.puntaje }} pts</span>
               <span class="badge" :class="p.origen === 'supabase' ? 'badge-bd' : 'badge-local-item'">
-                {{ p.origen === 'supabase' ? '☁️ Supabase' : '💾 Local' }}
+                {{ p.origen === 'supabase' ? 'Supabase' : 'Local' }}
               </span>
               <span v-for="tag in (p.etiquetas || [])" :key="tag" class="badge badge-tag">#{{ tag }}</span>
             </div>
@@ -201,7 +201,7 @@
               @click="$emit('agregar-pregunta', p)"
               data-testid="banco-usar-pregunta"
             >
-              {{ yaEnEvaluacion(p.id) ? '✓ Ya en evaluación' : '➕ Usar en evaluación' }}
+              {{ yaEnEvaluacion(p.id) ? 'Ya en evaluación' : 'Usar en evaluación' }}
             </button>
 
             <button
@@ -211,7 +211,7 @@
               :disabled="!p.compartida && !puedeCompartir && !esAdmin"
               @click="toggleCompartir(p)"
             >
-              {{ p.compartida ? '🔒 Hacer privada' : '🌐 Compartir' }}
+              {{ p.compartida ? 'Hacer privada' : 'Compartir' }}
             </button>
 
             <button
@@ -220,7 +220,7 @@
               class="btn btn-secondary btn-sm btn-peligro-txt"
               @click="borrarPregunta(p)"
             >
-              🗑️ Eliminar
+              <IconoUi name="trash" /> Eliminar
             </button>
           </div>
         </li>

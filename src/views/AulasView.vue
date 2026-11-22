@@ -3,7 +3,7 @@
     <div class="card">
       <div class="aulas-header">
         <div>
-          <h1 class="card-title">🏫 Aulas y Cursos</h1>
+          <h1 class="card-title">Aulas y Cursos</h1>
           <RouterLink :to="{ name: 'MisEvaluaciones' }" class="btn btn-secondary">
             Mis evaluaciones
           </RouterLink>
@@ -24,7 +24,7 @@
 
       <!-- Viene desde "Crear evaluación": al terminar el aula se puede volver a la evaluación -->
       <div v-if="vieneDeEvaluacion" class="alert" :class="aulaCreadaId ? 'alert-success' : 'alert-info'" data-testid="volver-evaluacion">
-        <span v-if="aulaCreadaId">✓ Aula creada. Ya puedes volver a crear tu evaluación.</span>
+        <span v-if="aulaCreadaId"><IconoUi name="check" /> Aula creada. Ya puedes volver a crear tu evaluación.</span>
         <span v-else>Estás creando un aula para tu evaluación. Cuando termines, vuelve a la evaluación; tu borrador se conserva.</span>
         <RouterLink :to="rutaVolverEvaluacion" class="btn btn-primary btn-sm" data-testid="btn-volver-evaluacion"
                     style="margin-left: 0.75rem; text-decoration: none;">
@@ -38,7 +38,7 @@
       </div>
 
       <div v-if="isProfesor && !tienePermisoProfesor('crear_aulas')" class="alert alert-warning">
-        ⚠️ Aún no tienes habilitado el permiso para crear aulas. Solicita al administrador que te active este permiso en el panel.
+        <IconoUi name="alert" /> Aún no tienes habilitado el permiso para crear aulas. Solicita al administrador que te active este permiso en el panel.
       </div>
 
       <!-- VISTA PROFESOR / ADMIN -->
@@ -59,7 +59,7 @@
             <div class="aula-header">
               <h3 class="aula-title">{{ aula.nombre }}</h3>
               <span class="badge" :class="aula.codigo_activo ? 'badge-profesor' : 'badge-desactivado'">
-                {{ aula.codigo_activo ? '🟢 Código Activo' : '🔴 Código Desactivado' }}
+                {{ aula.codigo_activo ? 'Código Activo' : 'Código Desactivado' }}
               </span>
             </div>
 
@@ -72,14 +72,14 @@
             <!-- RF103: Acceso a la página dedicada del aula -->
             <div class="aula-enter-row" style="margin: 0.75rem 0;">
               <router-link :to="`/aulas/${aula.id}`" class="btn btn-primary btn-sm w-100" style="display: flex; justify-content: center; align-items: center; gap: 0.5rem; text-decoration: none; font-weight: 700;">
-                🏛️ Gestionar Aula (Página del Aula) ➜
+                <IconoUi name="building" /> Gestionar Aula (Página del Aula) <IconoUi name="arrow-right" />
               </router-link>
             </div>
 
             <div class="aula-peligro-row">
               <button type="button" class="btn-code-action btn-peligro" data-testid="eliminar-aula"
                       title="Eliminar el aula con sus cursos, estudiantes y evaluaciones" @click="abrirModalEliminarAula(aula)">
-                🗑️ Eliminar aula
+                <IconoUi name="trash" /> Eliminar aula
               </button>
             </div>
 
@@ -90,7 +90,7 @@
                 <div class="codigo-display">
                   <code :class="{ 'codigo-tachado': !aula.codigo_activo }">{{ aula.codigo }}</code>
                   <button @click="copiarCodigo(aula.codigo)" class="btn-copy" title="Copiar código">
-                    📋 Copiar
+                    <IconoUi name="clipboard" /> Copiar
                   </button>
                 </div>
               </div>
@@ -109,13 +109,13 @@
                   class="btn-code-action"
                   title="Generar un código nuevo e invalidar el anterior"
                 >
-                  🔄 Regenerar
+                  <IconoUi name="refresh" /> Regenerar
                 </button>
                 <button 
                   @click="abrirModalInvitar(aula)" 
                   class="btn-code-action btn-invite"
                 >
-                  ✉️ Invitar Estudiante
+                  <IconoUi name="mail" /> Invitar Estudiante
                 </button>
               </div>
             </div>
@@ -137,18 +137,18 @@
                   <div class="curso-info">
                     <span class="curso-nombre">{{ curso.nombre }}</span>
                     <span class="badge badge-estudiantes">
-                      👥 {{ curso.cantidad_estudiantes }} estudiante(s)
+                      <IconoUi name="users" /> {{ curso.cantidad_estudiantes }} estudiante(s)
                     </span>
                   </div>
                   <div class="curso-actions">
                     <button @click="abrirModalEstudiantes(aula, curso)" class="btn-icon" title="Gestionar estudiantes">
-                      👥 Alumnos
+                      <IconoUi name="users" /> Alumnos
                     </button>
                     <button @click="abrirModalRenombrarCurso(aula, curso)" class="btn-icon" title="Renombrar curso">
-                      ✏️
+                      <IconoUi name="edit" />
                     </button>
                     <button @click="confirmarEliminarCurso(aula, curso)" class="btn-icon text-danger" title="Eliminar curso">
-                      🗑️
+                      <IconoUi name="trash" />
                     </button>
                   </div>
                 </li>
@@ -236,7 +236,7 @@
             <label class="form-label">Código generado</label>
             <div class="codigo-preview">
               <code>{{ codigoPrevisualizado }}</code>
-              <button type="button" @click="codigoPrevisualizado = generarCodigoAula()" class="btn-link">🔄 Generar otro</button>
+              <button type="button" @click="codigoPrevisualizado = generarCodigoAula()" class="btn-link"><IconoUi name="refresh" /> Generar otro</button>
             </div>
           </div>
 
@@ -251,7 +251,7 @@
     <!-- MODAL INVITAR ESTUDIANTE POR CORREO (RF100) -->
     <div v-if="modalInvitarAbierto" class="modal-backdrop" @click.self="modalInvitarAbierto = false">
       <div class="modal-card">
-        <h3 class="modal-title">✉️ Invitar Estudiantes al Aula</h3>
+        <h3 class="modal-title"><IconoUi name="mail" /> Invitar Estudiantes al Aula</h3>
         <p class="modal-subtitle">
           Aula: <strong>{{ aulaSeleccionada?.nombre }}</strong> (Código: <code>{{ aulaSeleccionada?.codigo }}</code>)
         </p>
@@ -325,7 +325,7 @@
                 :class="inv.estado === 'fallido' ? 'badge badge-desactivado' : 'badge badge-profesor'" 
                 style="font-size: 0.72rem;"
               >
-                {{ inv.estado === 'fallido' ? '❌ Fallido' : '✓ Enviado' }}
+                {{ inv.estado === 'fallido' ? 'Fallido' : 'Enviado' }}
               </span>
             </div>
           </div>
@@ -336,7 +336,7 @@
     <!-- MODAL ELIMINAR AULA -->
     <div v-if="aulaAEliminar" class="modal-backdrop" @click.self="cerrarModalEliminarAula">
       <div class="modal-card" data-testid="modal-eliminar-aula">
-        <h3 class="modal-title">🗑️ Eliminar aula</h3>
+        <h3 class="modal-title"><IconoUi name="trash" /> Eliminar aula</h3>
         <div class="alert alert-error" style="font-size: 0.85rem;">
           Vas a eliminar <strong>{{ aulaAEliminar.nombre }}</strong> de forma definitiva, con sus cursos, invitaciones,
           <strong>{{ resumenEliminar.estudiantes }}</strong> estudiante(s) y <strong>{{ resumenEliminar.evaluaciones }}</strong>
@@ -388,7 +388,7 @@
     <!-- MODAL GESTIONAR ESTUDIANTES DEL CURSO (RF101) -->
     <div v-if="modalEstudiantesAbierto" class="modal-backdrop" @click.self="modalEstudiantesAbierto = false">
       <div class="modal-card">
-        <h3 class="modal-title">👥 Asignar Estudiantes al Curso</h3>
+        <h3 class="modal-title"><IconoUi name="users" /> Asignar Estudiantes al Curso</h3>
         <p class="modal-subtitle">
           Curso: <strong>{{ cursoSeleccionado?.nombre }}</strong> (Aula: {{ aulaSeleccionada?.nombre }})
         </p>

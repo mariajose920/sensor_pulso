@@ -1,6 +1,6 @@
 <template>
   <div class="card">
-    <h2 class="card-title">Descargas (RF32)</h2>
+    <h2 class="card-title">Descargas</h2>
     <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1rem;">
       Descarga el informe en PDF, los datos de la señal en CSV o el gráfico comparativo como imagen PNG.
     </p>

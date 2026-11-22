@@ -216,7 +216,7 @@ export function calcularMetricasSenal(muestras, frecuenciaMuestreoHz = 50) {
  */
 export function generarCsvOsciloscopio(muestrasIr, muestrasRojo, frecuenciaHz = 50, canal = 1) {
   const lineas = [
-    '# sensor_pulso · Registro de Senal en Tiempo Real (RF06)',
+    '# Sensor de Pulso · Registro de Senal en Tiempo Real (RF06)',
     `# Canal: ${canal}`,
     `# Frecuencia de Muestreo: ${frecuenciaHz} Hz`,
     `# Fecha de Exportacion: ${new Date().toISOString()}`,

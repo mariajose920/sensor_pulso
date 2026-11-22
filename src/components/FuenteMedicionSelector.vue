@@ -50,7 +50,7 @@
     <!-- WiFi -->
     <div v-else-if="fuente === 'wifi'" class="fuente-detalle" aria-live="polite" data-testid="fuente-wifi">
       <div v-if="esp32State.conectado" class="estado-mensaje ok" role="status" data-testid="wifi-conectado">
-        <strong>✓ WiFi conectado.</strong>
+        <strong><IconoUi name="check" /> WiFi conectado.</strong>
         {{ esp32State.dispositivo || 'El ESP32' }} está enviando datos. Ya puedes agregar los canales de medición.
       </div>
       <div v-else-if="wifiConfigurado" class="estado-mensaje info" role="status" data-testid="wifi-esperando-datos">
@@ -112,7 +112,7 @@
       </div>
 
       <div v-if="usbState.conectado" class="estado-mensaje ok" role="status" data-testid="usb-conectado">
-        <strong>✓ USB conectado.</strong>
+        <strong><IconoUi name="check" /> USB conectado.</strong>
         Puerto {{ usbState.puerto || 'abierto' }}
         ({{ usbState.puertoAuto ? 'identificado automáticamente' : 'elegido por ti' }}).
       </div>

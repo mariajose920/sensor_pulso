@@ -9,7 +9,7 @@
         data-testid="pausar-canal"
         :aria-label="pausada ? `Reanudar la gráfica del canal ${canal}` : `Pausar la gráfica del canal ${canal}`"
         @click="emit('pausar')"
-      ><span class="icono" aria-hidden="true">{{ pausada ? '▶' : '❚❚' }}</span> {{ pausada ? 'Reanudar' : 'Pausar' }}</button>
+      ><span class="icono" aria-hidden="true">{{ pausada ? '' : '' }}</span> {{ pausada ? 'Reanudar' : 'Pausar' }}</button>
       <button
         type="button"
         class="h-btn"
@@ -37,7 +37,7 @@
         :aria-label="`${f.descripcion} del canal ${canal}: ${ajustes[f.clave] ? 'activado' : 'desactivado'}`"
         :data-testid="`filtro-${f.clave}`"
         @click="emit('alternar', f.clave)"
-      ><span class="marca" aria-hidden="true">{{ ajustes[f.clave] ? '✓' : '' }}</span> {{ f.texto }}</button>
+      ><span class="marca" aria-hidden="true">{{ ajustes[f.clave] ? '' : '' }}</span> {{ f.texto }}</button>
     </div>
   </div>
 </template>

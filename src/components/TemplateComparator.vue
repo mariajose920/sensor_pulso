@@ -4,7 +4,7 @@
     <div style="border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
       <div>
         <h3 class="card-title" style="margin-bottom: 0.25rem;">
-          Comparacion Detallada con Plantilla de Reposo y ECG Educativo (RF24)
+          Comparacion Detallada con Plantilla de Reposo y ECG Educativo
         </h3>
         <p style="font-size: 0.85rem; color: var(--color-muted); margin-bottom: 0;">
           Compara la medicion tomada (PPG) con el ECG de referencia y la plantilla estandar de reposo.
@@ -40,28 +40,7 @@
       </div>
     </div>
 
-    <!-- Barra de control: Capas visibles -->
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-size: 0.8rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
-      <span style="color: var(--color-muted); font-size: 0.8rem;">
-        Grafica ampliada con escala sincronizada
-      </span>
-
-      <!-- Toggles manuales de visibilidad de capas -->
-      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
-          <input type="checkbox" v-model="showPatient">
-          <span style="color: var(--color-success); font-weight: 600;">Medicion Tomada</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
-          <input type="checkbox" v-model="showResting">
-          <span style="color: #0284c7; font-weight: 600;">Plantilla Reposo</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
-          <input type="checkbox" v-model="showEcg">
-          <span style="color: #6366f1; font-weight: 600;">ECG Educativo</span>
-        </label>
-      </div>
-    </div>
+    <p style="color: var(--color-muted); font-size: 0.8rem; margin-bottom: 0.75rem;">Gráfica ampliada con escala sincronizada</p>
 
     <!-- 1. Grafico Didactico SVG con Medicion + Plantilla + ECG (Fijo en 380px ampliado) -->
     <div
@@ -217,7 +196,7 @@
             <th style="padding: 0.6rem;">Criterio</th>
             <th style="padding: 0.6rem; color: var(--color-success);">Medicion Tomada (Sensor)</th>
             <th style="padding: 0.6rem; color: #6366f1;">ECG Educativo (Electrico)</th>
-            <th style="padding: 0.6rem; color: #0284c7;">Plantilla Reposo PPG (RF24)</th>
+            <th style="padding: 0.6rem; color: #0284c7;">Plantilla Reposo PPG</th>
           </tr>
         </thead>
         <tbody style="border-bottom: 1px solid var(--color-border);">
@@ -253,7 +232,7 @@
             <dd>{{ f.ecg }}</dd>
           </div>
           <div>
-            <dt style="color: #0284c7;">Plantilla Reposo PPG (RF24)</dt>
+            <dt style="color: #0284c7;">Plantilla Reposo PPG</dt>
             <dd>{{ f.plantilla }}</dd>
           </div>
         </dl>

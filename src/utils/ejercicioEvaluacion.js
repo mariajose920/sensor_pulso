@@ -6,9 +6,9 @@
  */
 
 export const ACCION_EJERCICIO = {
-  medir_pulso: { texto: 'Realizar medición', icono: '🫀', ruta: 'Medicion', ayuda: 'Mide tu pulso y guarda la medición; después vuelve aquí y súbela.' },
-  medir_spo2: { texto: 'Realizar medición', icono: '🫁', ruta: 'Medicion', ayuda: 'Mide tu SpO₂ y guarda la medición; después vuelve aquí y súbela.' },
-  comparar_senales: { texto: 'Hacer comparación', icono: '📈', ruta: 'Comparacion', ayuda: 'Haz la comparación de señales y guárdala; después vuelve aquí y súbela.' }
+  medir_pulso: { texto: 'Realizar medición', icono: '', ruta: 'Medicion', ayuda: 'Mide tu pulso y guarda la medición; después vuelve aquí y súbela.' },
+  medir_spo2: { texto: 'Realizar medición', icono: '', ruta: 'Medicion', ayuda: 'Mide tu SpO₂ y guarda la medición; después vuelve aquí y súbela.' },
+  comparar_senales: { texto: 'Hacer comparación', icono: '', ruta: 'Comparacion', ayuda: 'Haz la comparación de señales y guárdala; después vuelve aquí y súbela.' }
 }
 
 /** Texto del botón para ir a hacer el ejercicio. */

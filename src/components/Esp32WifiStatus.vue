@@ -18,11 +18,11 @@
           :segundosSinContacto="tiempoDesdeContacto"
           tamano="sm" 
         />
-        <div class="badge-token" :title="'Autenticación de dispositivo verificada (RF54)'">
-          <span class="badge-icon">🔒</span> Token RF54 Válido
+        <div class="badge-token" :title="'Autenticación de dispositivo verificada'">
+          <span class="badge-icon"><IconoUi name="lock" /></span> Token Válido
         </div>
-        <div class="badge-tls" :title="'Cifrado en tránsito HTTPS/TLS 1.3 activo (RF55)'">
-          <span class="badge-icon">🛡️</span> TLS 1.3 (RF55)
+        <div class="badge-tls" :title="'Cifrado en tránsito HTTPS/TLS 1.3 activo'">
+          <span class="badge-icon"><IconoUi name="shield" /></span> TLS 1.3
         </div>
       </div>
     </div>

@@ -1,46 +1,43 @@
 <template>
   <div class="home-container">
     <div class="hero card">
-      <h1 class="hero-title">🫀 sensor_pulso</h1>
+      <h1 class="hero-title">Sensor de Pulso</h1>
       <p class="hero-subtitle">
-        Plataforma web educativa, responsiva e instalable (PWA) para medir, visualizar, comparar e interpretar la frecuencia cardíaca y saturación de oxígeno (SpO₂) mediante ESP32 conectado por WiFi.
+        Conecta el sensor de pulso por Wi-Fi para ver tu frecuencia cardíaca y tu saturación de oxígeno (SpO₂) en tiempo real. Compara tus mediciones con ejemplos de referencia para aprender a interpretarlas.
       </p>
-      <AvisoEducativo />
-      <div class="system-status alert alert-info">
-        <strong>Estado de la plataforma:</strong> Base del sistema inicializada para el equipo (Vue 3 + Vite + Supabase).
-      </div>
+      <AvisoEducativo>
+        <strong>Uso educativo.</strong> Las mediciones y comparaciones sirven para practicar la interpretación de señales.
+        Sensor de Pulso no es un dispositivo médico certificado ni permite diagnosticar enfermedades.
+        Si tienes síntomas o dudas sobre tu salud, consulta a un profesional de la salud.
+      </AvisoEducativo>
     </div>
 
     <div class="features-grid">
       <div class="feature-card card">
-        <div class="feature-icon">📡</div>
-        <h2 class="card-title">Medición y Tiempo Real</h2>
+        <h2 class="card-title"><IconoUi class="feature-icon" name="radio" /><span>Medición en tiempo real</span></h2>
         <p class="feature-text">
-          Recepción de datos vía WiFi desde ESP32 con hasta 5 canales simultáneos, cálculo de BPM y SpO₂ en vivo.
+          Observa el pulso y la saturación de oxígeno en hasta cinco canales simultáneos.
         </p>
       </div>
 
       <div class="feature-card card">
-        <div class="feature-icon">📊</div>
-        <h2 class="card-title">Análisis y Comparación</h2>
+        <h2 class="card-title"><IconoUi class="feature-icon" name="chart" /><span>Análisis de señales</span></h2>
         <p class="feature-text">
-          Detección de patrones y comparación con plantillas normales (PPG/ECG), ritmos patológicos y datasets validados.
+          Compara tus registros de pulso (PPG) y electrocardiograma (ECG) con señales de referencia.
         </p>
       </div>
 
       <div class="feature-card card">
-        <div class="feature-icon">🏫</div>
-        <h2 class="card-title">Aulas y Evaluaciones</h2>
+        <h2 class="card-title"><IconoUi class="feature-icon" name="building" /><span>Aulas y evaluaciones</span></h2>
         <p class="feature-text">
-          Gestión de cursos, bancos de preguntas, ejercicios prácticos de medición y retroalimentación académica en tiempo real.
+          Participa en actividades de medición y recibe retroalimentación. Como docente, puedes gestionar cursos y crear evaluaciones.
         </p>
       </div>
 
       <div class="feature-card card">
-        <div class="feature-icon">🔒</div>
-        <h2 class="card-title">Seguridad y Normativa</h2>
+        <h2 class="card-title"><IconoUi class="feature-icon" name="lock" /><span>Seguridad y privacidad</span></h2>
         <p class="feature-text">
-          Control de acceso basado en roles con correos institucionales UNACH, cifrado de datos de salud y cumplimiento normativo.
+          Accede con tu correo institucional de la UNACH. La plataforma cifra los datos de salud y limita el acceso según el rol de cada persona.
         </p>
       </div>
     </div>
@@ -82,7 +79,7 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
 .feature-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  text-align: center;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -91,9 +88,16 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-.feature-icon {
-  font-size: 2rem;
-  margin-bottom: 0.75rem;
+.feature-card .card-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.feature-card .feature-icon {
+  color: var(--color-primary);
+  margin: 0;
 }
 
 .feature-text {

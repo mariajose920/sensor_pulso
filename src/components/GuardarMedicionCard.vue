@@ -40,7 +40,7 @@
           :disabled="!puedeIntentar || guardando"
           @click="guardar"
         >
-          {{ guardando ? 'Guardando…' : yaGuardada ? 'Guardada ✔' : 'Guardar medición' }}
+          {{ guardando ? 'Guardando…' : yaGuardada ? 'Guardada ' : 'Guardar medición' }}
         </button>
       </div>
     </div>

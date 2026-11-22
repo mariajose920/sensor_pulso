@@ -2,7 +2,7 @@
   <div>
     <!-- Encabezado de la sección (RF17) -->
     <div style="margin-bottom: 1rem;">
-      <h2 class="card-title" style="margin-bottom: 0.25rem;">Detección de picos, BPM y HRV (RF17)</h2>
+      <h2 class="card-title" style="margin-bottom: 0.25rem;">Detección de picos, BPM y HRV</h2>
       <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 0;">
         Detección de picos en tiempo real, cálculo de BPM, variabilidad de la frecuencia cardíaca (HRV) y regularidad del ritmo, con el sensor por WiFi, USB o con el simulador.
       </p>
@@ -40,7 +40,7 @@
         class="btn btn-primary"
         style="font-size: 0.85rem; padding: 0.4rem 1rem; text-decoration: none;"
       >
-        Comparar esta Medicion con ECG (RF24) &rarr;
+        Comparar esta Medicion con ECG &rarr;
       </router-link>
     </div>
 

@@ -42,7 +42,7 @@
     <!-- Metrica 3: Ritmo y Regularidad (RF17 / RF18) -->
     <div class="card" style="margin-bottom: 0; padding: 1rem;">
       <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--color-muted); font-weight: 500;">
-        <span>Ritmo Cardíaco (RF18)</span>
+        <span>Ritmo Cardíaco</span>
         <span style="font-size: 0.72rem; color: #64748b;">AHA</span>
       </div>
       <div style="margin-top: 0.4rem; display: flex; flex-direction: column; gap: 0.25rem;">

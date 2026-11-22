@@ -1,10 +1,12 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
+import IconoUi from './components/IconoUi.vue'
 import './style.css'
 import { registrarServiceWorker } from './pwa/registro.js'
 
 const app = createApp(App)
+app.component('IconoUi', IconoUi)
 app.use(router)
 app.mount('#app')
 

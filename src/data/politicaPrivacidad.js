@@ -19,7 +19,7 @@ export const POLITICA_VIGENTE_DESDE = '2026-11-08'
 
 /** Responsable del tratamiento: el mismo que figura en el consentimiento informado. */
 export const RESPONSABLE =
-  'Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.'
+  'Equipo del proyecto Sensor de Pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.'
 
 /**
  * Canal de contacto. Se configura con VITE_CONTACTO_PRIVACIDAD (correo institucional que atiende
@@ -34,7 +34,7 @@ export function canalContacto(correo = '') {
     tipo: 'equipo',
     valor: '',
     texto:
-      'Dirígete al equipo del proyecto sensor pulso, en la Facultad de Ingeniería y Negocios de la UNACH, ' +
+      'Dirígete al equipo del proyecto Sensor de Pulso, en la Facultad de Ingeniería y Negocios de la UNACH, ' +
       'indicando el derecho que quieres ejercer.'
   }
 }

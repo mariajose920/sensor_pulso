@@ -8,7 +8,7 @@
 
     <!-- Android y computador: botón propio de instalación -->
     <div v-if="mostrarBoton" class="aviso aviso-instalar" role="region" aria-label="Instalar la aplicación">
-      <p class="aviso-texto"><strong>Instala sensor_pulso</strong> en tu dispositivo para abrirla como una app, incluso sin internet.</p>
+      <p class="aviso-texto"><strong>Instala Sensor de Pulso</strong> en tu dispositivo para abrirla como una app, incluso sin internet.</p>
       <div class="aviso-acciones">
         <button type="button" class="btn btn-primary" @click="instalar">Instalar app</button>
         <button type="button" class="btn btn-secondary" @click="ocultar">Ahora no</button>
@@ -18,7 +18,7 @@
     <!-- iPhone y iPad: no existe el botón, se explican los pasos -->
     <div v-if="mostrarGuiaIos" class="aviso aviso-instalar" role="region" aria-label="Cómo instalar en iPhone">
       <p class="aviso-texto">
-        <strong>Instala sensor_pulso en tu iPhone:</strong>
+        <strong>Instala Sensor de Pulso en tu iPhone:</strong>
         toca <strong>Compartir</strong> (el cuadrado con una flecha hacia arriba) y luego
         <strong>Añadir a pantalla de inicio</strong>.
       </p>

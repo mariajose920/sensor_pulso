@@ -55,9 +55,9 @@ export function estadoPregunta(pregunta) {
 }
 
 export const ETIQUETA_ESTADO_PREGUNTA = {
-  correcta: '✓ Correcta',
-  incorrecta: '✗ Incorrecta',
-  pendiente: '⏳ Pendiente de revisión',
+  correcta: 'Correcta',
+  incorrecta: 'Incorrecta',
+  pendiente: 'Pendiente de revisión',
   sin_responder: 'Sin responder'
 }
 
@@ -76,9 +76,9 @@ export function estadoEjercicio(ejercicio) {
 }
 
 export const ETIQUETA_ESTADO_EJERCICIO = {
-  cumple: '✓ Cumple el criterio',
+  cumple: 'Cumple el criterio',
   parcial: 'Cumple parcialmente',
-  no_cumple: '✗ No cumple el criterio',
+  no_cumple: 'No cumple el criterio',
   sin_calificar: 'Sin calificar'
 }
 

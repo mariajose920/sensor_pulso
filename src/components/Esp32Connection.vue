@@ -3,7 +3,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
       <div>
         <h2 style="font-size: 1rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.15rem;">Conexion Sensor ESP32 (MAX30100 / MAX30102)</h2>
-        <p style="font-size: 0.8rem; color: var(--color-muted); margin-bottom: 0;">Recepcion de senal de pulso por luz para deteccion de picos, BPM y HRV (RF17)</p>
+        <p style="font-size: 0.8rem; color: var(--color-muted); margin-bottom: 0;">Recepcion de senal de pulso por luz para deteccion de picos, BPM y HRV</p>
       </div>
       <div>
         <span
@@ -19,7 +19,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
       <div style="font-size: 0.85rem; color: var(--color-muted);">
         <p v-if="isWifiConnected" style="color: var(--color-success); font-weight: 600;">
-          📶 Transmisión activa por WiFi en tiempo real desde {{ wifiDevice }}.
+          <IconoUi name="wifi" /> Transmisión activa por WiFi en tiempo real desde {{ wifiDevice }}.
         </p>
         <p v-else style="color: var(--color-text); font-weight: 500;">
           Conexión por WiFi o Cable USB (Web Serial):

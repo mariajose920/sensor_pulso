@@ -9,7 +9,7 @@
           </p>
         </div>
         <button @click="recargarTodo" class="btn btn-secondary btn-sm" :disabled="cargandoLista || cargandoAuditoria">
-          {{ cargandoLista ? 'Actualizando...' : 'Recargar Todo' }}
+          {{ cargandoLista ? 'Actualizando...' : 'Recargar todo' }}
         </button>
       </div>
 
@@ -34,9 +34,21 @@
           @click="seleccionarSeccion(s.id)"
         >
           <span class="admin-tab-titulo">{{ s.titulo }}</span>
-          <span class="admin-tab-desc">{{ s.descripcion }}</span>
+
         </button>
       </div>
+
+      <label class="admin-selector">
+        Sección
+        <select class="form-input" :value="seccionActiva" @change="seleccionarSeccion($event.target.value)">
+          <option v-for="s in SECCIONES" :key="s.id" :value="s.id">{{ s.titulo }}</option>
+        </select>
+      </label>
+
+      <header class="seccion-resumen">
+        <h2 class="section-title">{{ seccionActual.titulo }}</h2>
+        <p class="header-desc">{{ seccionActual.descripcion }}</p>
+      </header>
 
       <!-- SECCIÓN: Gestión y Asignación de Roles -->
       <div
@@ -422,7 +434,7 @@ const SECCIONES = [
   { id: 'clasificacion', titulo: 'Clasificación', descripcion: 'Tipos de datos y su tratamiento' },
   { id: 'retencion', titulo: 'Retención', descripcion: 'Cuánto tiempo se guardan los datos' },
   { id: 'rangos', titulo: 'Rangos', descripcion: 'BPM y SpO₂ por edad y actividad' },
-  { id: 'contenidos', titulo: 'Contenidos', descripcion: 'Sincronización, lecciones y propuestas' }
+  { id: 'contenidos', titulo: 'Contenidos', descripcion: 'Configura la sincronización de señales y gestiona las lecciones y propuestas.' }
 ]
 const IDS_SECCION = SECCIONES.map(s => s.id)
 const ruta = useRoute()
@@ -432,6 +444,7 @@ const seccionDesdeUrl = () => {
   return IDS_SECCION.includes(pedida) ? pedida : 'cuentas'
 }
 const seccionActiva = ref(seccionDesdeUrl())
+const seccionActual = computed(() => SECCIONES.find(s => s.id === seccionActiva.value))
 
 const seleccionarSeccion = (id) => {
   if (!IDS_SECCION.includes(id)) return
@@ -699,64 +712,34 @@ onMounted(() => {
 
 .admin-tabs {
   display: flex;
-  gap: 0.35rem;
-  border-bottom: 2px solid var(--color-border);
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .admin-tab {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  min-width: 150px;
-  padding: 0.65rem 1rem;
-  border: none;
+  padding: 0.8rem 0.55rem;
+  border: 0;
   border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  background: none;
+  background: transparent;
   color: var(--color-muted);
-  text-align: left;
+  font: inherit;
+  font-weight: 600;
   cursor: pointer;
-  border-radius: 0.5rem 0.5rem 0 0;
-  transition: background 0.15s, color 0.15s;
 }
 
-.admin-tab:hover {
-  background: var(--color-bg);
-  color: var(--color-text);
-}
+.admin-tab:hover { color: var(--color-text); }
+.admin-tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -3px; }
+.admin-tab--activa { color: var(--color-primary); border-bottom-color: currentColor; }
+.admin-selector { display: none; }
+.seccion-resumen { margin-top: 1.5rem; }
+.seccion-resumen .section-title { margin-bottom: 0.35rem; }
 
-.admin-tab:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: -2px;
+@media (max-width: 760px) {
+  .admin-tabs { display: none; }
+  .admin-header { flex-direction: column; align-items: stretch; gap: 1rem; }
+  .admin-selector { display: grid; gap: 0.4rem; font-weight: 600; }
+  .admin-selector select { width: 100%; }
 }
-
-.admin-tab-titulo {
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.admin-tab-desc {
-  font-size: 0.74rem;
-  font-weight: 400;
-  white-space: nowrap;
-}
-
-.admin-tab--activa {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-  background: var(--color-bg);
-}
-
-@media (max-width: 640px) {
-  .admin-tab { min-width: 0; padding: 0.55rem 0.8rem; }
-  .admin-tab-desc { display: none; }
-}
-
 .header-desc {
   color: var(--color-muted);
   font-size: 0.95rem;

@@ -33,7 +33,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 0.4rem;">
           <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444;"></span>
-          <span style="color: #fca5a5;">Picos Sistolicos Detectados (RF17)</span>
+          <span style="color: #fca5a5;">Picos Sistolicos Detectados</span>
         </div>
       </div>
     </div>

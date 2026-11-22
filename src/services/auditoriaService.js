@@ -819,7 +819,7 @@ export function eventosAXlsx(eventos = [], { filtros = {}, generadoPor = '', gen
 
   // ---- Hoja de eventos
   const filasEventos = [
-    { alto: 30, celdas: [{ v: 'Registro de auditoría · sensor_pulso', e: E.TITULO }] },
+    { alto: 30, celdas: [{ v: 'Registro de auditoría · Sensor de Pulso', e: E.TITULO }] },
     { alto: 18, celdas: [{
       v: `Generado el ${cuando}${quien}  ·  ${resumen.total} evento(s), ${resumen.sospechosos} sospechoso(s)`,
       e: E.SUBTITULO
@@ -935,11 +935,11 @@ function descargarArchivo(contenido, tipoMime, nombre) {
   URL.revokeObjectURL(url)
 }
 
-/** Nombre del archivo, p. ej. auditoria-sensor_pulso-2026-11-18_1530.xlsx */
+/** Nombre del archivo, p. ej. auditoria-Sensor de Pulso-2026-11-18_1530.xlsx */
 export function nombreArchivoExportacion(extension, fecha = new Date()) {
   const p = partesFechaLocal(fecha.toISOString())
   const marca = p ? `${p.anio}-${dos(p.mes)}-${dos(p.dia)}_${dos(p.hora)}${dos(p.minuto)}` : 'registro'
-  return `auditoria-sensor_pulso-${marca}.${extension}`
+  return `auditoria-Sensor de Pulso-${marca}.${extension}`
 }
 
 /**

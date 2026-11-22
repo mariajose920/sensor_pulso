@@ -159,7 +159,7 @@
             <line x1="16" y1="17" x2="8" y2="17"></line>
             <polyline points="10 9 9 9 8 9"></polyline>
           </svg>
-          Registro activo en historial clínico (RF21)
+          Registro activo en historial clínico
         </span>
       </div>
     </div>

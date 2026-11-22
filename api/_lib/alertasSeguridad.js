@@ -185,11 +185,11 @@ export function construirMensajeAlerta(evento = {}, { suprimidos = 0, destinatar
   const ipSegura = anonimizarIp(evento.ip || evento.detalles?.ip)
   const detallesLimpio = sanitizarDetallesParaAlerta(evento.detalles || evento.detalle || {})
 
-  const asunto = `[ALERTA SEGURIDAD] ${tipo} - sensor_pulso`
+  const asunto = `[ALERTA SEGURIDAD] ${tipo} - Sensor de Pulso`
 
   const texto = [
     '====================================================',
-    '⚠️ ALERTA DE SEGURIDAD · SENSOR PULSO UNACH (RF72)',
+    '⚠️ ALERTA DE SEGURIDAD · Sensor de Pulso UNACH (RF72)',
     '====================================================',
     `Tipo de Incidente: ${tipo}`,
     `Fecha y Hora UTC : ${fecha}`,
@@ -233,7 +233,7 @@ export function construirMensajeAlerta(evento = {}, { suprimidos = 0, destinatar
           <span class="badge">Evento de Seguridad Crítico</span>
           <h1>${escaparHtml(tipo)}</h1>
         </div>
-        <p>Se ha detectado un comportamiento anómalo o de riesgo en la plataforma <strong>sensor_pulso</strong> que requiere revisión técnica:</p>
+        <p>Se ha detectado un comportamiento anómalo o de riesgo en la plataforma <strong>Sensor de Pulso</strong> que requiere revisión técnica:</p>
         <table class="meta-table">
           <tr><td class="label">Fecha y Hora UTC:</td><td>${escaparHtml(fecha)}</td></tr>
           <tr><td class="label">Entidad / Identificador:</td><td><code>${escaparHtml(entidadId)}</code></td></tr>
@@ -244,7 +244,7 @@ export function construirMensajeAlerta(evento = {}, { suprimidos = 0, destinatar
         <pre class="code-box">${escaparHtml(JSON.stringify(detallesLimpio, null, 2))}</pre>
         <p style="font-size: 13px; color: #334155;"><strong>Acción recomendada:</strong> Iniciar sesión en el portal administrativo y revisar el registro inmutable de auditoría (RF62/RF63) para auditar la traza completa.</p>
         <div class="footer">
-          Aviso automático de ciberseguridad (RF72) · Plataforma sensor_pulso · Universidad Adventista de Chile (UNACH)<br>
+          Aviso automático de ciberseguridad (RF72) · Plataforma Sensor de Pulso · Universidad Adventista de Chile (UNACH)<br>
           <em>Este mensaje no contiene contraseñas, secretos ni datos clínicos de salud (ISO 27001 A.8.16).</em>
         </div>
       </div>

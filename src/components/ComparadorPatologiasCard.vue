@@ -313,7 +313,7 @@
 
       <!-- Métrica 4: Parecido con el ritmo de referencia (educativo, no diagnóstico) -->
       <div class="metric-comp-card">
-        <span class="m-comp-title">Parecido con el ritmo de referencia (RF25)</span>
+        <span class="m-comp-title">Parecido con el ritmo de referencia</span>
         <div class="m-comp-value-row">
           <span class="m-comp-val font-mono" style="color: #2563eb;">{{ metricas.similitudFrecuencia }}%</span>
           <span class="m-comp-sub">Parecido de la frecuencia (educativo)</span>
@@ -333,7 +333,7 @@
             <tr>
               <th>Criterio Fisiológico</th>
               <th style="color: #16a34a;">Medición Tomada (Sensor)</th>
-              <th style="color: #d97706;">Versión PPG Patológica (RF25)</th>
+              <th style="color: #d97706;">Versión PPG Patológica</th>
               <th style="color: #4f46e5;">Versión ECG Equivalente</th>
             </tr>
           </thead>
