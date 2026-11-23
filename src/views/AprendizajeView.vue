@@ -124,15 +124,19 @@ watch(currentUserId, async (usuarioId, _, onCleanup) => {
 </script>
 
 <style scoped>
-.intro { color: var(--color-muted); margin: 0 0 0.75rem; line-height: 1.55; }
+.intro { color: var(--color-text-soft); margin: 0 0 0.75rem; line-height: 1.55; }
 .aviso-educativo { font-size: 0.8rem; color: var(--color-muted); margin: 0; }
-.seccion { font-size: 1.15rem; font-weight: 600; margin: 0 0 0.75rem; }
-.lecciones-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.leccion-card { position: relative; display: block; text-decoration: none; color: inherit; margin-bottom: 0; transition: border-color 0.15s, box-shadow 0.15s; min-height: var(--alto-tactil); }
+.seccion { font-size: 1.2rem; font-weight: 700; margin: 0 0 0.75rem; color: var(--color-primary); }
+.lecciones-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.1rem; margin-bottom: 1.5rem; }
+.leccion-card:nth-child(4n+1) { --tono: #2563eb; --tono-suave: #dbeafe; }
+.leccion-card:nth-child(4n+2) { --tono: #7c3aed; --tono-suave: #ede9fe; }
+.leccion-card:nth-child(4n+3) { --tono: #0f766e; --tono-suave: #ccfbf1; }
+.leccion-card:nth-child(4n+4) { --tono: #e11d48; --tono-suave: #ffe4ea; }
+.leccion-card { border-top: 4px solid var(--tono); background: linear-gradient(180deg, var(--tono-suave) 0%, #ffffff 55%); position: relative; display: block; text-decoration: none; color: inherit; margin-bottom: 0; transition: border-color 0.15s, box-shadow 0.15s; min-height: var(--alto-tactil); }
 .leccion-card:hover, .leccion-card:focus-visible { border-color: var(--color-primary); box-shadow: 0 2px 8px rgba(30, 64, 175, 0.15); }
-.numero { position: absolute; top: 1rem; right: 1rem; font-size: 1.4rem; font-weight: 700; color: var(--color-border); }
-.leccion-titulo { font-size: 1.05rem; font-weight: 600; margin: 0.6rem 0 0.35rem; }
-.leccion-resumen { font-size: 0.9rem; color: var(--color-muted); line-height: 1.5; margin: 0 0 0.6rem; }
-.leccion-meta { font-size: 0.8rem; color: var(--color-primary); font-weight: 600; }
+.numero { position: absolute; top: 1rem; right: 1rem; font-size: 1.6rem; font-weight: 800; color: var(--tono); opacity: 0.35; }
+.leccion-titulo { font-size: 1.05rem; font-weight: 700; margin: 0.6rem 0 0.35rem; }
+.leccion-resumen { font-size: 0.9rem; color: var(--color-muted); line-height: 1.5; margin: 0 0 0.6rem; color: var(--color-text-soft); }
+.leccion-meta { font-size: 0.8rem; color: var(--tono); font-weight: 700; }
 .practica { border-left: 4px solid var(--color-primary); margin-bottom: 1rem; }
 </style>

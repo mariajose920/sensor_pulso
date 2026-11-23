@@ -336,6 +336,7 @@ function onUsarMedicionExterna(datos) {
 .tab-btn.active {
   color: #1e40af;
   border-bottom-color: #2563eb;
-  background: #eff6ff;
+  background: #e8eefc;
+  font-weight: 700;
 }
 </style>

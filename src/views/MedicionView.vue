@@ -3379,4 +3379,115 @@ onBeforeUnmount(() => {
   background: #f8fafc;
   flex-wrap: wrap;
 }
+
+/* ========================================================================= */
+/* RNF05 · Ajuste visual de Medición según los mockups de referencia         */
+/* Solo colores, fondos, bordes y tipografía. No cambia textos ni funciones. */
+/* ========================================================================= */
+.medicion-view .view-header {
+  padding: 1.1rem 1.4rem;
+  border-radius: 1rem;
+  background: linear-gradient(120deg, #0b1d52 0%, #1e40af 60%, #2f5bd6 100%);
+  box-shadow: 0 10px 26px rgba(30, 64, 175, 0.22);
+}
+.medicion-view .view-title { color: #ffffff; margin-bottom: 0; letter-spacing: -0.015em; }
+.medicion-view .view-subtitle { color: #c7d6fa; }
+.medicion-view .header-modo-tag { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.3); color: #ffffff; }
+
+/* Stepper: pasos como píldoras con degradado en el activo */
+.stepper-nav { border-radius: 1rem; border-top: 3px solid var(--color-primary-medium); box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05); }
+.stepper-item { border-radius: 0.75rem; background: #ffffff; border: 2px solid var(--color-border); }
+.stepper-item.activo {
+  background: linear-gradient(135deg, #1e40af 0%, #2f5bd6 100%);
+  border-color: #1e40af;
+  box-shadow: 0 6px 16px rgba(30, 64, 175, 0.3);
+}
+.stepper-item.activo .stepper-nombre { color: #ffffff; }
+.stepper-item.activo .stepper-desc { color: #c7d6fa; }
+.stepper-item.activo .stepper-circulo { background: #ffffff; color: #1e40af; }
+.stepper-item.completado { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-color: #86efac; }
+.stepper-item.completado .stepper-circulo { background: #16a34a; }
+.stepper-nombre { font-weight: 700; }
+
+/* Tarjetas de cada paso */
+.wizard-step-card {
+  border-radius: 1rem;
+  border: 1px solid var(--color-primary-medium);
+  border-top: 5px solid #1e40af;
+  background: linear-gradient(180deg, #f5f8ff 0%, #ffffff 160px);
+  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.08);
+}
+.step-badge { background: linear-gradient(135deg, #1e40af, #2f5bd6); color: #ffffff; border-radius: 99px; padding: 3px 12px; letter-spacing: 0.05em; }
+.step-heading { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.015em; }
+.step-desc { color: var(--color-text-soft); font-size: 0.95rem; }
+
+/* Paso 1: pilares de consentimiento con color propio */
+.pilar-card { border-radius: 0.875rem; border-top: 4px solid var(--tono, #2563eb); background: linear-gradient(180deg, var(--tono-suave, #dbeafe) 0%, #ffffff 70%); }
+.pilar-card:nth-child(1) { --tono: #2563eb; --tono-suave: #dbeafe; }
+.pilar-card:nth-child(2) { --tono: #7c3aed; --tono-suave: #ede9fe; }
+.pilar-card:nth-child(3) { --tono: #0f766e; --tono-suave: #ccfbf1; }
+.pilar-card:nth-child(4) { --tono: #e11d48; --tono-suave: #ffe4ea; }
+.pilar-card:nth-child(5) { --tono: #ea580c; --tono-suave: #ffedd5; }
+.pilar-num { background: var(--tono, #2563eb); }
+.pilar-content h4 { color: var(--tono, #1e3a8a); font-weight: 800; font-size: 0.92rem; }
+.pilar-content p { color: var(--color-text-soft); }
+.consentimiento-check-box { border-radius: 0.875rem; border: 2px solid #fcd34d; border-left: 6px solid #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); }
+.consentimiento-check-label { font-weight: 650; }
+.checkbox-custom { width: 22px; height: 22px; }
+
+/* Paso 3: reposo */
+.reposo-timer-card { border-radius: 1rem; border: 1px solid var(--color-primary-medium); background: linear-gradient(180deg, #eef3ff 0%, #ffffff 80%); box-shadow: 0 4px 16px rgba(30, 64, 175, 0.1); }
+.inst-item { border-radius: 0.875rem; }
+.inst-item:nth-child(3n+1) { background: #eff6ff; border: 1px solid #bfdbfe; }
+.inst-item:nth-child(3n+2) { background: #f5f3ff; border: 1px solid #ddd6fe; }
+.inst-item:nth-child(3n+3) { background: #f0fdfa; border: 1px solid #99f6e4; }
+.inst-item strong { font-weight: 800; }
+.timer-numeros { font-weight: 800; color: #1e40af; }
+
+/* Paso 4: banner del paciente y herramientas */
+.paciente-clinico-banner { border-radius: 1rem; border: 1px solid #a7f3d0; border-left: 6px solid #10b981; background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 70%); }
+.pac-nombre { font-weight: 800; }
+.pac-edad-chip { background: #e8eefc; color: #1e40af; border-radius: 99px; }
+.pac-tag-item { border-radius: 99px; background: #ffffff; border: 1px solid #c7d6fa; }
+.pac-tag-val { font-weight: 700; color: #1e40af; }
+.step-intro-medicion { border-radius: 1rem; border: 1px solid #86efac; border-left: 6px solid #16a34a; }
+.test-panel { border-radius: 1rem; }
+
+/* Paso 5: resultados */
+.resultado-paciente-card { border-radius: 0.875rem; background: linear-gradient(135deg, #eef3ff 0%, #ffffff 80%); border: 1px solid var(--color-primary-medium); border-left: 6px solid #1e40af; }
+.tag-item { background: #e8eefc; color: #1e40af; border-radius: 99px; font-weight: 650; padding: 2px 10px; }
+.valor-box { border-radius: 0.875rem; border-top: 4px solid #2563eb; background: linear-gradient(180deg, #eef3ff 0%, #ffffff 70%); box-shadow: 0 2px 8px rgba(30, 64, 175, 0.08); }
+.valores-consolidados-grid .valor-box:nth-child(4n+2) { border-top-color: #0284c7; background: linear-gradient(180deg, #e0f2fe 0%, #ffffff 70%); }
+.valores-consolidados-grid .valor-box:nth-child(4n+3) { border-top-color: #0d9488; background: linear-gradient(180deg, #ccfbf1 0%, #ffffff 70%); }
+.valores-consolidados-grid .valor-box:nth-child(4n+4) { border-top-color: #7c3aed; background: linear-gradient(180deg, #ede9fe 0%, #ffffff 70%); }
+.valor-titulo { font-weight: 800; letter-spacing: 0.05em; color: var(--color-text-soft); }
+.valor-num { font-size: 2.1rem; }
+.ritmo-diagnostico-card { border-radius: 1rem; border-width: 2px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06); }
+.ritmo-porque-box { border-radius: 0.75rem; border-color: var(--color-primary-medium); }
+.porque-titulo { font-weight: 800; }
+.auditoria-inmutable-card { border-radius: 0.875rem; }
+
+/* Botones de avance de paso */
+.step-nav-actions .btn-primary { background: linear-gradient(135deg, #1e40af, #2f5bd6); box-shadow: 0 4px 12px rgba(30, 64, 175, 0.28); }
+.step-nav-actions .btn-primary:disabled { box-shadow: none; }
+
+/* Componentes hijos dentro de Medición */
+.medicion-view :deep(.card-title) { font-weight: 800; color: #0f172a; }
+.medicion-view :deep(.card) { border-radius: 1rem; }
+
+/* RNF01 + RNF05: nada se sale de su recuadro en pantallas angostas */
+.pilares-grid { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.pilar-card, .pilar-content, .consentimiento-check-label > span { min-width: 0; }
+.pilar-content h4, .pilar-content p, .consentimiento-check-label > span,
+.step-heading, .step-desc, .step-badge { overflow-wrap: anywhere; word-break: normal; }
+.step-badge { display: inline-block; max-width: 100%; white-space: normal; }
+.stepper-etiquetas { min-width: 0; }
+.stepper-nombre, .stepper-desc { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .wizard-step-card { padding: 1rem; }
+  .step-heading { font-size: 1.25rem; }
+  .medicion-view .view-header { padding: 0.85rem 1rem; }
+  .medicion-view .view-title { font-size: 1.4rem; }
+  .consentimiento-check-box { padding: 0.85rem; }
+}
 </style>
