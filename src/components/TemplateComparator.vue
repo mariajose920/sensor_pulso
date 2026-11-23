@@ -241,22 +241,22 @@
 
     <!-- 4. Bloques Explicativos Didacticos (RF24) -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 0.75rem; font-size: 0.8rem; color: var(--color-muted);">
-      <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
-        <b style="color: var(--color-text);">1. Por que se compara con el ECG?</b>
+      <div style="padding: 1rem; background: #eff6ff; border-radius: 0.75rem; border: 1px solid #bfdbfe; border-top: 4px solid #1e40af;">
+        <b style="color: #1e40af; font-size: 0.9rem;">1. Por que se compara con el ECG?</b>
         <p style="margin-top: 0.25rem;">
           El ECG es el estandar clinico de oro de la actividad cardiaca. Al compararlo con la medicion tomada por el MAX30102, los estudiantes pueden visualizar que cada latido se inicia con una senal electrica antes de que la onda de presion sanguinea llegue al dedo.
         </p>
       </div>
 
-      <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
-        <b style="color: var(--color-text);">2. Que es el Retardo PTT?</b>
+      <div style="padding: 1rem; background: #f5f3ff; border-radius: 0.75rem; border: 1px solid #ddd6fe; border-top: 4px solid #5b21b6;">
+        <b style="color: #5b21b6; font-size: 0.9rem;">2. Que es el Retardo PTT?</b>
         <p style="margin-top: 0.25rem;">
           El Tiempo de Transito del Pulso (PTT) es el intervalo entre la despolarizacion ventricular (onda R) y la cresta del pulso arterial en el dedo. Depende de la distancia anatomica y la elasticidad vascular (~180 a 220 ms).
         </p>
       </div>
 
-      <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
-        <b style="color: var(--color-text);">3. Comparacion con la Plantilla de Reposo</b>
+      <div style="padding: 1rem; background: #f0fdfa; border-radius: 0.75rem; border: 1px solid #99f6e4; border-top: 4px solid #115e59;">
+        <b style="color: #115e59; font-size: 0.9rem;">3. Comparacion con la Plantilla de Reposo</b>
         <p style="margin-top: 0.25rem;">
           La plantilla de 72 BPM sirve para verificar de un vistazo si la medicion tomada esta acelerada (taquicardia), dentro del rango fisiologico de reposo (60-80 BPM) o reducida (bradicardia).
         </p>

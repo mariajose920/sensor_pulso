@@ -51,21 +51,25 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
 <style scoped>
 .hero {
   text-align: center;
-  padding: clamp(1.25rem, 5vw, 2.5rem) clamp(0.75rem, 4vw, 1.5rem);
+  padding: clamp(1.5rem, 5vw, 3rem) clamp(0.75rem, 4vw, 2rem);
   margin-bottom: 2rem;
+  background: linear-gradient(120deg, #0b1d52 0%, #1e40af 60%, #2f5bd6 100%);
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: 0 10px 28px rgba(30, 64, 175, 0.25);
 }
 
 .hero-title {
   font-size: clamp(1.6rem, 6vw, 2.25rem);
   font-weight: 800;
-  color: var(--color-primary);
+  color: #ffffff;
   margin-bottom: 0.75rem;
 }
 
 .hero-subtitle {
   font-size: 1.1rem;
-  color: var(--color-muted);
-  max-width: 800px;
+  color: #dbe6ff;
+  max-width: 900px;
   margin: 0 auto 1.5rem auto;
   line-height: 1.6;
 }
@@ -76,7 +80,14 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
   gap: clamp(0.75rem, 3vw, 1.5rem);
 }
 
+.feature-card:nth-child(1) { --tono: #2563eb; --tono-suave: #dbeafe; }
+.feature-card:nth-child(2) { --tono: #7c3aed; --tono-suave: #ede9fe; }
+.feature-card:nth-child(3) { --tono: #0f766e; --tono-suave: #ccfbf1; }
+.feature-card:nth-child(4) { --tono: #e11d48; --tono-suave: #ffe4ea; }
+
 .feature-card {
+  border-top: 4px solid var(--tono);
+  background: linear-gradient(180deg, var(--tono-suave) 0%, #ffffff 60%);
   display: flex;
   flex-direction: column;
   text-align: center;
@@ -96,13 +107,15 @@ import AvisoEducativo from '../components/AvisoEducativo.vue'
 }
 
 .feature-card .feature-icon {
-  color: var(--color-primary);
+  color: var(--tono);
   margin: 0;
+  width: 22px !important;
+  height: 22px !important;
 }
 
 .feature-text {
-  font-size: 0.925rem;
-  color: var(--color-muted);
+  font-size: 0.95rem;
+  color: var(--color-text-soft);
   line-height: 1.5;
 }
 </style>

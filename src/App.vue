@@ -118,8 +118,25 @@ function alSalirDelMenu(evento) {
 function alPulsarFuera(evento) {
   if (!menuCuenta.value?.contains(evento.target)) cerrarMenu()
 }
-onMounted(() => document.addEventListener('pointerdown', alPulsarFuera))
-onUnmounted(() => document.removeEventListener('pointerdown', alPulsarFuera))
+let observadorBarra = null
+function medirBarraInferior() {
+  const barra = document.querySelector('.bottom-nav')
+  if (!barra || barra.offsetHeight === 0) return
+  document.documentElement.style.setProperty('--alto-barra-inferior-real', barra.offsetHeight + 'px')
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', alPulsarFuera)
+  const barra = document.querySelector('.bottom-nav')
+  if (barra && 'ResizeObserver' in window) {
+    observadorBarra = new ResizeObserver(medirBarraInferior)
+    observadorBarra.observe(barra)
+  }
+  medirBarraInferior()
+})
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', alPulsarFuera)
+  observadorBarra?.disconnect()
+})
 watch(() => router.currentRoute.value.fullPath, cerrarMenu)
 
 const manejarLogout = async () => {
@@ -185,9 +202,9 @@ main.container {
   width: 1.85rem;
   height: 1.85rem;
   border-radius: 0.5rem;
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  background: linear-gradient(135deg, #0b1d52 0%, #1e40af 55%, #e11d48 140%);
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
+  box-shadow: 0 3px 10px rgba(30, 64, 175, 0.35);
   flex-shrink: 0;
 }
 
@@ -304,7 +321,8 @@ main.container {
   .btn-acceso { padding: 0 0.75rem; }
 
   .bottom-nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
     position: fixed;
     left: 0;
     right: 0;
@@ -319,9 +337,9 @@ main.container {
   }
 
   .bottom-link {
-    flex: 1;
     min-width: 0;
-    min-height: var(--alto-barra-inferior);
+    min-height: 52px;
+    padding: 0.35rem 0.15rem;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -335,14 +353,15 @@ main.container {
     -webkit-tap-highlight-color: transparent;
   }
   .bottom-link span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bottom-link { text-align: center; }
   .bottom-link.activo { color: var(--color-primary); }
   .bottom-link:active { background: var(--color-bg); }
 
   /* Espacio para que la barra inferior no tape el final del contenido */
   main.container {
-    padding-bottom: calc(var(--alto-barra-inferior) + env(safe-area-inset-bottom) + 1rem);
+    padding-bottom: calc(var(--alto-barra-inferior-real, var(--alto-barra-inferior)) + env(safe-area-inset-bottom) + 1rem);
   }
-  .footer { padding-bottom: calc(var(--alto-barra-inferior) + env(safe-area-inset-bottom) + 0.75rem); }
+  .footer { padding-bottom: calc(var(--alto-barra-inferior-real, var(--alto-barra-inferior)) + env(safe-area-inset-bottom) + 0.75rem); }
 }
 
 /* Móvil muy pequeño: solo el ícono en el botón de acceso */
@@ -354,9 +373,8 @@ main.container {
 
 /* Tablet: con muchos enlaces (administrador) la barra inferior se desplaza en horizontal en vez de apretarlos */
 @media (min-width: 641px) and (max-width: 1188px) {
-  .bottom-nav { overflow-x: auto; scrollbar-width: none; }
-  .bottom-nav::-webkit-scrollbar { display: none; }
-  .bottom-link { flex: 1 0 auto; min-width: 84px; padding: 0 0.5rem; font-size: 0.75rem; }
+  .bottom-nav { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+  .bottom-link { padding: 0.35rem 0.5rem; font-size: 0.75rem; }
 }
 
 @media (min-width: 641px) {
