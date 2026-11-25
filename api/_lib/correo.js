@@ -25,7 +25,7 @@ export function leerConfiguracionCorreo() {
 
 export function remitenteCorreo() {
   const { usuario } = leerConfiguracionCorreo()
-  return `"Sensor Pulso UNACH" <${usuario}>`
+  return `"Sensor de Pulso UNACH" <${usuario}>`
 }
 
 /** Convierte los errores técnicos de SMTP en frases que el profesor pueda entender. */

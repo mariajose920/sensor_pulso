@@ -24,6 +24,19 @@
         </div>
       </section>
 
+      <!-- Alojamiento fuera de Chile y base legal (explicación completa; el texto vive en src/data/alojamiento.js) -->
+      <AvisoAlojamiento :con-sesion="isAuthenticated" />
+
+      <!-- Cómo se clasifican y tratan los datos (explicación; no forma parte del texto versionado de la política) -->
+      <section id="clasificacion-datos" class="clasificacion-bloque" data-testid="politica-clasificacion">
+        <h2>Cómo clasificamos y tratamos tus datos</h2>
+        <p>
+          No todos los datos reciben el mismo trato. Los clasificamos en tres tipos y cada uno tiene reglas distintas de
+          acceso, protección, publicación y conservación.
+        </p>
+        <ClasesDatoTarjetas />
+      </section>
+
       <AvisoEducativo compacto />
       <router-link to="/" class="volver">&larr; Volver al inicio</router-link>
     </article>
@@ -32,6 +45,8 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import ClasesDatoTarjetas from '../components/ClasesDatoTarjetas.vue'
+import AvisoAlojamiento from '../components/AvisoAlojamiento.vue'
 import { useAuth } from '../composables/useAuth'
 import { POLITICA_VERSION, POLITICA_VIGENTE_DESDE, SECCIONES, canalContacto } from '../data/politicaPrivacidad.js'
 
@@ -42,7 +57,10 @@ const contacto = canalContacto(import.meta.env.VITE_CONTACTO_PRIVACIDAD)
 </script>
 
 <style scoped>
-.privacidad-view { max-width: 820px; margin: 0 auto; }
+.privacidad-view { max-width: 980px; margin: 0 auto; }
+.clasificacion-bloque { margin: 1.5rem 0; padding-top: 1.25rem; border-top: 1px solid var(--color-border); }
+.clasificacion-bloque h2 { font-size: 1.05rem; margin: 0 0 0.4rem; }
+.clasificacion-bloque > p { line-height: 1.55; font-size: 0.95rem; margin: 0 0 0.9rem; }
 .version { color: var(--color-muted); font-size: 0.85rem; margin: 0 0 1rem; }
 .seccion { margin-bottom: 1.25rem; }
 .seccion h2 { font-size: 1.05rem; margin: 0 0 0.4rem; }

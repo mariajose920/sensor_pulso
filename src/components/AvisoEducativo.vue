@@ -1,8 +1,10 @@
 <template>
   <aside class="aviso-educativo" :class="{ compacto }" role="note" aria-label="Aviso educativo" data-testid="aviso-educativo">
     <p class="aviso-texto">
-      <template v-if="compacto"><strong>Aviso:</strong> {{ AVISO_EDUCATIVO_CORTO }}</template>
-      <template v-else><strong>{{ AVISO_EDUCATIVO_TITULO }}.</strong> {{ AVISO_EDUCATIVO_TEXTO }}</template>
+      <slot>
+        <template v-if="compacto"><strong>Aviso:</strong> {{ AVISO_EDUCATIVO_CORTO }}</template>
+        <template v-else><strong>{{ AVISO_EDUCATIVO_TITULO }}.</strong> {{ AVISO_EDUCATIVO_TEXTO }}</template>
+      </slot>
     </p>
     <p v-if="dispositivo" class="aviso-texto aviso-dispositivo" data-testid="aviso-dispositivo">{{ AVISO_DISPOSITIVO }}</p>
   </aside>

@@ -10,9 +10,17 @@
  */
 import { ref } from 'vue'
 import { supabase } from './supabase.js'
+import { registrarEventoAuditoria } from './auditoriaService.js'
 
 const LOCAL_CONSENT_KEY = 'sensor_consentimiento_aceptado_rf04'
 const LOCAL_HISTORIAL_KEY = 'sensor_consentimiento_historial_rf59'
+const LOCAL_PUBLICACIONES_ANONIMAS_KEY = 'sensor_publicaciones_anonimas_locales'
+
+export const CAMBIOS_REVOCACION_CONSENTIMIENTO = [
+  'Tus publicaciones en la Galería Pública fueron retiradas y tus enlaces compartidos quedaron desactivados.',
+  'No podrás realizar nuevas mediciones ni publicar registros hasta que otorgues un nuevo consentimiento informado.',
+  'La revocación quedó registrada en la auditoría y en el historial de tus solicitudes.'
+]
 
 /**
  * Formatea una estampa ISO a fecha y hora completa en formato chileno (RF59)
@@ -70,7 +78,7 @@ export const CONSENTIMIENTO_BASE = {
   finalidad: 'Actividad educativa de laboratorio: medir, visualizar, analizar y comparar la frecuencia cardíaca y saturación de oxígeno mediante fotopletismografía (PPG).',
   advertenciaMedica: 'Esta plataforma web y el dispositivo ESP32 son herramientas estrictamente didácticas y educativas. <strong>No son un dispositivo médico certificado, no entregan diagnósticos ni sustituyen la evaluación de un profesional de la salud.</strong>',
   datosRecogidos: 'Señal de pulso fotopletismográfica (infrarroja y roja), frecuencia cardíaca (BPM), saturación de oxígeno (% SpO₂), variabilidad R-R, edad, nombre y factores fisiológicos declarados (estrés, sueño, medicación, cafeína, actividad previa y condición de salud).',
-  responsable: 'Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.',
+  responsable: 'Equipo del proyecto Sensor de Pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.',
   plazoConservacion: 'Hasta 12 meses desde la última medición académica, salvo solicitud previa de eliminación por parte del titular (Derecho de Supresión).',
   textoLegal: 'Consiento de forma previa, expresa, informada y específica la captura y procesamiento de mis datos fisiológicos con fines estrictamente académicos. Entiendo que puedo revocar este consentimiento en cualquier momento.'
 }
@@ -219,18 +227,18 @@ export const consentimientoService = {
       console.warn('Error guardando consentimiento local:', e)
     }
 
-    // 2. Si hay sesión iniciada en Supabase, registrar en la tabla consentimientos_aceptados
+    // 2. Si hay sesión iniciada en Supabase, registrar o reactivar en la tabla consentimientos_aceptados
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user?.id) {
         const { error } = await supabase
           .from('consentimientos_aceptados')
-          .insert({
+          .upsert({
             usuario_id: session.user.id,
             version,
             aceptado_en: ahora,
             revocado_en: null
-          })
+          }, { onConflict: 'usuario_id,version' })
 
         if (!error) {
           nuevoEstado.origen = 'supabase'
@@ -287,8 +295,8 @@ export const consentimientoService = {
           version: item.version,
           aceptadoEn: item.aceptado_en,
           fechaHoraTexto: item.fecha_hora_texto || formatearFechaHora(item.aceptado_en),
-          revocadoEn: null,
-          vigente: true,
+          revocadoEn: item.revocado_en || null,
+          vigente: !item.revocado_en,
           origen: 'local'
         }))
       }
@@ -298,28 +306,55 @@ export const consentimientoService = {
   },
 
   /**
-   * Revoca el consentimiento informado (RF90)
+   * Revoca el consentimiento informado (RF90):
+   * - Retira las publicaciones del usuario en la galería y desactiva enlaces compartidos.
+   * - Impide nuevas mediciones y publicaciones hasta que consienta de nuevo.
+   * - Registra el evento en la auditoría y devuelve el detalle de qué cambió.
    */
   async revocarConsentimiento() {
     const ahora = new Date().toISOString()
+    let usuarioId = null
 
-    // 1. Actualizar Supabase si hay sesión
+    // 1. Ejecutar función revocar_consentimiento en Supabase (y respaldo directo si aplica)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user?.id) {
-        await supabase
-          .from('consentimientos_aceptados')
-          .update({ revocado_en: ahora })
-          .eq('usuario_id', session.user.id)
-          .is('revocado_en', null)
+      usuarioId = session?.user?.id || null
+      if (usuarioId) {
+        if (typeof supabase.rpc === 'function') {
+          const { error: rpcError } = await supabase.rpc('revocar_consentimiento')
+          if (rpcError) {
+            await supabase
+              .from('consentimientos_aceptados')
+              .update({ revocado_en: ahora })
+              .eq('usuario_id', usuarioId)
+              .is('revocado_en', null)
+          }
+        } else {
+          await supabase
+            .from('consentimientos_aceptados')
+            .update({ revocado_en: ahora })
+            .eq('usuario_id', usuarioId)
+            .is('revocado_en', null)
+        }
       }
     } catch (e) {
       console.warn('Error revocando en Supabase:', e)
     }
 
-    // 2. Limpiar o actualizar localStorage
+    // 2. Limpiar el consentimiento local y retirar las publicaciones anónimas locales
     try {
-      localStorage.removeItem(LOCAL_CONSENT_KEY)
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(LOCAL_CONSENT_KEY)
+        localStorage.removeItem(LOCAL_PUBLICACIONES_ANONIMAS_KEY)
+        const rawHistorial = localStorage.getItem(LOCAL_HISTORIAL_KEY)
+        if (rawHistorial) {
+          const lista = JSON.parse(rawHistorial)
+          if (Array.isArray(lista)) {
+            const actualizada = lista.map((item, idx) => (idx === 0 && !item.revocado_en ? { ...item, revocado_en: ahora } : item))
+            localStorage.setItem(LOCAL_HISTORIAL_KEY, JSON.stringify(actualizada))
+          }
+        }
+      }
     } catch (e) {}
 
     consentimientoEstado.value = {
@@ -332,6 +367,26 @@ export const consentimientoService = {
       origen: 'local'
     }
 
-    return { ok: true }
+    await registrarEventoAuditoria({
+      accion: 'revocacion_consentimiento',
+      entidad: 'perfiles',
+      entidadId: usuarioId,
+      entidadNombre: 'Revocación de Consentimiento Informado',
+      resumen: 'Consentimiento informado revocado por el titular y publicaciones retiradas',
+      detalle: {
+        revocado_en: ahora,
+        alcance: 'consentimientos_aceptados, publicaciones retiradas y bloqueo de nuevas mediciones'
+      }
+    }).catch(() => {})
+
+    return {
+      ok: true,
+      revocadoEn: ahora,
+      cambios: [...CAMBIOS_REVOCACION_CONSENTIMIENTO],
+      mensaje:
+        'Retiraste tu consentimiento. Tus publicaciones dejaron de ser visibles en la galería y por enlace, y no podrás medir ni publicar hasta otorgar un nuevo consentimiento.'
+    }
   }
 }
+
+export const revocacion_consentimiento = () => consentimientoService.revocarConsentimiento()

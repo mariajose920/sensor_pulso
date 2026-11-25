@@ -71,7 +71,7 @@ export function generarSenales({ bpm, amplitud = 100 }) {
 /** Texto CSV (separador coma, UTF-8) con metadatos como comentarios y la señal. */
 export function construirCsv({ nombre, bpm, intervaloMs, amplitud }) {
   const meta = [
-    ['# sensor_pulso - datos de comparacion (RF32)'],
+    ['# Sensor de Pulso - datos de comparacion (RF32)'],
     ['# medicion', nombre],
     ['# generado', new Date().toISOString()],
     ['# bpm', bpm],
@@ -141,7 +141,7 @@ export function renderizarGrafico({ nombre, bpm, amplitud = 100, ancho = 1200, a
 
   ctx.fillStyle = '#e2e8f0'
   ctx.font = 'bold 24px sans-serif'
-  ctx.fillText('sensor_pulso - Comparacion con plantilla de reposo', 20, 30)
+  ctx.fillText('Sensor de Pulso - Comparacion con plantilla de reposo', 20, 30)
   ctx.font = '16px sans-serif'
   ctx.fillStyle = '#94a3b8'
   ctx.fillText(`Generado: ${new Date().toLocaleString('es-CL')}  |  Ventana: ${VENTANA_S} s`, 20, 52)

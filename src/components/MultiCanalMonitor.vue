@@ -4,7 +4,7 @@
     <div class="multicanal-header">
       <div class="header-titles">
         <div class="header-tags">
-          <span class="tag-badge">RF08 · Visualización Multi-Canal</span>
+          <span class="tag-badge">Visualización Multi-Canal</span>
           <span class="badge-total-canales">5 Canales Simultáneos</span>
         </div>
         <h2 class="multicanal-title">Central de Monitoreo Fisiológico (ESP32)</h2>
@@ -23,7 +23,7 @@
             @click="modoVista = 'tarjetas'"
             title="Vista de cuadrícula con mini-trazas PPG"
           >
-            🗂️ Tarjetas
+            <IconoUi name="folder" /> Tarjetas
           </button>
           <button 
             type="button" 
@@ -32,7 +32,7 @@
             @click="modoVista = 'central'"
             title="Vista panorámica multiparámetro estilo monitor hospitalario"
           >
-            🖥️ Central Clínica
+            <IconoUi name="monitor" /> Central Clínica
           </button>
           <button 
             type="button" 
@@ -41,7 +41,7 @@
             @click="modoVista = 'tabla'"
             title="Vista tabla comparativa de los 5 canales"
           >
-            📋 Tabla Comparativa
+            <IconoUi name="clipboard" /> Tabla Comparativa
           </button>
         </div>
       </div>
@@ -50,7 +50,7 @@
     <!-- Barra de Telemetría Grupal y Alertas Fisiológicas (RF08) -->
     <div class="telemetria-grupal-bar">
       <div class="telemetria-stat-pill">
-        <span class="stat-icon">📡</span>
+        <span class="stat-icon"><IconoUi name="radio" /></span>
         <div class="stat-info">
           <span class="stat-label">Canales Activos:</span>
           <strong class="stat-value font-mono">{{ metricasGrupales.activosCount }} / {{ canales.length }}</strong>
@@ -58,7 +58,7 @@
       </div>
 
       <div class="telemetria-stat-pill">
-        <span class="stat-icon">❤️</span>
+        <span class="stat-icon"><IconoUi name="heart" /></span>
         <div class="stat-info">
           <span class="stat-label">BPM Promedio Grupal:</span>
           <strong class="stat-value font-mono text-primary">{{ metricasGrupales.promedioBpm > 0 ? metricasGrupales.promedioBpm.toFixed(1) : '--' }} <small>BPM</small></strong>
@@ -66,7 +66,7 @@
       </div>
 
       <div class="telemetria-stat-pill">
-        <span class="stat-icon">🫁</span>
+        <span class="stat-icon"><IconoUi name="lungs" /></span>
         <div class="stat-info">
           <span class="stat-label">SpO₂ Promedio Grupal:</span>
           <strong class="stat-value font-mono text-cyan">{{ metricasGrupales.promedioSpo2 > 0 ? metricasGrupales.promedioSpo2.toFixed(1) : '--' }} <small>%</small></strong>
@@ -74,7 +74,7 @@
       </div>
 
       <div class="telemetria-stat-pill" :class="{ 'stat-alerta': metricasGrupales.alertasCount > 0 }">
-        <span class="stat-icon">{{ metricasGrupales.alertasCount > 0 ? '⚠️' : '✅' }}</span>
+        <span class="stat-icon">{{ metricasGrupales.alertasCount > 0 ? '' : '' }}</span>
         <div class="stat-info">
           <span class="stat-label">Alertas Clínicas:</span>
           <strong class="stat-value font-mono" :class="metricasGrupales.alertasCount > 0 ? 'text-danger' : 'text-success'">
@@ -110,7 +110,7 @@
             :class="{ active: filtroActivo === 'alertas' }" 
             @click="filtroActivo = 'alertas'"
           >
-            ⚠️ Alertas ({{ metricasGrupales.alertasCount }})
+            <IconoUi name="alert" /> Alertas ({{ metricasGrupales.alertasCount }})
           </button>
           <button 
             v-if="miCanalAsignado" 
@@ -119,7 +119,7 @@
             :class="{ active: filtroActivo === 'mi_canal' }" 
             @click="filtroActivo = 'mi_canal'"
           >
-            ⭐ Mi Canal
+            <IconoUi name="star" /> Mi Canal
           </button>
         </div>
       </div>
@@ -143,18 +143,18 @@
         <div class="card-header-row">
           <div class="canal-tag-wrapper">
             <span class="canal-title-badge">Canal {{ c.canal }}</span>
-            <span v-if="miCanalAsignado === c.canal" class="badge-mi-canal">⭐ Mi Canal</span>
-            <span v-if="tieneAlertaCanal(c)" class="badge-alerta-chip" :title="obtenerTextoAlerta(c)">⚠️ Alerta</span>
+            <span v-if="miCanalAsignado === c.canal" class="badge-mi-canal"><IconoUi name="star" /> Mi Canal</span>
+            <span v-if="tieneAlertaCanal(c)" class="badge-alerta-chip" :title="obtenerTextoAlerta(c)"><IconoUi name="alert" /> Alerta</span>
           </div>
           <CalidadSenalBadge :nivel="c.calidad || 'buena'" :causas="c.causasCalidad || []" />
         </div>
 
         <!-- Asignación de Estudiante (RF12 / RF111) -->
         <div v-if="obtenerNombreAsignado(c.canal)" class="user-assigned-badge font-mono">
-          👤 {{ obtenerNombreAsignado(c.canal) }}
+          <IconoUi name="user" /> {{ obtenerNombreAsignado(c.canal) }}
         </div>
         <div v-else class="free-channel-badge font-mono">
-          🟢 Canal Libre (RF12)
+          <IconoUi name="dot-green" /> Canal Libre
         </div>
 
         <!-- Mini Traza PPG en Tiempo Real del Canal -->
@@ -173,7 +173,7 @@
           <!-- Métrica 1: Frecuencia Cardíaca (BPM) -->
           <div class="metrica-box bpm-box">
             <div class="metrica-header">
-              <span class="heart-pulse-dot" :class="{ beating: c.bpm > 0 }">❤️</span>
+              <span class="heart-pulse-dot" :class="{ beating: c.bpm > 0 }"><IconoUi name="heart" /></span>
               <span class="metrica-label">BPM</span>
             </div>
             <div class="metrica-valor font-mono">
@@ -187,7 +187,7 @@
           <!-- Métrica 2: Saturación de Oxígeno (SpO₂) -->
           <div class="metrica-box spo2-box">
             <div class="metrica-header">
-              <span class="oximeter-dot">🫁</span>
+              <span class="oximeter-dot"><IconoUi name="lungs" /></span>
               <span class="metrica-label">SpO₂</span>
             </div>
             <div class="metrica-valor font-mono">
@@ -205,7 +205,7 @@
             ● Enfocado en osciloscopio
           </span>
           <span v-else class="inactive-focus-tag">
-            🔍 Clic para enfocar osciloscopio
+            <IconoUi name="search" /> Clic para enfocar osciloscopio
           </span>
         </div>
       </div>
@@ -232,7 +232,7 @@
               <span v-if="miCanalAsignado === c.canal" class="badge-mi-canal-sm">MI CANAL</span>
             </div>
             <div class="track-user font-mono">
-              {{ obtenerNombreAsignado(c.canal) || '🟢 Libre' }}
+              {{ obtenerNombreAsignado(c.canal) || 'Libre' }}
             </div>
             <CalidadSenalBadge :nivel="c.calidad || 'buena'" :causas="c.causasCalidad || []" />
           </div>
@@ -254,7 +254,7 @@
           <!-- Métrica Digital BPM -->
           <div class="track-metric-col metric-bpm">
             <div class="metric-top">
-              <span class="heart-pulse-dot" :class="{ beating: c.bpm > 0 }">❤️</span>
+              <span class="heart-pulse-dot" :class="{ beating: c.bpm > 0 }"><IconoUi name="heart" /></span>
               <span class="metric-kind">HR / PULSO</span>
             </div>
             <div class="metric-huge font-mono">
@@ -268,7 +268,7 @@
           <!-- Métrica Digital SpO2 -->
           <div class="track-metric-col metric-spo2">
             <div class="metric-top">
-              <span class="oximeter-dot">🫁</span>
+              <span class="oximeter-dot"><IconoUi name="lungs" /></span>
               <span class="metric-kind">SPO₂ ARTERIAL</span>
             </div>
             <div class="metric-huge font-mono text-cyan">
@@ -287,7 +287,7 @@
               :class="{ 'btn-focus-active': canalSeleccionado === c.canal }"
               @click.stop="$emit('select', c.canal)"
             >
-              {{ canalSeleccionado === c.canal ? '✓ Activo' : 'Enfocar' }}
+              {{ canalSeleccionado === c.canal ? 'Activo' : 'Enfocar' }}
             </button>
           </div>
         </div>
@@ -301,9 +301,9 @@
           <thead>
             <tr>
               <th>Canal</th>
-              <th>Asignación (RF12)</th>
-              <th>Frecuencia Cardíaca (RF07)</th>
-              <th>Saturación SpO₂ (RF114)</th>
+              <th>Asignación</th>
+              <th>Frecuencia Cardíaca</th>
+              <th>Saturación SpO₂</th>
               <th>Estado Fisiológico</th>
               <th>Calidad de Señal</th>
               <th>Acción</th>
@@ -321,36 +321,36 @@
             >
               <td class="font-mono">
                 <strong>Canal {{ c.canal }}</strong>
-                <span v-if="miCanalAsignado === c.canal" class="badge-mi-canal-xs">⭐ Tuyo</span>
+                <span v-if="miCanalAsignado === c.canal" class="badge-mi-canal-xs"><IconoUi name="star" /> Tuyo</span>
               </td>
               <td>
                 <span v-if="obtenerNombreAsignado(c.canal)" class="user-chip">
-                  👤 {{ obtenerNombreAsignado(c.canal) }}
+                  <IconoUi name="user" /> {{ obtenerNombreAsignado(c.canal) }}
                 </span>
                 <span v-else class="free-chip">
-                  🟢 Libre
+                  <IconoUi name="dot-green" /> Libre
                 </span>
               </td>
               <td>
                 <div class="table-metric-cell">
-                  <span class="heart-pulse-dot" :class="{ beating: c.bpm > 0 }">❤️</span>
+                  <span class="heart-pulse-dot" :class="{ beating: c.bpm > 0 }"><IconoUi name="heart" /></span>
                   <strong class="font-mono">{{ c.bpm ? c.bpm.toFixed(1) : '--' }} BPM</strong>
                   <span class="mini-pill" :class="'pill-' + evaluarBpm(c.bpm)">{{ etiquetaBpm(c.bpm) }}</span>
                 </div>
               </td>
               <td>
                 <div class="table-metric-cell">
-                  <span>🫁</span>
+                  <span><IconoUi name="lungs" /></span>
                   <strong class="font-mono text-cyan">{{ c.spo2 ? c.spo2.toFixed(1) : '--' }}%</strong>
                   <span class="mini-pill" :class="'pill-' + evaluarSpo2(c.spo2)">{{ etiquetaSpo2(c.spo2) }}</span>
                 </div>
               </td>
               <td>
                 <span v-if="tieneAlertaCanal(c)" class="alerta-badge-cell">
-                  ⚠️ {{ obtenerTextoAlerta(c) }}
+                  <IconoUi name="alert" /> {{ obtenerTextoAlerta(c) }}
                 </span>
                 <span v-else class="ok-badge-cell">
-                  ✓ Fisiológicamente Estable
+                  <IconoUi name="check" /> Fisiológicamente Estable
                 </span>
               </td>
               <td>

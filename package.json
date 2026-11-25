@@ -19,8 +19,14 @@
     "test:rf55": "node scripts/test-rf55-cifrado.js",
     "test:rf27": "node scripts/test-rf27-cargar-senales.js",
     "test:rf47": "node scripts/test-rf47-contrastar-datasets.js",
+    "test:rf56": "node scripts/test-rf56-clasificacion-datos.mjs",
+    "test:rf115": "node scripts/test-rf115-spo2-aprendizaje.mjs",
+    "test:rf95": "node scripts/test-rf95-aviso-alojamiento.mjs",
+    "test:rf60": "node scripts/test-rf60-politica-retencion.mjs",
+    "test:rf61": "node scripts/test-rf61-enmascaramiento.mjs",
     "test:rf62": "node scripts/test-rf62-auditoria.mjs",
     "test:rf63": "node scripts/test-rf63-registros-inmutables.js",
+    "test:rf64": "node scripts/test-rf64-panel-auditoria.mjs",
     "test:rf29": "node scripts/test-rf29-analisis-comparacion.mjs",
     "test:rf112": "node scripts/test-rf112-umbrales-nivel.mjs",
     "test:rf65": "node scripts/test-rf65-validar-sanitizar.js",
@@ -38,7 +44,15 @@
     "test:rf34": "node scripts/test-rf34-galeria-publica.mjs",
     "test:rf35": "node scripts/test-rf35-compartir-enlace.mjs",
     "test:rf113": "node scripts/test-rf113-panel-en-vivo.js",
-    "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs"
+    "test:rf111-estudiante": "node scripts/test-rf111-canal-automatico-estudiante.mjs",
+    "auditar:dependencias": "npm audit --audit-level=high",
+    "test:rf70": "node scripts/test-rf70-revision-dependencias.mjs",
+    "test:rf71": "node scripts/test-rf71-respaldos-restauracion.mjs",
+    "test:rf72": "node scripts/test-rf72-alertas-seguridad.mjs",
+    "test:rf73": "node scripts/test-rf73-procedimiento-incidentes.mjs",
+    "test:rnf13": "node scripts/test-rnf13-mfa-supabase-vercel.mjs",
+    "test:rnf04": "node scripts/test-rnf04-latencia-tiempo-real.mjs",
+    "test:rnf15": "node scripts/test-rnf15-recuperacion-fallas.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",
@@ -49,7 +63,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
-    "puppeteer-core": "^23.11.1",
+    "puppeteer-core": "^25.17.0",
     "vite": "^6.0.0",
     "vite-plugin-pwa": "^0.21.2"
   }

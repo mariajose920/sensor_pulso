@@ -3,7 +3,7 @@
     <div class="card" style="margin-bottom: 1rem;">
       <h1 class="card-title" style="margin-bottom: 0.25rem;">Historial Clínico y Registro de Alertas</h1>
       <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 0;">
-        Registro cronológico de bioseñales y eventos fuera de rango (RF21). Información de salud
+        Registro cronológico de bioseñales y eventos fuera de rango. Información de salud
         sensible protegida por políticas de acceso seguro. Plataforma para docencia e investigación biomédica.
       </p>
     </div>
@@ -36,8 +36,22 @@
           <line x1="12" y1="8" x2="12" y2="12"></line>
           <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
-        Registro de Alertas Clínicas (RF21)
+        Registro de Alertas Clínicas
         <span class="tab-counter tab-counter-alertas" v-if="alertasItems.length > 0">{{ alertasItems.length }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="tab-btn"
+        :class="{ active: pestanaActiva === 'evolucion' }"
+        data-testid="tab-evolucion-personal"
+        @click="pestanaActiva = 'evolucion'"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
+          <path d="M3 3v18h18"></path>
+          <path d="M7 14l4-4 4 3 5-6"></path>
+        </svg>
+        Evolución Personal
       </button>
     </div>
 
@@ -214,7 +228,7 @@
           <p style="margin: 0.5rem 0 0.25rem;"><strong>No hay alertas fuera de rango registradas.</strong></p>
           <p style="margin: 0; color: var(--color-muted); font-size: 0.88rem;">
             Las mediciones monitoreadas se mantuvieron dentro de los parámetros fisiológicos esperados.
-            Cuando un parámetro sobrepase el rango en Paso 4, el evento visual y sonoro se registrará aquí automáticamente (RF21).
+            Cuando un parámetro sobrepase el rango en Paso 4, el evento visual y sonoro se registrará aquí automáticamente.
           </p>
         </div>
 
@@ -284,12 +298,18 @@
           </li>
         </ul>
       </section>
+
+      <!-- PESTAÑA 3: PANEL DE EVOLUCIÓN PERSONAL -->
+      <section v-if="pestanaActiva === 'evolucion'" aria-label="Panel de evolución personal">
+        <PanelEvolucionPersonal />
+      </section>
     </template>
   </div>
 </template>
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import PanelEvolucionPersonal from '../components/PanelEvolucionPersonal.vue'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CalidadSenalBadge from '../components/CalidadSenalBadge.vue'
 import EstadoConexionBadge from '../components/EstadoConexionBadge.vue'

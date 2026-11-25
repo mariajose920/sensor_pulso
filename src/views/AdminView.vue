@@ -9,7 +9,7 @@
           </p>
         </div>
         <button @click="recargarTodo" class="btn btn-secondary btn-sm" :disabled="cargandoLista || cargandoAuditoria">
-          {{ cargandoLista ? 'Actualizando...' : 'Recargar Todo' }}
+          {{ cargandoLista ? 'Actualizando...' : 'Recargar todo' }}
         </button>
       </div>
 
@@ -18,8 +18,46 @@
         {{ feedbackMensaje }}
       </div>
 
+      <!-- Submenú: cada sección se muestra por separado para no mezclar toda la información -->
+      <div class="admin-tabs" role="tablist" aria-label="Secciones del panel de administración" @keydown="moverConTeclado">
+        <button
+          v-for="s in SECCIONES"
+          :id="`tab-${s.id}`"
+          :key="s.id"
+          type="button"
+          role="tab"
+          class="admin-tab"
+          :class="{ 'admin-tab--activa': seccionActiva === s.id }"
+          :aria-selected="seccionActiva === s.id"
+          :aria-controls="`panel-${s.id}`"
+          :tabindex="seccionActiva === s.id ? 0 : -1"
+          @click="seleccionarSeccion(s.id)"
+        >
+          <span class="admin-tab-titulo">{{ s.titulo }}</span>
+
+        </button>
+      </div>
+
+      <label class="admin-selector">
+        Sección
+        <select class="form-input" :value="seccionActiva" @change="seleccionarSeccion($event.target.value)">
+          <option v-for="s in SECCIONES" :key="s.id" :value="s.id">{{ s.titulo }}</option>
+        </select>
+      </label>
+
+      <header class="seccion-resumen">
+        <h2 class="section-title">{{ seccionActual.titulo }}</h2>
+        <p class="header-desc">{{ seccionActual.descripcion }}</p>
+      </header>
+
       <!-- SECCIÓN: Gestión y Asignación de Roles -->
-      <div class="admin-section">
+      <div
+        v-if="seccionActiva === 'cuentas'"
+        id="panel-cuentas"
+        class="admin-section mt-4"
+        role="tabpanel"
+        aria-labelledby="tab-cuentas"
+      >
         <div class="section-top">
           <h2 class="section-title">Cuentas y Asignación de Roles</h2>
           <div class="search-box">
@@ -30,6 +68,10 @@
               placeholder="Buscar por nombre o correo..."
             />
           </div>
+        </div>
+
+        <div class="privacidad-barra">
+          <BotonRevelarDatos :control="revelarCuentas" />
         </div>
 
         <div v-if="cargandoLista" class="loading-state">
@@ -53,10 +95,13 @@
             <tbody>
               <tr v-for="cuenta in cuentasFiltradas" :key="cuenta.id">
                 <td>
-                  <strong>{{ cuenta.nombre || 'Sin nombre registrado' }}</strong>
+                  <strong v-if="cuenta.nombre">
+                    <DatoEnmascarado :valor="cuenta.nombre" tipo="nombre" :revelado="revelarCuentas.revelado.value || cuenta.id === currentUserId" />
+                  </strong>
+                  <strong v-else>Sin nombre registrado</strong>
                   <span v-if="cuenta.id === currentUserId" class="self-tag">(Tú)</span>
                 </td>
-                <td><code>{{ cuenta.correo }}</code></td>
+                <td><code><DatoEnmascarado :valor="cuenta.correo" tipo="correo" :revelado="revelarCuentas.revelado.value || cuenta.id === currentUserId" /></code></td>
                 <td>
                   <span class="badge" :class="claseBadge(cuenta)">
                     {{ etiquetaCuenta(cuenta) }}
@@ -85,6 +130,12 @@
         </div>
       </div>
 
+      <div
+        v-if="seccionActiva === 'auditoria'"
+        id="panel-auditoria"
+        role="tabpanel"
+        aria-labelledby="tab-auditoria"
+      >
       <!-- SECCIÓN: Registro General de Auditoría del Sistema -->
       <RegistroAuditoriaPanel ref="panelAuditoriaGeneral" class="mt-4" />
 
@@ -100,6 +151,10 @@
           <button @click="cargarAuditoria" class="btn btn-secondary btn-sm" :disabled="cargandoAuditoria">
             {{ cargandoAuditoria ? 'Cargando...' : 'Actualizar Registro' }}
           </button>
+        </div>
+
+        <div class="privacidad-barra">
+          <BotonRevelarDatos :control="revelarHistorialRoles" />
         </div>
 
         <div v-if="cargandoAuditoria" class="loading-state">
@@ -127,12 +182,12 @@
                   <span class="fecha-badge">{{ formatearFechaHora(item.ocurrio_en) }}</span>
                 </td>
                 <td>
-                  <strong>{{ item.actor_nombre }}</strong>
-                  <div class="sub-correo"><code>{{ item.actor_correo }}</code></div>
+                  <strong><DatoEnmascarado :valor="item.actor_nombre" tipo="nombre" :revelado="revelarHistorialRoles.revelado.value" /></strong>
+                  <div class="sub-correo"><code><DatoEnmascarado :valor="item.actor_correo" tipo="correo" :revelado="revelarHistorialRoles.revelado.value" /></code></div>
                 </td>
                 <td>
-                  <strong>{{ item.usuario_nombre }}</strong>
-                  <div class="sub-correo"><code>{{ item.usuario_correo }}</code></div>
+                  <strong><DatoEnmascarado :valor="item.usuario_nombre" tipo="nombre" :revelado="revelarHistorialRoles.revelado.value" /></strong>
+                  <div class="sub-correo"><code><DatoEnmascarado :valor="item.usuario_correo" tipo="correo" :revelado="revelarHistorialRoles.revelado.value" /></code></div>
                 </td>
                 <td>
                   <span class="badge" :class="claseBadgeRol(item.rol_antes)">{{ etiquetaRol(item.rol_antes) }}</span>
@@ -152,17 +207,54 @@
           </table>
         </div>
       </div>
+      </div>
+
+      <!-- SECCIÓN: Clasificación de los datos (públicos, privados, sensibles de salud) -->
+      <div
+        v-if="seccionActiva === 'clasificacion'"
+        id="panel-clasificacion"
+        class="admin-section mt-4"
+        role="tabpanel"
+        aria-labelledby="tab-clasificacion"
+      >
+        <ClasificacionDatosPanel />
+      </div>
+
+      <!-- SECCIÓN: Política de retención (cuánto tiempo se conservan los datos) -->
+      <div
+        v-if="seccionActiva === 'retencion'"
+        id="panel-retencion"
+        class="admin-section mt-4"
+        role="tabpanel"
+        aria-labelledby="tab-retencion"
+      >
+        <RetencionPanel />
+      </div>
 
       <!-- SECCIÓN: Rangos de BPM y SpO₂ por actividad y edad -->
-      <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+      <div
+        v-if="seccionActiva === 'rangos'"
+        id="panel-rangos"
+        role="tabpanel"
+        aria-labelledby="tab-rangos"
+      >
+        <RangosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+      </div>
 
       <!-- SECCIÓN: Método de sincronización, contenidos y propuestas de profesores -->
-      <MetodoSincronizacionPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
-      <ContenidosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
-      <PropuestasPanel class="mt-4" modo="admin" />
+      <div
+        v-if="seccionActiva === 'contenidos'"
+        id="panel-contenidos"
+        role="tabpanel"
+        aria-labelledby="tab-contenidos"
+      >
+        <MetodoSincronizacionPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+        <ContenidosPanel class="mt-4" modo="admin" :usuario-id="currentUserId" />
+        <PropuestasPanel class="mt-4" modo="admin" />
+      </div>
 
       <!-- SECCIÓN: Primer Administrador (Arranque Inicial) -->
-      <div class="seed-card card mt-4">
+      <div v-if="seccionActiva === 'cuentas'" class="seed-card card mt-4">
         <h2 class="section-title">Inicialización del Sistema</h2>
         <p class="section-desc">
           Verificación de la cuenta raíz predeterminada en código.
@@ -309,9 +401,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import RegistroAuditoriaPanel from '../components/RegistroAuditoriaPanel.vue'
+import ClasificacionDatosPanel from '../components/ClasificacionDatosPanel.vue'
+import RetencionPanel from '../components/RetencionPanel.vue'
+import DatoEnmascarado from '../components/DatoEnmascarado.vue'
+import BotonRevelarDatos from '../components/BotonRevelarDatos.vue'
+import { useRevelarDatos } from '../composables/useRevelarDatos.js'
 import RangosPanel from '../components/RangosPanel.vue'
 import MetodoSincronizacionPanel from '../components/MetodoSincronizacionPanel.vue'
 import ContenidosPanel from '../components/ContenidosPanel.vue'
@@ -328,6 +426,54 @@ import {
 import { obtenerEtiquetaPerfil } from '../utils/roles'
 
 const { currentUserId, currentUserEmail, currentUserName, isAdmin, refrescarPerfil } = useAuth()
+
+// Submenú del panel. La sección activa se guarda en la URL (?seccion=...) para poder recargar o compartir el enlace.
+const SECCIONES = [
+  { id: 'cuentas', titulo: 'Cuentas y roles', descripcion: 'Usuarios, roles y permisos' },
+  { id: 'auditoria', titulo: 'Auditoría', descripcion: 'Registro de eventos y alertas' },
+  { id: 'clasificacion', titulo: 'Clasificación', descripcion: 'Tipos de datos y su tratamiento' },
+  { id: 'retencion', titulo: 'Retención', descripcion: 'Cuánto tiempo se guardan los datos' },
+  { id: 'rangos', titulo: 'Rangos', descripcion: 'BPM y SpO₂ por edad y actividad' },
+  { id: 'contenidos', titulo: 'Contenidos', descripcion: 'Configura la sincronización de señales y gestiona las lecciones y propuestas.' }
+]
+const IDS_SECCION = SECCIONES.map(s => s.id)
+const ruta = useRoute()
+const enrutador = useRouter()
+const seccionDesdeUrl = () => {
+  const pedida = Array.isArray(ruta.query.seccion) ? ruta.query.seccion[0] : ruta.query.seccion
+  return IDS_SECCION.includes(pedida) ? pedida : 'cuentas'
+}
+const seccionActiva = ref(seccionDesdeUrl())
+const seccionActual = computed(() => SECCIONES.find(s => s.id === seccionActiva.value))
+
+const seleccionarSeccion = (id) => {
+  if (!IDS_SECCION.includes(id)) return
+  seccionActiva.value = id
+  if (ruta.query.seccion !== id) {
+    enrutador.replace({ query: { ...ruta.query, seccion: id } })
+  }
+}
+
+// Flechas izquierda/derecha, Inicio y Fin para moverse entre pestañas con el teclado
+const moverConTeclado = (evento) => {
+  const teclas = { ArrowRight: 1, ArrowLeft: -1 }
+  let indice = IDS_SECCION.indexOf(seccionActiva.value)
+  if (evento.key in teclas) indice = (indice + teclas[evento.key] + IDS_SECCION.length) % IDS_SECCION.length
+  else if (evento.key === 'Home') indice = 0
+  else if (evento.key === 'End') indice = IDS_SECCION.length - 1
+  else return
+  evento.preventDefault()
+  seleccionarSeccion(IDS_SECCION[indice])
+  document.getElementById(`tab-${IDS_SECCION[indice]}`)?.focus()
+}
+
+watch(() => ruta.query.seccion, () => {
+  seccionActiva.value = seccionDesdeUrl()
+})
+
+// Datos personales de otras personas: enmascarados por defecto; mostrarlos queda registrado en la auditoría
+const revelarCuentas = useRevelarDatos('Cuentas y roles')
+const revelarHistorialRoles = useRevelarDatos('Historial de cambios de rol')
 
 const cuentas = ref([])
 const filtroBusqueda = ref('')
@@ -556,6 +702,44 @@ onMounted(() => {
   margin-bottom: 1.5rem;
 }
 
+.privacidad-barra {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.55rem;
+  background: var(--color-bg);
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-tab {
+  padding: 0.8rem 0.55rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-tab:hover { color: var(--color-text); }
+.admin-tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -3px; }
+.admin-tab--activa { color: var(--color-primary); border-bottom-color: currentColor; }
+.admin-selector { display: none; }
+.seccion-resumen { margin-top: 1.5rem; }
+.seccion-resumen .section-title { margin-bottom: 0.35rem; }
+
+@media (max-width: 760px) {
+  .admin-tabs { display: none; }
+  .admin-header { flex-direction: column; align-items: stretch; gap: 1rem; }
+  .admin-selector { display: grid; gap: 0.4rem; font-weight: 600; }
+  .admin-selector select { width: 100%; }
+}
 .header-desc {
   color: var(--color-muted);
   font-size: 0.95rem;

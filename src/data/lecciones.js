@@ -8,6 +8,8 @@
  * de ritmo, umbrales de SpO₂ y curva SpO₂ = 110 − 25·R del servicio de SpO₂).
  */
 
+import { seleccionarMedida } from '../utils/spo2Aprendizaje.js'
+
 export const CATEGORIAS = {
   fisiologia: 'Fisiología',
   sensor: 'Sensor',
@@ -19,7 +21,7 @@ export const CATEGORIAS = {
 
 export const TIPOS_BLOQUE = ['texto', 'lista', 'pasos', 'formula', 'dato', 'tabla', 'aviso', 'esquema', 'spo2_medida']
 
-export const ESQUEMAS = ['corazon', 'cadena_sensor', 'esp32_flujo', 'razon_r']
+export const ESQUEMAS = ['corazon', 'cadena_sensor', 'esp32_flujo', 'razon_r', 'ppg_muestreo', 'ppg_filtrado']
 
 export const AVISO_EDUCATIVO =
   'Contenido educativo. Esta plataforma no sustituye el diagnóstico ni la opinión de un profesional de la salud.'
@@ -48,6 +50,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'dato', titulo: 'Dos circuitos', texto: 'La circulación pulmonar lleva la sangre a los pulmones para cargarla de oxígeno. La circulación sistémica la reparte por el cuerpo. Los dos circuitos trabajan al mismo tiempo en cada latido.' },
       { tipo: 'formula', titulo: 'Gasto cardíaco', formula: 'Gasto cardíaco = frecuencia cardíaca × volumen sistólico', nota: 'En reposo un adulto suele mover alrededor de 5 litros de sangre por minuto.' }
+    ],
+    reto: [
+      {
+        id: 'corazon-circuito',
+        enunciado: '¿Qué circuito lleva la sangre a los pulmones para cargarla de oxígeno?',
+        opciones: [
+          { id: 'a', texto: 'La circulación sistémica' },
+          { id: 'b', texto: 'La circulación pulmonar' },
+          { id: 'c', texto: 'Ambos circuitos hacen el mismo recorrido' }
+        ]
+      },
+      {
+        id: 'corazon-bombeo',
+        enunciado: '¿Qué parte del corazón bombea la sangre hacia el resto del cuerpo?',
+        opciones: [
+          { id: 'a', texto: 'El ventrículo izquierdo' },
+          { id: 'b', texto: 'La aurícula derecha' },
+          { id: 'c', texto: 'El ventrículo derecho' }
+        ]
+      },
+      {
+        id: 'corazon-gasto',
+        enunciado: '¿Cómo se calcula el gasto cardíaco?',
+        opciones: [
+          { id: 'a', texto: 'Volumen sistólico dividido por frecuencia cardíaca' },
+          { id: 'b', texto: 'Frecuencia cardíaca más volumen sistólico' },
+          { id: 'c', texto: 'Frecuencia cardíaca multiplicada por volumen sistólico' }
+        ]
+      }
     ]
   },
   {
@@ -73,6 +104,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'dato', titulo: 'Variabilidad de la frecuencia (HRV)', texto: 'Aunque el promedio sea 70 BPM, el tiempo entre un latido y el siguiente cambia unos milisegundos. Esa variación se llama variabilidad de la frecuencia cardíaca. La plataforma la calcula con el índice RMSSD y la usa para decir si el ritmo es regular o irregular.' },
       { tipo: 'aviso', texto: 'Mide siempre en reposo, sentado y tranquilo durante uno o dos minutos, para poder comparar un día con otro.' }
+    ],
+    reto: [
+      {
+        id: 'frecuencia-cardiaca-bpm',
+        enunciado: '¿Qué significa BPM?',
+        opciones: [
+          { id: 'a', texto: 'Latidos por minuto' },
+          { id: 'b', texto: 'Latidos por segundo' },
+          { id: 'c', texto: 'Milisegundos por latido' }
+        ]
+      },
+      {
+        id: 'frecuencia-cardiaca-ejercicio',
+        enunciado: '¿Qué suele ocurrir con la frecuencia cardíaca durante el ejercicio?',
+        opciones: [
+          { id: 'a', texto: 'Siempre baja' },
+          { id: 'b', texto: 'Suele subir' },
+          { id: 'c', texto: 'Se mantiene fija' }
+        ]
+      },
+      {
+        id: 'frecuencia-cardiaca-hrv',
+        enunciado: '¿Qué describe la variabilidad de la frecuencia cardíaca?',
+        opciones: [
+          { id: 'a', texto: 'El color de la sangre' },
+          { id: 'b', texto: 'La saturación de oxígeno' },
+          { id: 'c', texto: 'La variación del tiempo entre latidos' }
+        ]
+      }
     ]
   },
   {
@@ -95,6 +155,35 @@ export const LECCIONES = [
       { tipo: 'dato', titulo: 'Los nanómetros no son BPM', texto: 'Los nanómetros (nm) son la longitud de onda de la luz de cada LED. Lo que el sensor entrega es intensidad: un número por cada muestra. Los BPM se calculan después, a partir de cómo sube y baja esa intensidad.' },
       { tipo: 'texto', texto: 'Con cada latido llega más sangre a los vasos del dedo. La sangre absorbe luz, así que vuelve menos luz al fotodetector. Entre latidos pasa lo contrario. Esa subida y bajada es la señal de pulso.' },
       { tipo: 'aviso', texto: 'Para una buena señal: dedo quieto, presión suave, manos tibias y sin esmalte oscuro en la uña.' }
+    ],
+    reto: [
+      {
+        id: 'sensor-max30102-luz',
+        enunciado: '¿Qué luces usa el MAX30102?',
+        opciones: [
+          { id: 'a', texto: 'Ultravioleta y verde' },
+          { id: 'b', texto: 'Roja e infrarroja' },
+          { id: 'c', texto: 'Azul y amarilla' }
+        ]
+      },
+      {
+        id: 'sensor-max30102-detector',
+        enunciado: '¿Qué mide el fotodetector?',
+        opciones: [
+          { id: 'a', texto: 'El voltaje de la batería' },
+          { id: 'b', texto: 'La temperatura del ESP32' },
+          { id: 'c', texto: 'La intensidad de luz que recibe' }
+        ]
+      },
+      {
+        id: 'sensor-max30102-nm',
+        enunciado: '¿Qué indican los nanómetros de los LED?',
+        opciones: [
+          { id: 'a', texto: 'La longitud de onda' },
+          { id: 'b', texto: 'Los latidos por minuto' },
+          { id: 'c', texto: 'El número de muestras' }
+        ]
+      }
     ]
   },
   {
@@ -115,6 +204,35 @@ export const LECCIONES = [
       ] },
       { tipo: 'dato', titulo: 'Hasta 5 canales', texto: 'Cada ESP32 puede enviar hasta cinco canales a la vez. Así se pueden medir a varias personas al mismo tiempo, cada una con su sensor.' },
       { tipo: 'dato', titulo: 'Sin sensor también se puede', texto: 'El firmware tiene un modo de datos de prueba que genera una señal parecida a la real. Además, el simulador de señal de esta sección permite probar sin ESP32.' }
+    ],
+    reto: [
+      {
+        id: 'esp32-lectura',
+        enunciado: '¿Qué componente lee las muestras del MAX30102?',
+        opciones: [
+          { id: 'a', texto: 'El navegador' },
+          { id: 'b', texto: 'El ESP32' },
+          { id: 'c', texto: 'El usuario' }
+        ]
+      },
+      {
+        id: 'esp32-red',
+        enunciado: '¿Cómo puede enviar las muestras el ESP32 a la plataforma?',
+        opciones: [
+          { id: 'a', texto: 'Por WiFi' },
+          { id: 'b', texto: 'Por luz infrarroja' },
+          { id: 'c', texto: 'Por sonido' }
+        ]
+      },
+      {
+        id: 'esp32-canales',
+        enunciado: '¿Cuántos canales simultáneos se describen en la lección?',
+        opciones: [
+          { id: 'a', texto: 'Dos' },
+          { id: 'b', texto: 'Tres' },
+          { id: 'c', texto: 'Hasta cinco' }
+        ]
+      }
     ]
   },
   {
@@ -140,6 +258,35 @@ export const LECCIONES = [
         'Calidad de la señal: buena, regular o mala, con la causa (movimiento, poca luz, saturación, ruido).'
       ] },
       { tipo: 'aviso', texto: 'Si la calidad es mala la medición no se guarda como válida: es mejor repetirla que guardar un dato dudoso.' }
+    ],
+    reto: [
+      {
+        id: 'como-se-obtienen-los-resultados-intervalo',
+        enunciado: '¿Qué se mide entre dos picos seguidos?',
+        opciones: [
+          { id: 'a', texto: 'La longitud de onda' },
+          { id: 'b', texto: 'El intervalo de tiempo' },
+          { id: 'c', texto: 'La temperatura' }
+        ]
+      },
+      {
+        id: 'como-se-obtienen-los-resultados-calculo',
+        enunciado: '¿A cuántos BPM equivalen picos separados por 800 ms?',
+        opciones: [
+          { id: 'a', texto: '75 BPM' },
+          { id: 'b', texto: '80 BPM' },
+          { id: 'c', texto: '60 BPM' }
+        ]
+      },
+      {
+        id: 'como-se-obtienen-los-resultados-senal',
+        enunciado: '¿Qué representa la señal PPG capturada aquí?',
+        opciones: [
+          { id: 'a', texto: 'La actividad eléctrica del corazón' },
+          { id: 'b', texto: 'La temperatura corporal' },
+          { id: 'c', texto: 'Variaciones de intensidad luminosa asociadas al pulso' }
+        ]
+      }
     ]
   },
   {
@@ -174,6 +321,35 @@ export const LECCIONES = [
         'Monóxido de carbono: el sensor lo confunde con oxígeno y puede mostrar un valor falsamente alto.'
       ] },
       { tipo: 'aviso', texto: 'Un valor bajo no es un diagnóstico. Repite la medición con el dedo quieto y, si sigue bajo o tienes síntomas (falta de aire, mareo, labios azulados), consulta a un profesional de la salud.' }
+    ],
+    reto: [
+      {
+        id: 'saturacion-de-oxigeno-significado',
+        enunciado: '¿Qué estima la SpO₂?',
+        opciones: [
+          { id: 'a', texto: 'La frecuencia cardíaca' },
+          { id: 'b', texto: 'El porcentaje de hemoglobina saturada de oxígeno' },
+          { id: 'c', texto: 'El volumen de sangre del cuerpo' }
+        ]
+      },
+      {
+        id: 'saturacion-de-oxigeno-luces',
+        enunciado: '¿Qué señales de luz se comparan para estimarla?',
+        opciones: [
+          { id: 'a', texto: 'Roja e infrarroja' },
+          { id: 'b', texto: 'Verde y ultravioleta' },
+          { id: 'c', texto: 'Solo infrarroja' }
+        ]
+      },
+      {
+        id: 'saturacion-de-oxigeno-curva',
+        enunciado: '¿Cómo describe la lección la curva usada por la plataforma?',
+        opciones: [
+          { id: 'a', texto: 'Como una calibración clínica universal' },
+          { id: 'b', texto: 'Como una medición directa de oxígeno' },
+          { id: 'c', texto: 'Como una aproximación empírica' }
+        ]
+      }
     ]
   },
   {
@@ -200,6 +376,127 @@ export const LECCIONES = [
       ] },
       { tipo: 'texto', texto: 'Los resultados se comparan con rangos según la actividad y la edad. Así, 110 BPM puede ser esperable después de caminar rápido, pero llamar la atención en reposo.' },
       { tipo: 'aviso', texto: AVISO_EDUCATIVO }
+    ],
+    reto: [
+      {
+        id: 'datos-de-salud-privacidad',
+        enunciado: '¿Cómo debes tratar los datos de salud identificables?',
+        opciones: [
+          { id: 'a', texto: 'Como datos sensibles' },
+          { id: 'b', texto: 'Como datos anónimos' },
+          { id: 'c', texto: 'Como datos públicos' }
+        ]
+      },
+      {
+        id: 'datos-de-salud-consentimiento',
+        enunciado: '¿Qué debes obtener antes de compartir mediciones identificables de otra persona?',
+        opciones: [
+          { id: 'a', texto: 'Su frecuencia en reposo' },
+          { id: 'b', texto: 'Su consentimiento' },
+          { id: 'c', texto: 'Su promedio de SpO₂' }
+        ]
+      },
+      {
+        id: 'datos-de-salud-educativo',
+        enunciado: '¿Para qué puedes usar los resultados de esta plataforma?',
+        opciones: [
+          { id: 'a', texto: 'Para reemplazar una consulta médica' },
+          { id: 'b', texto: 'Para emitir diagnósticos' },
+          { id: 'c', texto: 'Para aprender a interpretar señales' }
+        ]
+      }
+    ]
+  },
+  {
+    slug: 'ppg-y-muestreo',
+    titulo: 'De la luz a la señal PPG',
+    categoria: 'sensor',
+    resumen: 'Descubre cómo un sensor óptico obtiene una señal de pulso y qué significa tomar muestras a intervalos regulares.',
+    minutos: 5,
+    bloques: [
+      { tipo: 'texto', texto: 'La fotopletismografía (PPG) usa luz para observar cambios en el volumen de sangre del tejido. En el MAX30102, los LED iluminan el dedo y un fotodetector registra cuánta luz regresa al sensor. Esa intensidad cambia a lo largo del pulso.' },
+      { tipo: 'esquema', nombre: 'cadena_sensor', alt: 'Los LED iluminan el tejido y el fotodetector recibe parte de la luz que regresa.' },
+      { tipo: 'texto', texto: 'Cada lectura del fotodetector es una muestra. La frecuencia de muestreo indica cuántas muestras se toman por segundo. Al colocar las muestras en orden temporal, podemos observar cómo cambia la señal.' },
+      { tipo: 'formula', titulo: 'Tiempo entre muestras', formula: 'Δt (ms) = 1000 ÷ frecuencia de muestreo (Hz)', nota: 'En este ejemplo, a 50 Hz se toma una muestra cada 20 ms.' },
+      { tipo: 'esquema', nombre: 'ppg_muestreo', alt: 'Muestras de una señal simulada a 50 Hz. Los puntos están separados por 20 ms.' },
+      { tipo: 'dato', titulo: 'Muestreo y pulso', texto: 'Los 50 Hz del ejemplo cuentan muestras del sensor por segundo. Para estimar los latidos por minuto, primero hay que analizar cómo cambia la señal a lo largo del tiempo.' }
+    ],
+    reto: [
+      {
+        id: 'ppg-y-muestreo-luz',
+        enunciado: '¿Qué registra el fotodetector del MAX30102?',
+        opciones: [
+          { id: 'a', texto: 'La intensidad de luz que regresa al sensor' },
+          { id: 'b', texto: 'La actividad eléctrica del corazón' },
+          { id: 'c', texto: 'La temperatura del dedo' }
+        ]
+      },
+      {
+        id: 'ppg-y-muestreo-hz',
+        enunciado: '¿Qué significa muestrear a 50 Hz?',
+        opciones: [
+          { id: 'a', texto: 'Medir 50 latidos por minuto' },
+          { id: 'b', texto: 'Tomar 50 muestras por segundo' },
+          { id: 'c', texto: 'Tomar una muestra cada 50 segundos' }
+        ]
+      },
+      {
+        id: 'ppg-y-muestreo-intervalo',
+        enunciado: '¿Cuánto tiempo pasa entre muestras a 50 Hz?',
+        opciones: [
+          { id: 'a', texto: '2 ms' },
+          { id: 'b', texto: '50 ms' },
+          { id: 'c', texto: '20 ms' }
+        ]
+      }
+    ]
+  },
+  {
+    slug: 'filtrado-y-picos-ppg',
+    titulo: 'De la señal PPG al pulso',
+    categoria: 'bpm',
+    resumen: 'Compara una señal con ruido y una señal filtrada, identifica artefactos de movimiento y estima los BPM con los picos.',
+    minutos: 6,
+    bloques: [
+      { tipo: 'texto', texto: 'Al mover el dedo, puede cambiar el contacto con el sensor y variar la cantidad de luz que recibe el fotodetector. Esa alteración se llama artefacto de movimiento y puede parecer un pico de pulso.' },
+      { tipo: 'esquema', nombre: 'ppg_filtrado', alt: 'Ejemplo simulado. La señal original muestra un salto por movimiento. La señal filtrada ilustra dos picos separados por 0,8 segundos.' },
+      { tipo: 'pasos', titulo: 'De las muestras a los BPM', items: [
+        'Revisa la señal original y localiza los tramos afectados por movimiento.',
+        'Aplica un filtro para reducir variaciones rápidas y facilitar la identificación de los pulsos.',
+        'Identifica los máximos locales de un tramo estable. Usa una separación mínima entre candidatos para evitar contar dos veces el mismo pulso.',
+        'Mide el tiempo entre picos consecutivos y calcula los BPM. Si tienes varios intervalos fiables, usa su promedio.'
+      ] },
+      { tipo: 'formula', titulo: 'De la separación entre picos a los BPM', formula: 'BPM = 60 ÷ intervalo entre picos (s)', nota: 'Si dos picos consecutivos están separados por 0,8 segundos, 60 ÷ 0,8 = 75 BPM.' },
+      { tipo: 'aviso', titulo: 'Calidad de la señal', texto: 'Un filtro ayuda a reducir el ruido. Ante un movimiento fuerte, usa un tramo más estable o repite la medición. Los ejemplos son educativos y no permiten hacer diagnósticos.' }
+    ],
+    reto: [
+      {
+        id: 'filtrado-y-picos-ppg-movimiento',
+        enunciado: '¿Qué puede causar un falso pico en la señal PPG?',
+        opciones: [
+          { id: 'a', texto: 'Cambiar la unidad de tiempo' },
+          { id: 'b', texto: 'Mover el dedo y alterar el contacto con el sensor' },
+          { id: 'c', texto: 'Mostrar la señal en otra pantalla' }
+        ]
+      },
+      {
+        id: 'filtrado-y-picos-ppg-filtro',
+        enunciado: '¿Para qué se usa el filtro del ejemplo?',
+        opciones: [
+          { id: 'a', texto: 'Para reducir el ruido y facilitar la detección de picos' },
+          { id: 'b', texto: 'Para duplicar la frecuencia de muestreo' },
+          { id: 'c', texto: 'Para recuperar cualquier tramo dañado por movimiento' }
+        ]
+      },
+      {
+        id: 'filtrado-y-picos-ppg-bpm',
+        enunciado: '¿A cuántos BPM equivale un intervalo de 0,8 s entre picos?',
+        opciones: [
+          { id: 'a', texto: '48 BPM' },
+          { id: 'b', texto: '80 BPM' },
+          { id: 'c', texto: '75 BPM' }
+        ]
+      }
     ]
   }
 ]
@@ -217,11 +514,12 @@ export function vecinas(slug) {
 }
 
 /**
- * Valor de SpO₂ que muestra la lección (RF115) a partir del historial de la cuenta:
- * la medición más reciente que tenga SpO₂. Devuelve null si no hay ninguna.
- * @param {Array<{spo2: number|null, inicio: string, calidad?: string|null}>} items historial, de más reciente a más antigua
+ * Valor de SpO₂ que muestra la lección (RF115) a partir del historial de la cuenta: la medición más reciente hecha
+ * con el sensor y con señal de calidad aceptable (ver src/utils/spo2Aprendizaje.js). Devuelve null si no hay ninguna.
+ * Las mediciones sin dato de origen se aceptan (copias guardadas en el dispositivo antes de registrarlo).
+ * @param {Array<{spo2: number|null, inicio: string, calidad?: string|null, fuente?: string|null}>} items historial, de más reciente a más antigua
  */
 export function ultimaSpo2Medida(items = []) {
-  const m = items.find((x) => x && x.spo2 !== null && x.spo2 !== undefined && Number.isFinite(Number(x.spo2)))
-  return m ? { spo2: Number(m.spo2), fecha: m.inicio, calidad: m.calidad || null } : null
+  const { medida } = seleccionarMedida(items, { permitirSinFuente: true })
+  return medida ? { spo2: medida.spo2, fecha: medida.fecha, calidad: medida.calidad } : null
 }

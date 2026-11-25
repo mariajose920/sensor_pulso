@@ -13,7 +13,7 @@
 
       <div style="display: flex; align-items: center; gap: 0.5rem;">
         <span class="badge badge-usuario" style="font-size: 0.8rem; font-weight: 600;">
-          Activa: {{ currentLabel }} ({{ modelBpm }} BPM)
+          Activa: {{ currentLabel }}
         </span>
       </div>
     </div>
@@ -43,6 +43,14 @@
         style="font-size: 0.85rem; padding: 0.35rem 0.85rem;"
       >
         Perfiles de Referencia
+      </button>
+            <button
+        @click="activeTab = 'fine'"
+        class="btn"
+        :class="activeTab === 'fine' ? 'btn-primary' : 'btn-secondary'"
+        style="font-size: 0.85rem; padding: 0.35rem 0.85rem;"
+      >
+        Ajuste Fino
       </button>
     </div>
 
@@ -155,7 +163,7 @@
     </div>
 
     <!-- 3. Presets clinicos -->
-    <div v-else style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+    <div v-else-if="activeTab === 'presets'" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
       <button
         v-for="preset in presets"
         :key="preset.id"
@@ -169,7 +177,7 @@
     </div>
 
     <!-- Ajuste fino y controles interactivos -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 1rem; align-items: center; font-size: 0.85rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border);">
+    <div v-else-if="activeTab === 'fine'" style="background: var(--color-bg); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--color-border); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 1rem; align-items: center; font-size: 0.85rem;">
       <div>
         <label class="form-label" style="margin-bottom: 0.2rem;">
           Ajuste Fino de Frecuencia Cardiaca (BPM):

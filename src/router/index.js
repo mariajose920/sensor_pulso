@@ -19,6 +19,7 @@ import PrivacidadView from '../views/PrivacidadView.vue'
 import MisDatosView from '../views/MisDatosView.vue'
 import SeguridadAdminView from '../views/SeguridadAdminView.vue'
 import EvaluacionesView from '../views/EvaluacionesView.vue'
+import EvolucionView from '../views/EvolucionView.vue'
 import { useAuth } from '../composables/useAuth'
 import { ROLES } from '../utils/roles'
 import { motivoDeRuta } from '../utils/accesoSinSesion'
@@ -71,6 +72,12 @@ const routes = [
     path: '/historial',
     name: 'Historial',
     component: HistorialView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/evolucion',
+    name: 'Evolucion',
+    component: EvolucionView,
     meta: { requiresAuth: true }
   },
   {
@@ -189,6 +196,12 @@ const routes = [
 
 const router = createRouter({
   history: createWebHistory(),
+  // Solo se desplaza cuando el enlace trae ancla (p. ej. /privacidad#alojamiento-datos); lo demás queda como estaba
+  scrollBehavior(to, from, guardada) {
+    if (guardada) return guardada
+    if (to.hash) return { el: to.hash, top: 80, behavior: 'smooth' }
+    return false
+  },
   routes
 })
 

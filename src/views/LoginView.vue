@@ -16,7 +16,7 @@
 
       <!-- Alerta de Bloqueo Temporal (RF50) -->
       <div v-if="cuentaBloqueada" class="alert alert-error bloqueo-banner">
-        <div class="bloqueo-icono">🔒</div>
+        <div class="bloqueo-icono"><IconoUi name="lock" /></div>
         <div>
           <strong>Acceso Bloqueado Temporalmente</strong>
           <p class="mt-1">
@@ -61,6 +61,9 @@
       <!-- RF75: Aviso educativo obligatorio -->
       <AvisoEducativo compacto />
 
+      <!-- Alojamiento de los datos fuera de Chile: se informa antes de pedir el consentimiento -->
+      <AvisoAlojamiento compacto />
+
       <!-- Casilla obligatoria de Política de Privacidad (RF88) -->
       <div class="politica-check-box mb-4">
         <label class="acepta-politica" style="display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.88rem; cursor: pointer;">
@@ -73,9 +76,7 @@
           <span>
             He leído y acepto la
             <router-link to="/privacidad" data-testid="enlace-privacidad-login" target="_blank" style="color: #0284c7; text-decoration: underline;">
-              política de privacidad
-            </router-link>
-            y el tratamiento de datos institucionales.
+              política de privacidad</router-link>, el tratamiento de datos institucionales y {{ FRASE_ACEPTACION }}.
           </span>
         </label>
         <p v-if="!aceptaPolitica" class="text-muted-xs" style="color: #dc2626; margin: 0.35rem 0 0 1.6rem;">
@@ -110,7 +111,7 @@
           @click="mostrarDemo = !mostrarDemo"
           class="btn-toggle-demo"
         >
-          <span>{{ mostrarDemo ? '▲ Ocultar accesos de prueba rápida' : '⚡ Usar accesos directos de prueba' }}</span>
+          <span>{{ mostrarDemo ? '▲ Ocultar accesos de prueba rápida' : 'Usar accesos directos de prueba' }}</span>
         </button>
 
         <div v-if="mostrarDemo" class="demo-buttons-grid mt-2">
@@ -123,7 +124,7 @@
             class="btn-demo-item"
             :disabled="loading"
           >
-            🛡️ Probar como Administrador (admin.general@unach.cl)
+            <IconoUi name="shield" /> Probar como Administrador (admin.general@unach.cl)
           </button>
           <button
             type="button"
@@ -131,7 +132,7 @@
             class="btn-demo-item"
             :disabled="loading"
           >
-            👨‍🏫 Probar como Profesor (profesor.prueba@unach.cl)
+            <IconoUi name="user" /> Probar como Profesor (profesor.prueba@unach.cl)
           </button>
         </div>
       </div>
@@ -150,7 +151,7 @@
           </div>
         </div>
         <small class="domain-note">
-          ⚠️ Por políticas de seguridad, las cuentas personales (@gmail.com) no están autorizadas.
+          <IconoUi name="alert" /> Por políticas de seguridad, las cuentas personales (@gmail.com) no están autorizadas.
         </small>
       </div>
     </div>
@@ -159,6 +160,8 @@
 
 <script setup>
 import AvisoEducativo from '../components/AvisoEducativo.vue'
+import AvisoAlojamiento from '../components/AvisoAlojamiento.vue'
+import { FRASE_ACEPTACION } from '../data/alojamiento.js'
 import { POLITICA_VERSION } from '../data/politicaPrivacidad.js'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'

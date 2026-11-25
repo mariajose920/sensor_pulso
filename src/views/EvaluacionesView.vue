@@ -3,9 +3,9 @@
     <div class="card">
       <div class="header-flex">
         <div>
-          <h1 class="card-title">📋 Gestión de Evaluaciones</h1>
+          <h1 class="card-title"><IconoUi name="clipboard" /> Gestión de Evaluaciones</h1>
           <p class="header-desc">
-            Crea una evaluación desde cero o utiliza una plantilla precargada oficial para tu aula (RF105).
+            Crea una evaluación desde cero o utiliza una plantilla precargada oficial para tu aula.
           </p>
         </div>
       </div>
@@ -18,7 +18,7 @@
         <div v-if="!aulas.length" class="alert alert-info" data-testid="sin-aulas">
           Para guardar la evaluación necesitas un aula. Puedes ir armándola aquí y crear el aula cuando quieras: tu evaluación en curso se conserva.
           <button type="button" class="btn btn-primary btn-sm" data-testid="crear-aula" style="margin-left: 0.75rem;" @click="irACrearAula">
-            ➕ Crear aula
+            <IconoUi name="plus" /> Crear aula
           </button>
         </div>
         <p v-if="avisoRegreso" class="alert alert-success" role="status" data-testid="aviso-regreso">{{ avisoRegreso }}</p>
@@ -32,7 +32,7 @@
               :class="{ activo: modoCreacion === 'cero' }"
               @click="seleccionarModo('cero')"
             >
-              ✍️ Crear Evaluación desde Cero
+              <IconoUi name="edit" /> Crear Evaluación desde Cero
             </button>
             <button 
               type="button" 
@@ -40,7 +40,7 @@
               :class="{ activo: modoCreacion === 'precargada' }"
               @click="seleccionarModo('precargada')"
             >
-              📦 Usar Plantilla Precargada ({{ plantillasPrecargadas.length }})
+              <IconoUi name="box" /> Usar Plantilla Precargada ({{ plantillasPrecargadas.length }})
             </button>
             <button 
               type="button" 
@@ -49,7 +49,7 @@
               @click="seleccionarModo('banco')"
               data-testid="tab-banco-preguntas"
             >
-              🏦 Banco de Preguntas ({{ bancoPreguntas.length }})
+              <IconoUi name="building" /> Banco de Preguntas ({{ bancoPreguntas.length }})
             </button>
           </div>
 
@@ -78,7 +78,7 @@
               >
                 <div class="plantilla-top">
                   <span class="badge badge-tipo">{{ p.tipo === 'ejercicio_aplicado' ? 'Ejercicio Práctico' : 'Preguntas Teóricas' }}</span>
-                  <span class="badge badge-preguntas">📝 {{ (p.preguntas || []).length }} preguntas</span>
+                  <span class="badge badge-preguntas"><IconoUi name="edit" /> {{ (p.preguntas || []).length }} preguntas</span>
                 </div>
                 <h4 class="plantilla-titulo">{{ p.titulo }}</h4>
                 <p class="plantilla-desc">{{ p.descripcion }}</p>
@@ -100,7 +100,7 @@
           <!-- FORMULARIO DE EVALUACIÓN (RF105 / RF108) -->
           <form v-if="modoCreacion !== 'banco'" class="nueva" novalidate @submit.prevent="guardar">
             <div v-if="plantillaSeleccionadaId" class="banner-precargada">
-              <span>✓ Plantilla cargada en el formulario. Puedes personalizar el título, criterios y preguntas antes de guardar.</span>
+              <span><IconoUi name="check" /> Plantilla cargada en el formulario. Puedes personalizar el título, criterios y preguntas antes de guardar.</span>
               <button type="button" class="btn-link" @click="limpiarPlantilla">Restablecer formulario</button>
             </div>
 
@@ -110,7 +110,7 @@
                 <option v-for="a in aulas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
               </select>
               <button type="button" class="btn btn-secondary btn-sm btn-crear-aula" data-testid="crear-aula" @click="irACrearAula">
-                ➕ Crear aula nueva
+                <IconoUi name="plus" /> Crear aula nueva
               </button>
             </div>
 
@@ -148,12 +148,12 @@
             <div class="seccion-preguntas">
               <div class="preguntas-header">
                 <div>
-                  <h3 class="preguntas-titulo">📝 Preguntas de la Evaluación ({{ preguntas.length }})</h3>
+                  <h3 class="preguntas-titulo"><IconoUi name="edit" /> Preguntas de la Evaluación ({{ preguntas.length }})</h3>
                   <p class="preguntas-desc">Agrega preguntas manuales, reutilízalas o tómalas al azar desde el banco.</p>
                 </div>
                 <div class="preguntas-acciones">
                   <button type="button" class="btn btn-secondary btn-sm" @click="seleccionarModo('banco')">
-                    📚 Elegir del Banco
+                    <IconoUi name="book" /> Elegir del Banco
                   </button>
                   <button type="button" class="btn btn-secondary btn-sm" @click="agregarPreguntaVacia">
                     + Agregar Pregunta
@@ -163,7 +163,7 @@
 
               <!-- Selección al azar desde el banco (RF108) -->
               <div class="azar-box" data-testid="selector-azar-banco">
-                <span class="azar-label">🎲 Agregar al azar del banco:</span>
+                <span class="azar-label"><IconoUi name="activity" /> Agregar al azar del banco:</span>
                 <div class="azar-controles">
                   <input
                     v-model.number="cantidadAzar"
@@ -192,7 +192,7 @@
                     @click="agregarDesdeBancoAlAzar"
                     data-testid="btn-agregar-azar"
                   >
-                    🎲 Seleccionar {{ cantidadAzar || 1 }} al azar
+                    <IconoUi name="activity" /> Seleccionar {{ cantidadAzar || 1 }} al azar
                   </button>
                 </div>
                 <small v-if="avisoAzar" class="azar-aviso">{{ avisoAzar }}</small>
@@ -209,7 +209,7 @@
                       Pregunta #{{ idx + 1 }}
                       <span v-if="preg.bancoId" class="badge badge-banco">Del banco</span>
                     </span>
-                    <button type="button" class="btn-borrar-pregunta" @click="eliminarPregunta(idx)" title="Eliminar pregunta">✕</button>
+                    <button type="button" class="btn-borrar-pregunta" @click="eliminarPregunta(idx)" title="Eliminar pregunta"><IconoUi name="x" /></button>
                   </div>
                   <div class="form-group">
                     <label class="form-label">Enunciado de la pregunta *</label>
@@ -284,8 +284,8 @@
                   <strong>{{ e.titulo }}</strong>
                   <span v-if="e.precargadaBaseId" class="badge badge-precargada">Basada en plantilla precargada</span>
                   <span v-else class="badge badge-personalizada">Personalizada</span>
-                  <span v-if="Array.isArray(e.preguntas)" class="badge badge-banco">📝 {{ e.preguntas.length }} pregunta(s)</span>
-                  <span v-if="e.origen === 'supabase'" class="badge badge-bd" title="Guardada en PostgreSQL">☁️ Supabase</span>
+                  <span v-if="Array.isArray(e.preguntas)" class="badge badge-banco"><IconoUi name="edit" /> {{ e.preguntas.length }} pregunta(s)</span>
+                  <span v-if="e.origen === 'supabase'" class="badge badge-bd" title="Guardada en PostgreSQL"><IconoUi name="cloud" /> Supabase</span>
                   <span v-else-if="e.origen === 'local'" class="badge badge-local" title="Guardada en este navegador">Local</span>
                 </div>
                 <p v-if="e.descripcion" class="lista-item-desc">{{ e.descripcion }}</p>
@@ -296,9 +296,9 @@
                     :to="`/aulas/${e.aula_id || aulaId}?tab=evaluaciones`"
                     class="btn btn-secondary btn-sm"
                     style="color: #15803d; background: #f0fdf4; border-color: #bbf7d0; text-decoration: none; display: inline-flex; align-items: center;"
-                    title="Monitorear avance en vivo en el aula (RF113)"
+                    title="Monitorear avance en vivo en el aula"
                   >
-                    ⚡ Monitoreo en Vivo
+                    <IconoUi name="zap" /> Monitoreo en Vivo
                   </router-link>
                   <button
                     v-if="e.tipo !== 'preguntas' && e.origen === 'supabase'"
@@ -307,7 +307,7 @@
                     data-testid="ver-resultados"
                     @click="alternarResultados(e)"
                   >
-                    🎯 {{ resultadosAbiertos[e.id] ? 'Ocultar resultados' : 'Resultados del ejercicio' }}
+                    <IconoUi name="target" /> {{ resultadosAbiertos[e.id] ? 'Ocultar resultados' : 'Resultados del ejercicio' }}
                   </button>
                   <button
                     type="button"
@@ -316,7 +316,7 @@
                     @click="abrirEdicionTipo(e)"
                     title="Cambiar a solo preguntas, solo ejercicio aplicado o ambas"
                   >
-                    ✏️ Cambiar tipo
+                    <IconoUi name="edit" /> Cambiar tipo
                   </button>
                   <button
                     type="button"
@@ -325,7 +325,7 @@
                     @click="abrirAsignacion(e)"
                     title="Elegir el curso y las fechas de inicio y término"
                   >
-                    🎯 Asignar
+                    <IconoUi name="target" /> Asignar
                   </button>
                   <button 
                     type="button" 
@@ -333,7 +333,7 @@
                     @click="duplicarExistente(e)"
                     title="Crear una copia de esta evaluación"
                   >
-                    📑 Duplicar
+                    <IconoUi name="file" /> Duplicar
                   </button>
                   <button
                     type="button"
@@ -343,7 +343,7 @@
                     @click="confirmarEliminarEvaluacion(e)"
                     title="Eliminar la evaluación con sus asignaciones y resultados"
                   >
-                    🗑️ Eliminar
+                    <IconoUi name="trash" /> Eliminar
                   </button>
                 </div>
                 <!-- Asignar una evaluación ya guardada: curso y fechas -->
@@ -706,7 +706,7 @@ async function agregarDesdeBancoAlAzar() {
   }
   res.data.forEach(p => preguntas.value.push(convertirPreguntaBanco(p)))
   const via = res.origen === 'supabase' ? 'desde Supabase' : 'modo local'
-  avisoAzar.value = `✓ Se añadieron ${res.data.length} pregunta(s) al azar (${via}).`
+  avisoAzar.value = `Se añadieron ${res.data.length} pregunta(s) al azar (${via}).`
 }
 
 async function cargarBanco() {

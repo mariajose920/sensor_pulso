@@ -38,6 +38,17 @@ jobs:
       - name: Verificar que no hay secretos en el código ni en el historial nuevo
         run: node scripts/revisar-secretos.mjs --todo
 
+  auditoria-dependencias:
+    name: Auditoría de dependencias (RF70)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Revisar dependencias vulnerables (bloquea ante fallas graves)
+        run: npm audit --audit-level=high
+
   compilacion:
     name: Compilación
     runs-on: ubuntu-latest

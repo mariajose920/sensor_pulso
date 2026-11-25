@@ -47,7 +47,7 @@ const FILTROS = [
 ]
 const contarPorEstado = (id) => (id === 'todas' ? evaluaciones.value.length : evaluaciones.value.filter(ev => ev.disponibilidad === id).length)
 const evaluacionesVisibles = computed(() => (filtro.value === 'todas' ? evaluaciones.value : evaluaciones.value.filter(ev => ev.disponibilidad === filtro.value)))
-const ICONO_TIPO = { preguntas: '📝', ejercicio_aplicado: '🫀', mixta: '🧩' }
+const ICONO_TIPO = { preguntas: 'edit', ejercicio_aplicado: 'heart', mixta: 'puzzle' }
 let salioEn = null // cuándo salió a medir, para marcar las mediciones nuevas
 
 const estados = {
@@ -412,8 +412,8 @@ onUnmounted(() => {
       </button>
     </header>
 
-    <p v-if="error" class="me-aviso me-aviso-error" role="alert">⚠️ {{ error }}</p>
-    <p v-if="mensaje" class="me-aviso me-aviso-ok" role="status">✓ {{ mensaje }}</p>
+    <p v-if="error" class="me-aviso me-aviso-error" role="alert"><IconoUi name="alert" /> {{ error }}</p>
+    <p v-if="mensaje" class="me-aviso me-aviso-ok" role="status"><IconoUi name="check" /> {{ mensaje }}</p>
 
     <!-- RESULTADO Y CORRECCIONES -->
     <section v-if="resultadoFinal" class="me-final" data-testid="resultado-final">
@@ -434,9 +434,9 @@ onUnmounted(() => {
           </p>
           <div class="me-barra" aria-hidden="true"><span :style="{ width: Math.min(100, Number(resultadoFinal.porcentaje) || 0) + '%' }"></span></div>
           <p v-if="conteoPreguntas.total" class="me-conteo" data-testid="conteo-preguntas">
-            <span>✓ {{ conteoPreguntas.correcta }} correcta(s)</span>
-            <span>✗ {{ conteoPreguntas.incorrecta }} incorrecta(s)</span>
-            <span v-if="conteoPreguntas.pendiente">⏳ {{ conteoPreguntas.pendiente }} por revisar</span>
+            <span><IconoUi name="check" /> {{ conteoPreguntas.correcta }} correcta(s)</span>
+            <span><IconoUi name="x" /> {{ conteoPreguntas.incorrecta }} incorrecta(s)</span>
+            <span v-if="conteoPreguntas.pendiente"><IconoUi name="clock" /> {{ conteoPreguntas.pendiente }} por revisar</span>
             <span v-if="conteoPreguntas.sin_responder">{{ conteoPreguntas.sin_responder }} sin responder</span>
           </p>
         </div>
@@ -447,7 +447,7 @@ onUnmounted(() => {
       </p>
 
       <template v-if="resultadoFinal.preguntas.length">
-        <h3 class="me-seccion">📝 Correcciones de las preguntas</h3>
+        <h3 class="me-seccion"><IconoUi name="edit" /> Correcciones de las preguntas</h3>
         <article v-for="(p, i) in resultadoFinal.preguntas" :key="p.pregunta_id" class="me-correccion"
                  :class="'estado-' + estadoPregunta(p)" data-testid="correccion-pregunta">
           <div class="me-correccion-cabeza">
@@ -465,12 +465,12 @@ onUnmounted(() => {
             </div>
           </dl>
           <p v-if="estadoPregunta(p) === 'pendiente'" class="me-pista">Esta respuesta es abierta: la revisa tu profesor y todavía no suma puntos.</p>
-          <p v-if="p.explicacion" class="me-explicacion">💡 {{ p.explicacion }}</p>
+          <p v-if="p.explicacion" class="me-explicacion"><IconoUi name="bulb" /> {{ p.explicacion }}</p>
         </article>
       </template>
 
       <template v-if="resultadoFinal.ejercicios.length">
-        <h3 class="me-seccion">🫀 Ejercicios aplicados</h3>
+        <h3 class="me-seccion"><IconoUi name="heart" /> Ejercicios aplicados</h3>
         <article v-for="(e, i) in resultadoFinal.ejercicios" :key="i" class="me-correccion me-correccion-ej"
                  :class="'estado-' + estadoEjercicio(e)" data-testid="correccion-ejercicio">
           <div class="me-correccion-cabeza">
@@ -503,7 +503,7 @@ onUnmounted(() => {
     <template v-else-if="!seleccion">
       <p v-if="ocupado && !evaluaciones.length" class="me-vacio">Cargando evaluaciones…</p>
       <div v-else-if="!error && !evaluaciones.length" class="me-vacio" data-testid="sin-evaluaciones">
-        <span class="me-vacio-icono" aria-hidden="true">📋</span>
+        <span class="me-vacio-icono" aria-hidden="true"><IconoUi name="clipboard" /></span>
         <strong>No tienes evaluaciones asignadas</strong>
         <span>Cuando tu profesor te asigne una, aparecerá aquí.</span>
       </div>
@@ -519,14 +519,14 @@ onUnmounted(() => {
       <div class="me-grilla">
         <article v-for="ev in evaluacionesVisibles" :key="ev.id" class="me-tarjeta" :class="'estado-' + ev.disponibilidad" data-testid="tarjeta-evaluacion">
           <div class="me-chips">
-            <span class="chip chip-tipo">{{ ICONO_TIPO[ev.tipo] }} {{ etiquetaTipo(ev.tipo, ev.ejercicio) }}</span>
+            <span class="chip chip-tipo"><IconoUi v-if="ICONO_TIPO[ev.tipo]" :name="ICONO_TIPO[ev.tipo]" /> {{ etiquetaTipo(ev.tipo, ev.ejercicio) }}</span>
             <span class="chip" :class="'chip-' + ev.disponibilidad">{{ estados[ev.disponibilidad] }}</span>
-            <span class="chip chip-neutro">{{ ev.modo === 'en_vivo' ? '🔴 En vivo' : '📅 Ventana de fechas' }}</span>
+            <span class="chip chip-neutro">{{ ev.modo === 'en_vivo' ? 'En vivo' : 'Ventana de fechas' }}</span>
           </div>
 
           <h2>{{ ev.titulo }}</h2>
           <p v-if="tiempoDe(ev)" class="me-tiempo" :class="'tiempo-' + tiempoDe(ev).tipo" data-testid="tiempo-evaluacion">
-            <span aria-hidden="true">⏱</span> {{ tiempoDe(ev).texto }}
+            <span aria-hidden="true"><IconoUi name="clock" /></span> {{ tiempoDe(ev).texto }}
           </p>
           <p v-if="ev.descripcion" class="me-desc">{{ ev.descripcion }}</p>
 
@@ -572,7 +572,7 @@ onUnmounted(() => {
         <span class="chip chip-tipo">{{ etiquetaTipo(seleccion.tipo, seleccion.ejercicio, ejerciciosMixta.length) }}</span>
         <h2>{{ seleccion.titulo }}</h2>
         <p v-if="tiempoEntrega" class="me-tiempo" :class="'tiempo-' + tiempoEntrega.tipo" role="timer" data-testid="tiempo-restante">
-          <span aria-hidden="true">⏱</span> {{ tiempoEntrega.texto }}
+          <span aria-hidden="true"><IconoUi name="clock" /></span> {{ tiempoEntrega.texto }}
         </p>
         <p v-if="seleccion.descripcion" class="me-desc">{{ seleccion.descripcion }}</p>
 
@@ -589,7 +589,7 @@ onUnmounted(() => {
 
       <!-- Preguntas -->
       <template v-if="seleccion.tipo === 'preguntas' || seleccion.tipo === 'mixta'">
-        <h3 v-if="seleccion.tipo === 'mixta'" class="me-seccion">📝 Preguntas</h3>
+        <h3 v-if="seleccion.tipo === 'mixta'" class="me-seccion"><IconoUi name="edit" /> Preguntas</h3>
         <section v-for="(pregunta, indice) in preguntas" :key="pregunta.id" class="me-pregunta"
                  :class="{ respondida: estaRespondida(pregunta) }" data-testid="pregunta">
           <div class="me-pregunta-cabeza">
@@ -627,7 +627,7 @@ onUnmounted(() => {
 
       <!-- RF107: ejercicios de la evaluación mixta -->
       <template v-if="seleccion.tipo === 'mixta'">
-        <h3 class="me-seccion">🫀 Ejercicios aplicados</h3>
+        <h3 class="me-seccion"><IconoUi name="heart" /> Ejercicios aplicados</h3>
         <p class="me-pista">Para cada ejercicio, haz la medición o comparación (y vuelve con el botón «Volver a la evaluación») o elige una medición ya guardada. Puedes entregar con cualquier medición, buena o mala: al entregar se califican todas y verás qué corregir.</p>
         <section v-for="(ej, i) in ejerciciosMixta" :key="ej.id" class="me-pregunta me-ejercicio"
                  :class="{ respondida: resultadoPorEjercicio[ej.id] }" data-testid="ejercicio-mixto">
@@ -657,7 +657,7 @@ onUnmounted(() => {
           <div v-if="resultadoPorEjercicio[ej.id]" class="me-resultado" :class="resultadoPorEjercicio[ej.id].cumple ? 'nivel-ok' : 'nivel-bajo'"
                role="status" data-testid="resultado-ejercicio-mixto">
             <div class="me-resultado-cabecera">
-              <strong>{{ resultadoPorEjercicio[ej.id].cumple ? '✓ Cumple el criterio' : 'No cumple el criterio' }}</strong>
+              <strong>{{ resultadoPorEjercicio[ej.id].cumple ? 'Cumple el criterio' : 'No cumple el criterio' }}</strong>
               <span>{{ resultadoPorEjercicio[ej.id].puntaje_obtenido }} / {{ resultadoPorEjercicio[ej.id].puntaje_ejercicio }} pts</span>
             </div>
             <p>{{ resultadoPorEjercicio[ej.id].motivo }}</p>
@@ -671,7 +671,7 @@ onUnmounted(() => {
       <!-- Ejercicio aplicado simple -->
       <section v-if="seleccion.tipo === 'ejercicio_aplicado'" class="me-pregunta me-ejercicio">
         <div class="me-pregunta-cabeza">
-          <span class="me-numero me-numero-ej">🫀</span>
+          <span class="me-numero me-numero-ej"><IconoUi name="heart" /></span>
           <div>
             <p class="me-enunciado">{{ nombreEjercicio[seleccion.ejercicio] || 'Ejercicio aplicado' }}</p>
             <p class="me-pista">{{ instruccionParaEstudiante(seleccion.tipo, seleccion.ejercicio) }}</p>

@@ -58,7 +58,7 @@
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" :disabled="enviando" @click="$emit('cerrar')">Cerrar</button>
       <button type="submit" class="btn btn-primary" :disabled="enviando || !leidos.validos.length" data-testid="enviar-invitaciones">
-        <span v-if="enviando">📨 Enviando {{ progreso.hecho }} de {{ progreso.total }}...</span>
+        <span v-if="enviando"><IconoUi name="mail" /> Enviando {{ progreso.hecho }} de {{ progreso.total }}...</span>
         <span v-else>Enviar {{ leidos.validos.length > 1 ? leidos.validos.length + ' invitaciones' : 'invitación' }}</span>
       </button>
     </div>

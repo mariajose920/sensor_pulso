@@ -849,12 +849,16 @@ export async function obtenerIntentosEvaluacionAula(aulaId, evaluacionId) {
         inicio,
         fin,
         perfiles:usuario_id(id, nombre, correo),
-        mediciones:medicion_id(id, bpm, spo2, creado_en, dentro_de_rango),
-        respuestas(id, pregunta_id, respuesta, es_correcta, puntaje, preguntas(texto))
+        mediciones:medicion_id(id, bpm:bpm_promedio, spo2:spo2_promedio, creado_en, dentro_de_rango),
+        respuestas(id, pregunta_id, respuesta, es_correcta, puntaje, preguntas(texto:enunciado))
       `)
       .eq('evaluacion_id', evaluacionId)
 
-    if (!error && data && data.length > 0) {
+    if (error) {
+      return { success: false, error: error.message, data: [] }
+    }
+
+    if (data) {
       // Filtrar estrictamente solo estudiantes que sigan activos en el aula (RF102/RF117)
       const filtrados = data
         .filter(intento => idsActivos.has(intento.usuario_id))
@@ -888,18 +892,11 @@ export async function obtenerIntentosEvaluacionAula(aulaId, evaluacionId) {
 
       return { success: true, data: filtrados }
     }
-  } catch (_) {}
+  } catch (error) {
+    return { success: false, error: error.message || 'No se pudieron cargar los intentos.', data: [] }
+  }
 
-  // 3. Fallback local offline/demostracion
-  const locales = intentosEvaluacionesLocales.filter(
-    i => i.aula_id === aulaId && i.evaluacion_id === evaluacionId && idsActivos.has(i.usuario_id)
-  ).map(i => {
-    // Sanitizacion estricta: asegurar que nunca viajen campos de salud del RF116
-    const { datos_cifrados, condicionSalud, medicacion, sueno, cafeina, estres, ...limpio } = i
-    return limpio
-  })
-
-  return { success: true, data: locales }
+  return { success: true, data: [] }
 }
 
 /**
@@ -907,6 +904,7 @@ export async function obtenerIntentosEvaluacionAula(aulaId, evaluacionId) {
  */
 export async function obtenerEstadisticasEvaluacionAula(aulaId, evaluacionId) {
   const resIntentos = await obtenerIntentosEvaluacionAula(aulaId, evaluacionId)
+    if (!resIntentos.success) return resIntentos
   const intentos = resIntentos.data || []
 
   const resEst = await obtenerEstudiantesAula(aulaId)

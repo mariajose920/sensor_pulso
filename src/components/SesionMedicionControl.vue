@@ -19,7 +19,7 @@
                 :motivo="sesionState.sesionActiva?.motivo_fin" 
               />
               <span class="badge badge-ronda">Ronda {{ sesionState.sesionActiva.ronda }} de 5</span>
-              <span class="badge badge-sub">En Vivo (RF11)</span>
+              <span class="badge badge-sub">En Vivo</span>
             </div>
             <h3 class="sesion-titulo">Sesión de Adquisición en Curso</h3>
           </div>
@@ -40,17 +40,17 @@
 
       <!-- Alertas de Vigilancia en Tiempo Real (RF10, RF11) -->
       <div v-if="vigilanteState.estadoAlerta === 'perdida'" class="alert-status-banner banner-perdida anim-fade">
-        <span class="warning-icon">⚠️</span>
+        <span class="warning-icon"><IconoUi name="alert" /></span>
         <div style="flex: 1;">
-          <strong>Pérdida de señal WiFi con el ESP32 (RF11):</strong>
-          <span> La medición se finalizará automáticamente en <strong>{{ vigilanteState.segundosGraciaRestantes }}s</strong> si no se restablece la comunicación (RF10).</span>
+          <strong>Pérdida de señal WiFi con el ESP32:</strong>
+          <span> La medición se finalizará automáticamente en <strong>{{ vigilanteState.segundosGraciaRestantes }}s</strong> si no se restablece la comunicación.</span>
         </div>
       </div>
       <div v-else-if="vigilanteState.estadoAlerta === 'advertencia'" class="alert-status-banner banner-sensor anim-fade">
-        <span class="warning-icon">🔌</span>
+        <span class="warning-icon"><IconoUi name="plug" /></span>
         <div style="flex: 1;">
           <strong>Sensor óptico sin lectura biológica:</strong>
-          <span> Se detectó dedo retirado o sensor desconectado. Si persiste, se cerrará la sesión (RF10).</span>
+          <span> Se detectó dedo retirado o sensor desconectado. Si persiste, se cerrará la sesión.</span>
         </div>
       </div>
 
@@ -73,7 +73,7 @@
               @click="copiarIdSesion"
               :title="copiado ? '¡Copiado!' : 'Copiar UUID completo'"
             >
-              {{ copiado ? '✓ Copiado' : 'Copiar' }}
+              {{ copiado ? 'Copiado' : 'Copiar' }}
             </button>
           </div>
         </div>
@@ -128,17 +128,17 @@
               type="button" 
               class="btn-test-rf10" 
               @click="forzarSimulacionPerdidaWiFi"
-              title="Simula pérdida de señal WiFi durante más de 10s para probar el cierre automático (RF10)"
+              title="Simula pérdida de señal WiFi durante más de 10s para probar el cierre automático"
             >
-              ⚡ Test Pérdida WiFi
+              <IconoUi name="zap" /> Test Pérdida WiFi
             </button>
             <button 
               type="button" 
               class="btn-test-rf10" 
               @click="forzarSimulacionSensorDesconectado"
-              title="Simula desconexión física del sensor MAX30102 o dedo retirado por más de 8s (RF10)"
+              title="Simula desconexión física del sensor MAX30102 o dedo retirado por más de 8s"
             >
-              🔌 Test Desconexión Sensor
+              <IconoUi name="plug" /> Test Desconexión Sensor
             </button>
           </div>
 
@@ -147,13 +147,13 @@
             class="btn btn-secondary btn-sm btn-ronda" 
             :disabled="avanzandoRonda"
             @click="onAvanzarRonda"
-            title="Incrementar ronda y liberar los 5 canales para el siguiente grupo de estudiantes (RF111)"
+            title="Incrementar ronda y liberar los 5 canales para el siguiente grupo de estudiantes"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="23 4 23 10 17 10"></polyline>
               <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
             </svg>
-            <span>{{ avanzandoRonda ? 'Avanzando...' : 'Siguiente Ronda (RF111)' }}</span>
+            <span>{{ avanzandoRonda ? 'Avanzando...' : 'Siguiente Ronda' }}</span>
           </button>
 
           <button 
@@ -161,7 +161,7 @@
             class="btn btn-danger btn-sm" 
             :disabled="sesionState.cargando"
             @click="confirmarFinalizar"
-            title="Finalizar sesión oficial de medición (RF10)"
+            title="Finalizar sesión oficial de medición"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
@@ -184,7 +184,7 @@
         </div>
         <div class="inactiva-texto">
           <div class="badge-tag-wrap">
-            <span class="badge badge-primary">RF09 · Sesión de Medición</span>
+            <span class="badge badge-primary">Sesión de Medición</span>
             <span class="badge badge-neutral">Protocolo Clínico y Multiusuario</span>
           </div>
           <h3 class="inactiva-titulo">Iniciar Sesión de Medición Oficial</h3>
@@ -197,7 +197,7 @@
       <!-- Configuración Rápida de la Sesión -->
       <div class="config-rapida-grid">
         <div class="config-item">
-          <label class="config-label" for="select-dispositivo">Dispositivo ESP32 (RF54):</label>
+          <label class="config-label" for="select-dispositivo">Dispositivo ESP32:</label>
           <select id="select-dispositivo" v-model="formDispositivo" class="select-custom">
             <option value="ESP32-Biomedico-01">ESP32-Biomedico-01 (Laboratorio Principal)</option>
             <option value="ESP32-Biomedico-02">ESP32-Biomedico-02 (Sala Bioingeniería)</option>
@@ -206,7 +206,7 @@
         </div>
 
         <div class="config-item">
-          <label class="config-label" for="input-ronda">Ronda de Medición (RF111):</label>
+          <label class="config-label" for="input-ronda">Ronda de Medición:</label>
           <select id="input-ronda" v-model.number="formRonda" class="select-custom">
             <option :value="1">Ronda 1 (Grupo de 5 inicial)</option>
             <option :value="2">Ronda 2</option>
@@ -217,7 +217,7 @@
         </div>
 
         <div class="config-item">
-          <label class="config-label" for="select-canal-inicial">Mi Canal Inicial (RF12):</label>
+          <label class="config-label" for="select-canal-inicial">Mi Canal Inicial:</label>
           <select id="select-canal-inicial" v-model.number="formCanalInicial" class="select-custom">
             <option :value="1">Canal 1 (Predeterminado)</option>
             <option :value="2">Canal 2</option>
@@ -247,7 +247,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5 3 19 12 5 21 5 3"></polygon>
           </svg>
-          <span>{{ sesionState.cargando ? 'Iniciando sesión oficial...' : 'Iniciar Sesión de Medición (RF09)' }}</span>
+          <span>{{ sesionState.cargando ? 'Iniciando sesión oficial...' : 'Iniciar Sesión de Medición' }}</span>
         </button>
       </div>
     </div>
@@ -257,7 +257,7 @@
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-fin-titulo">
         <div class="modal-header">
           <h4 id="modal-fin-titulo" style="margin: 0; color: #b91c1c; display: flex; align-items: center; gap: 0.5rem;">
-            <span>⚠️</span> Finalizar Sesión de Medición
+            <span><IconoUi name="alert" /></span> Finalizar Sesión de Medición
           </h4>
         </div>
         <div class="modal-body">

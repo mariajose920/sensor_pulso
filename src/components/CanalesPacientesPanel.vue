@@ -3,7 +3,7 @@
     <!-- Estudiante: un solo canal y un solo paciente (él mismo). El canal se asigna SOLO, con los datos de su ficha -->
     <div v-if="esEstudiante" class="canal-auto" data-testid="canal-automatico">
       <template v-if="miCanalAsignado">
-        <span class="mi-canal" data-testid="mi-canal-asignado">✓ Tu canal: <strong>Canal {{ miCanalAsignado }}</strong></span>
+        <span class="mi-canal" data-testid="mi-canal-asignado"><IconoUi name="check" /> Tu canal: <strong>Canal {{ miCanalAsignado }}</strong></span>
         <p class="nota" data-testid="un-solo-canal">
           Se te asignó automáticamente, con los datos de tu ficha: el paciente eres tú y solo puedes medirte a ti mismo.
         </p>
@@ -35,7 +35,7 @@
         :title="estadoAgregarCanal.puede ? 'Agregar un paciente: se le asigna el siguiente canal libre' : estadoAgregarCanal.motivo"
         @click="modalVisible = true"
       >
-        ➕ {{ misCanales.length ? 'Agregar otro canal' : 'Agregar canal' }}
+        <IconoUi name="plus" /> {{ misCanales.length ? 'Agregar otro canal' : 'Agregar canal' }}
       </button>
       <p v-if="!estadoAgregarCanal.puede" class="nota" data-testid="agregar-canal-motivo">{{ estadoAgregarCanal.motivo }}</p>
       <p v-else-if="!misCanales.length" class="nota" data-testid="sin-pacientes">

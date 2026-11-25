@@ -1,6 +1,6 @@
 <template>
   <fieldset class="asignacion" data-testid="asignacion-form">
-    <legend class="form-label">📅 Asignación a los estudiantes</legend>
+    <legend class="form-label"><IconoUi name="calendar" /> Asignación a los estudiantes</legend>
 
     <label v-if="conInterruptor" class="asignar-interruptor">
       <input type="checkbox" :checked="modelValue.asignar" data-testid="asignar-al-guardar" @change="cambiar({ asignar: $event.target.checked })" />

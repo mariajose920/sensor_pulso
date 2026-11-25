@@ -95,9 +95,9 @@
         :data-testid="'revision-' + d.id"
       >
         <p class="estado">
-          <span v-if="d.ok">✔ Correcta</span>
+          <span v-if="d.ok"><IconoUi name="check" /> Correcta</span>
           <span v-else-if="d.sinResponder">○ Sin responder</span>
-          <span v-else>✘ Incorrecta</span>
+          <span v-else><IconoUi name="x" /> Incorrecta</span>
         </p>
         <h2 class="enunciado">{{ i + 1 }}. {{ d.enunciado }}</h2>
 

@@ -24,7 +24,7 @@ const props = defineProps({
   mostrarCausa: { type: Boolean, default: false }
 })
 
-const ICONOS = { buena: '✅', regular: '⚠️', mala: '⛔', sin_senal: '…' }
+const ICONOS = { buena: '', regular: '', mala: '', sin_senal: '…' }
 const TEXTOS = { buena: 'Buena', regular: 'Regular', mala: 'Mala', sin_senal: 'Sin señal' }
 
 const icono = computed(() => ICONOS[props.nivel] || ICONOS.sin_senal)

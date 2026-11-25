@@ -1,17 +1,17 @@
 <template>
   <div class="card">
-    <h2 class="card-title">Descargas (RF32)</h2>
+    <h2 class="card-title">Descargas</h2>
     <p style="color: var(--color-muted); font-size: 0.9rem; margin-bottom: 1rem;">
       Descarga el informe en PDF, los datos de la señal en CSV o el gráfico comparativo como imagen PNG.
     </p>
     <div class="descargas-botones">
-      <button class="btn btn-primary" :disabled="ocupado" @click="ejecutar('informe_pdf', descargarPdf)">
+      <button class="btn btn-primary" :disabled="Boolean(ocupado)" @click="ejecutar('informe_pdf', descargarPdf)">
         {{ ocupado === 'informe_pdf' ? 'Generando…' : 'Informe PDF' }}
       </button>
-      <button class="btn btn-primary" :disabled="ocupado" @click="ejecutar('datos_csv', descargarCsv)">
+      <button class="btn btn-primary" :disabled="Boolean(ocupado)" @click="ejecutar('datos_csv', descargarCsv)">
         {{ ocupado === 'datos_csv' ? 'Generando…' : 'Datos CSV' }}
       </button>
-      <button class="btn btn-primary" :disabled="ocupado" @click="ejecutar('grafico_imagen', descargarImagen)">
+      <button class="btn btn-primary" :disabled="Boolean(ocupado)" @click="ejecutar('grafico_imagen', descargarImagen)">
         {{ ocupado === 'grafico_imagen' ? 'Generando…' : 'Gráfico PNG' }}
       </button>
     </div>

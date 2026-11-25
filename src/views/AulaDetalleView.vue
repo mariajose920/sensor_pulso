@@ -181,7 +181,7 @@
                   <strong>{{ est.nombre }}</strong>
                 </td>
                 <td>
-                  <code class="email-code">{{ est.correo }}</code>
+                  <code class="email-code"><DatoEnmascarado :valor="est.correo" tipo="correo" /></code>
                 </td>
                 <td>
                   <span 
@@ -301,7 +301,7 @@
             <div>
               <h2 class="panel-title">Evaluaciones y Controles Prácticos</h2>
               <p class="panel-desc">
-                {{ isAdmin || isProfesor ? 'Asigna y administra evaluaciones al aula, por cursos o estudiantes individuales (RF104).' : 'Evaluaciones asignadas para ti en este espacio académico.' }}
+                {{ isAdmin || isProfesor ? 'Asigna y administra evaluaciones al aula, por cursos o estudiantes individuales.' : 'Evaluaciones asignadas para ti en este espacio académico.' }}
               </p>
             </div>
             <!-- Botón de asignación rápida para el Docente -->
@@ -310,7 +310,7 @@
               @click="abrirModalAsignar()" 
               class="btn btn-primary"
             >
-              🎯 Asignar Evaluación
+              <IconoUi name="target" /> Asignar Evaluación
             </button>
           </div>
 
@@ -344,13 +344,13 @@
                   
                   <!-- Badge del Alcance RF104 -->
                   <span class="badge-asignacion" :class="'badge-asig-' + (ev.asignaciones && ev.asignaciones.length ? ev.asignaciones[0].alcance : 'ninguno')">
-                    🎯 {{ obtenerTextoAsignacion(ev) }}
+                    <IconoUi name="target" /> {{ obtenerTextoAsignacion(ev) }}
                   </span>
 
                   <span class="eval-tag-tipo">{{ ev.tipo === 'mixta' ? 'Preguntas + Ejercicios' : (ev.tipo === 'ejercicio_aplicado' ? 'Práctica Clínica' : 'Cuestionario Teórico') }}</span>
                 </div>
                 <p v-if="ev.modo === 'en_vivo' && ev.abre_en && ev.estado === 'programada'" class="eval-inicio-auto" data-testid="inicio-automatico-aviso">
-                  ⏱ Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
+                  <IconoUi name="clock" /> Inicia sola el {{ new Date(ev.abre_en).toLocaleString('es-CL', { dateStyle: 'short', timeStyle: 'short' }) }}
                   (no hace falta iniciarla en vivo)
                 </p>
                 <h3 class="eval-card-title">{{ ev.titulo }}</h3>
@@ -385,10 +385,10 @@
                   @click="abrirPanelEnVivo(ev)" 
                   class="btn-eval-accion"
                   style="flex: 2; background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-weight: 700;"
-                  title="Ver respuestas y estudiantes conectados en tiempo real (RF113)"
+                  title="Ver respuestas y estudiantes conectados en tiempo real"
                   data-testid="btn-abrir-panel-en-vivo"
                 >
-                  <span>⚡ Monitoreo en Vivo</span>
+                  <span><IconoUi name="zap" /> Monitoreo en Vivo</span>
                 </button>
 
                 <!-- Botón Docente 1: Ver Desempeño (RF117) -->
@@ -412,7 +412,7 @@
                   style="flex: 1; background: #f8fafc; color: #0284c7; border: 1px solid #bae6fd;"
                   title="Configurar a quién se asigna esta evaluación"
                 >
-                  <span>🎯 Asignar</span>
+                  <span><IconoUi name="target" /> Asignar</span>
                 </button>
 
                 <!-- Botón Docente: eliminar la evaluación (con sus asignaciones y resultados) -->
@@ -426,7 +426,7 @@
                   title="Eliminar esta evaluación y sus asignaciones"
                   @click="confirmarEliminarEvaluacionAsignada(ev)"
                 >
-                  <span>🗑️ Eliminar</span>
+                  <span><IconoUi name="trash" /> Eliminar</span>
                 </button>
 
                 <button
@@ -493,6 +493,7 @@
           <PanelAvanceEnVivo
             v-if="mostrarPanelEnVivo || evaluacionSeleccionada?.modo === 'en_vivo'"
             :evaluacion-id="evaluacionSeleccionada.id"
+            :cursos="cursos"
             :aula-id="aula.id"
             :es-profesor-o-admin="isAdmin || isProfesor"
             :permite-cerrar="evaluacionSeleccionada?.modo !== 'en_vivo'"
@@ -571,7 +572,7 @@
               <div class="spinner"></div>
               <p>Cargando resultados de la evaluación...</p>
             </div>
-
+            <p v-else-if="errorDesempeno" class="alert alert-error" role="alert">{{ errorDesempeno }}</p>
             <div v-else-if="intentosEvaluacion.length === 0" class="empty-state">
               <p>Aún no hay intentos registrados por estudiantes activos para esta evaluación.</p>
               <small>Los resultados aparecerán aquí conforme los estudiantes completen sus pruebas.</small>
@@ -598,7 +599,7 @@
                         </div>
                         <div class="student-name-group">
                           <strong class="student-name">{{ intento.estudiante_nombre }}</strong>
-                          <span class="student-email">{{ intento.estudiante_correo }}</span>
+                          <span class="student-email"><DatoEnmascarado :valor="intento.estudiante_correo" tipo="correo" /></span>
                         </div>
                       </div>
                     </td>
@@ -691,7 +692,7 @@
                 Revisión de Respuestas y Calificación
               </h3>
               <p class="modal-subtitle" style="margin: 0.2rem 0 0 0;">
-                Estudiante: <strong>{{ intentoVerRespuestas.estudiante_nombre }}</strong> ({{ intentoVerRespuestas.estudiante_correo }})
+                Estudiante: <strong>{{ intentoVerRespuestas.estudiante_nombre }}</strong> (<DatoEnmascarado :valor="intentoVerRespuestas.estudiante_correo" tipo="correo" />)
               </p>
             </div>
           </div>
@@ -821,7 +822,7 @@
                 Bioseñal Fotopletismográfica (PPG)
               </h3>
               <p class="modal-subtitle" style="margin: 0.2rem 0 0 0;">
-                Estudiante: <strong>{{ intentoVerMedicion.estudiante_nombre }}</strong> ({{ intentoVerMedicion.estudiante_correo }})
+                Estudiante: <strong>{{ intentoVerMedicion.estudiante_nombre }}</strong> (<DatoEnmascarado :valor="intentoVerMedicion.estudiante_correo" tipo="correo" />)
               </p>
             </div>
           </div>
@@ -1027,7 +1028,7 @@
               style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid #f1f5f9;"
             >
               <div>
-                <strong>{{ inv.correo }}</strong>
+                <strong><DatoEnmascarado :valor="inv.correo" tipo="correo" /></strong>
                 <small style="display: block; color: #94a3b8;">
                   {{ formatearFecha(inv.enviada_en || inv.intentado_en) }}
                   <span v-if="inv.error_detalle" style="color: #ef4444; display: block;">{{ inv.error_detalle }}</span>
@@ -1098,7 +1099,7 @@
             />
             <div>
               <strong>{{ est.nombre }}</strong>
-              <p><code>{{ est.correo }}</code></p>
+              <p><code><DatoEnmascarado :valor="est.correo" tipo="correo" /></code></p>
             </div>
           </label>
         </div>
@@ -1122,7 +1123,7 @@
 
         <div class="retiro-lista-box" style="max-height: 160px; overflow-y: auto; background: #f8fafc; border: 1px solid var(--color-border); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem;">
           <div v-for="est in estudiantesARetirar" :key="est.usuario_id" style="padding: 0.3rem 0; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem;">
-            <strong>{{ est.nombre }}</strong> <span style="color: #64748b;">({{ est.correo }})</span>
+            <strong>{{ est.nombre }}</strong> <span style="color: #64748b;">(<DatoEnmascarado :valor="est.correo" tipo="correo" />)</span>
           </div>
         </div>
 
@@ -1150,7 +1151,7 @@
     <!-- ======================================================== -->
     <div v-if="modalAsignarEvaluacionAbierto" class="modal-backdrop" @click.self="modalAsignarEvaluacionAbierto = false">
       <div class="modal-card modal-card-lg">
-        <h3 class="modal-title">🎯 Asignar Evaluación al Aula</h3>
+        <h3 class="modal-title"><IconoUi name="target" /> Asignar Evaluación al Aula</h3>
         <p class="modal-subtitle">
           Configura a quiénes estará dirigida esta evaluación en <strong>{{ aula?.nombre }}</strong>.
         </p>
@@ -1227,7 +1228,7 @@
               <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'aula' }">
                 <input type="radio" value="aula" v-model="alcanceSeleccionado" name="alcance" />
                 <div class="alcance-info">
-                  <strong>🏫 Toda el Aula</strong>
+                  <strong><IconoUi name="building" /> Toda el Aula</strong>
                   <p>Todos los estudiantes activos inscritos en esta aula tendrán acceso.</p>
                 </div>
               </label>
@@ -1235,7 +1236,7 @@
               <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'curso' }">
                 <input type="radio" value="curso" v-model="alcanceSeleccionado" name="alcance" />
                 <div class="alcance-info">
-                  <strong>👥 Por Curso / Sección</strong>
+                  <strong><IconoUi name="users" /> Por Curso / Sección</strong>
                   <p>Solo los estudiantes inscritos en una sección específica podrán rendirla.</p>
                 </div>
               </label>
@@ -1243,7 +1244,7 @@
               <label class="alcance-option-card" :class="{ activo: alcanceSeleccionado === 'estudiante' }">
                 <input type="radio" value="estudiante" v-model="alcanceSeleccionado" name="alcance" />
                 <div class="alcance-info">
-                  <strong>👤 Estudiantes Específicos</strong>
+                  <strong><IconoUi name="user" /> Estudiantes Específicos</strong>
                   <p>Selecciona manualmente uno o varios estudiantes concretos del aula.</p>
                 </div>
               </label>
@@ -1292,12 +1293,12 @@
                 />
                 <div>
                   <strong>{{ est.nombre }}</strong>
-                  <p><code>{{ est.correo }}</code></p>
+                  <p><code><DatoEnmascarado :valor="est.correo" tipo="correo" /></code></p>
                 </div>
               </label>
             </div>
             <small v-if="estudiantesAsignacionIds.length" style="color: #0284c7; font-weight: 600; display: block; margin-top: 0.35rem;">
-              ✓ {{ estudiantesAsignacionIds.length }} estudiante(s) seleccionado(s)
+              <IconoUi name="check" /> {{ estudiantesAsignacionIds.length }} estudiante(s) seleccionado(s)
             </small>
           </div>
 
@@ -1321,6 +1322,7 @@ import PanelAvanceEnVivo from '../components/PanelAvanceEnVivo.vue'
 import InvitacionMasivaForm from '../components/InvitacionMasivaForm.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import DatoEnmascarado from '../components/DatoEnmascarado.vue'
 import { useAuth } from '../composables/useAuth'
 import {
   eliminarEvaluacion,
@@ -1386,6 +1388,7 @@ const mostrarPanelEnVivo = ref(true)
 const intentosEvaluacion = ref([])
 const estadisticasEval = ref(null)
 const cargandoDesempeno = ref(false)
+const errorDesempeno = ref('')
 const intentoVerRespuestas = ref(null)
 const intentoVerMedicion = ref(null)
 
@@ -1404,18 +1407,34 @@ const alActualizarEnVivo = (datos) => {
 
 const seleccionarEvaluacionParaVer = async (ev) => {
   evaluacionSeleccionada.value = ev
+  intentosEvaluacion.value = []
+  estadisticasEval.value = null
+  errorDesempeno.value = ''
   cargandoDesempeno.value = true
+
   try {
     const [resIntentos, resStats] = await Promise.all([
       obtenerIntentosEvaluacionAula(aulaId, ev.id),
       obtenerEstadisticasEvaluacionAula(aulaId, ev.id)
     ])
+
+    if (evaluacionSeleccionada.value?.id !== ev.id) return
+
+    if (!resIntentos.success || !resStats.success) {
+      errorDesempeno.value = resIntentos.error || resStats.error || 'No se pudo cargar el desempeño.'
+      return
+    }
+
     intentosEvaluacion.value = resIntentos.data || []
     estadisticasEval.value = resStats.data || null
-  } catch (err) {
-    console.error('Error cargando desempeño de evaluación:', err)
+  } catch {
+    if (evaluacionSeleccionada.value?.id === ev.id) {
+      errorDesempeno.value = 'No se pudo cargar el desempeño.'
+    }
   } finally {
-    cargandoDesempeno.value = false
+    if (evaluacionSeleccionada.value?.id === ev.id) {
+      cargandoDesempeno.value = false
+    }
   }
 }
 

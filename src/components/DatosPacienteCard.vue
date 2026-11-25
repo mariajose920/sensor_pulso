@@ -32,6 +32,7 @@
           <span class="badge badge-success">
             Datos completados
           </span>
+          <EtiquetaClaseDato clase="sensible_salud" compacta />
           <span v-if="paciente.origen === 'supabase'" class="badge badge-supabase">
             ● En la nube
           </span>
@@ -136,7 +137,7 @@
           <div style="display: flex; align-items: center; gap: 0.4rem;">
             <span style="color: #16a34a; font-weight: 700;">● Consentimiento Informado Vigente</span>
             <span class="badge badge-success" style="font-size: 0.68rem; padding: 0.1rem 0.45rem;">Ley 19.628</span>
-            <span class="badge" style="font-size: 0.68rem; padding: 0.1rem 0.45rem; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">AES-256-GCM + TLS (RF116)</span>
+            <span class="badge" style="font-size: 0.68rem; padding: 0.1rem 0.45rem; background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe;">AES-256-GCM + TLS</span>
           </div>
           <span v-if="consentimientoEstado.aceptadoEn" style="color: #64748b; font-size: 0.75rem;">
             Registrado el <strong>{{ formatearFechaHora(consentimientoEstado.aceptadoEn) }}</strong> para uso docente y confidencial
@@ -147,7 +148,7 @@
             ○ Consentimiento pendiente (saltará al medir / conectar)
           </span>
           <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
-            Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+            Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong>
           </span>
         </div>
         <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
@@ -156,7 +157,7 @@
             class="btn btn-secondary btn-sm"
             style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;"
             @click="emit('abrir-consentimiento')"
-            title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
+            title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación"
           >
             Ver términos
           </button>
@@ -166,7 +167,7 @@
             class="btn btn-secondary btn-sm"
             style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
             @click="revocarConsentimientoPrueba"
-            title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+            title="Permite reiniciar el consentimiento para volver a probar el popup de consentimiento"
           >
             Reiniciar consentimiento
           </button>
@@ -183,6 +184,10 @@
           </h2>
           <p style="color: var(--color-muted); font-size: 0.85rem; margin-top: 0.25rem; margin-bottom: 0;">
             Completa los datos obligatorios del paciente y declara los factores que alteran la frecuencia cardíaca antes de medir.
+          </p>
+          <p class="nota-clase" data-testid="ficha-nota-clasificacion">
+            <EtiquetaClaseDato clase="sensible_salud" compacta />
+            Los factores de salud que declares se guardan cifrados y solo tú puedes verlos.
           </p>
         </div>
 
@@ -283,18 +288,19 @@
           <!-- Sueño -->
           <div class="form-group">
             <label class="form-label" for="suenoHoras">
-              Sueño / Horas dormidas anoche
+              Sueño / Horas dormidas anoche (opcional)
             </label>
             <select 
               id="suenoHoras"
               v-model="formulario.suenoHoras"
               class="form-control"
             >
+              <option value="">Sin especificar (opcional)</option>
               <option v-for="opt in OPCIONES_SUENO" :key="opt.id" :value="opt.id">
                 {{ opt.label }}
               </option>
             </select>
-            <small class="form-text">La privación de sueño altera la variabilidad (HRV).</small>
+            <small class="form-text">La privación de sueño altera la variabilidad (HRV) y se correlaciona en tu evolución personal.</small>
           </div>
 
           <!-- Cafeína -->
@@ -396,8 +402,12 @@
         <!-- Privacidad y Protección de Datos (RF116 / RF117) -->
         <div class="privacidad-box">
           <small>
-            La información médica declarada se almacena cifrada (AES-256-GCM) en base de datos bajo control de acceso de nivel de fila (RLS). En tránsito se protege mediante HTTPS/TLS 1.3 (RF55). Para fines <strong>pedagógicos</strong>, en las vistas compartidas solo se exponen nombre y rangos etarios.
+            Los datos de salud que ingresas en esta ficha se cifran al enviarlos y al guardarlos. Solo las personas autorizadas pueden acceder a ellos. En las vistas compartidas para actividades educativas, los demás participantes solo ven tu nombre y tu rango de edad.
           </small>
+          <details>
+            <summary><small>Cómo protegemos tus datos</small></summary>
+            <small>La conexión usa HTTPS/TLS 1.3 para proteger los datos durante el envío. Los datos de salud declarados se guardan cifrados con AES-256-GCM. Las políticas de seguridad por fila (RLS) controlan quién puede acceder a cada registro.</small>
+          </details>
           <div style="margin-top: 0.5rem; pt: 0.5rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.78rem;">
             <div v-if="consentimientoEstado.vigente" style="display: flex; flex-direction: column; gap: 0.15rem;">
           <div style="display: flex; align-items: center; gap: 0.4rem;">
@@ -413,7 +423,7 @@
                 ○ Consentimiento pendiente (saltará al medir / conectar)
               </span>
               <span v-if="consentimientoEstado.registroPrevio?.aceptadoEn" style="color: #64748b; font-size: 0.74rem;">
-                Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong> (RF59)
+                Última vez registrado: <strong>{{ consentimientoEstado.registroPrevio.fechaHoraTexto }}</strong>
               </span>
             </div>
             <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
@@ -422,7 +432,7 @@
               class="btn btn-secondary btn-sm"
               style="font-size: 0.72rem; padding: 0.2rem 0.55rem; background: #e0f2fe; color: #0369a1; border-color: #bae6fd;"
               @click="emit('abrir-consentimiento')"
-              title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación (RF76)"
+              title="Inspeccionar finalidad, datos recogidos, responsable y plazo de conservación"
             >
               Ver términos
             </button>
@@ -432,7 +442,7 @@
               class="btn btn-secondary btn-sm"
               style="font-size: 0.72rem; padding: 0.2rem 0.55rem;"
               @click="revocarConsentimientoPrueba"
-              title="Permite reiniciar el consentimiento para volver a probar el popup del RF04"
+              title="Permite reiniciar el consentimiento para volver a probar el popup de consentimiento"
             >
               Reiniciar consentimiento
             </button>
@@ -459,6 +469,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import EtiquetaClaseDato from './EtiquetaClaseDato.vue'
 import { useAuth } from '../composables/useAuth'
 import { calcularEdad, fechaHoyIso, textoEdad, parsearFechaIso } from '../utils/edad.js'
 import { consentimientoService, consentimientoEstado, formatearFechaHora } from '../services/consentimientoService'
@@ -760,6 +771,16 @@ defineExpose({
   padding: 1rem 0.25rem;
   color: var(--color-muted, #64748b);
   font-size: 0.9rem;
+}
+
+.nota-clase {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-muted);
 }
 
 .card-header-flex {

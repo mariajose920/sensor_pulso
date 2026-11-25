@@ -14,7 +14,7 @@
           <h2 id="wifi-asistente-titulo" ref="titulo" class="modal-title" tabindex="-1">Configurar WiFi del ESP32 por USB</h2>
           <span id="wifi-asistente-sub" class="version-tag">Se hace una sola vez. Después el ESP32 se conecta solo.</span>
         </div>
-        <button type="button" class="btn-close" aria-label="Cerrar el asistente" data-testid="wifi-cerrar" @click="cerrarAsistente">✕</button>
+        <button type="button" class="btn-close" aria-label="Cerrar el asistente" data-testid="wifi-cerrar" @click="cerrarAsistente"><IconoUi name="x" /></button>
       </div>
 
       <ol class="pasos-wifi" aria-label="Pasos para configurar el WiFi">
@@ -170,7 +170,7 @@
         <section v-else-if="estado.paso === 'resultado' && estado.resultado" aria-labelledby="wifi-paso-resultado">
           <template v-if="estado.resultado.ok">
             <h3 id="wifi-paso-resultado" class="paso-titulo ok" tabindex="-1" data-autofocus data-testid="wifi-resultado-ok">
-              ✓ El ESP32 se conectó a la red {{ estado.resultado.ssid }}<template v-if="estado.resultado.ip"> (IP {{ estado.resultado.ip }})</template>
+              <IconoUi name="check" /> El ESP32 se conectó a la red {{ estado.resultado.ssid }}<template v-if="estado.resultado.ip"> (IP {{ estado.resultado.ip }})</template>
             </h3>
             <p class="alert alert-success" role="status">
               Ya puedes desconectar el cable y alimentar el ESP32 con un cargador; se conectará solo.

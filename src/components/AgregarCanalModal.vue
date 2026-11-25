@@ -10,7 +10,7 @@
             {{ canalExistente && !esEstudiante ? 'Este canal ya es tuyo, pero aún no puede medir.' : 'El sistema te asigna automáticamente el siguiente canal libre.' }}
           </span>
         </div>
-        <button type="button" class="btn-close" @click="cerrar" aria-label="Cerrar">✕</button>
+        <button type="button" class="btn-close" @click="cerrar" aria-label="Cerrar"><IconoUi name="x" /></button>
       </div>
 
       <ol class="pasos-canal" aria-label="Pasos para usar el canal">
@@ -81,7 +81,7 @@
         <!-- Paso 2: términos y condiciones (RF88) y consentimiento informado (RF04) en una sola vista -->
         <div v-else-if="paso === 2">
           <div class="alerta-medica">
-            <strong>Aviso importante:</strong> sensor pulso es una herramienta didáctica de la Universidad Adventista de Chile (UNACH).
+            <strong>Aviso importante:</strong> Sensor de Pulso es una herramienta didáctica de la Universidad Adventista de Chile (UNACH).
             <strong>No es un dispositivo médico certificado ni entrega diagnósticos.</strong>
           </div>
 
@@ -98,7 +98,7 @@
             <p><strong>Datos que se recogen.</strong> {{ doc.datosRecogidos }}</p>
             <p><strong>Quién los trata.</strong> {{ doc.responsable }} Los datos de este canal quedan guardados en tu cuenta, protegidos por cuenta de usuario (RLS) y cifrado en tránsito.</p>
             <p><strong>Plazo y derechos.</strong> {{ doc.plazoConservacion }} La persona medida puede revocar su consentimiento o pedir la eliminación de sus datos en cualquier momento.</p>
-            <p class="constancia">Al aceptar se registra de forma permanente la versión del consentimiento con la fecha y hora de aceptación (RF59).</p>
+            <p class="constancia">Al aceptar se registra de forma permanente la versión del consentimiento con la fecha y hora de aceptación.</p>
           </div>
 
           <label class="check">

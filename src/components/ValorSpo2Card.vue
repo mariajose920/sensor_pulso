@@ -2,7 +2,7 @@
   <div class="spo2-card-container card" :class="{ 'alerta-hipoxia': esHipoxia }">
     <div class="spo2-card-header">
       <div class="header-title-box">
-        <div class="tag-badge">RF114 · Medición de SpO₂ (MAX30102)</div>
+        <div class="tag-badge">Medición de SpO₂ (MAX30102)</div>
         <h3 class="card-main-title">Monitor de Saturación de Oxígeno (SpO₂)</h3>
       </div>
 
@@ -134,7 +134,7 @@
         @click="mostrarExplicacion = !mostrarExplicacion"
       >
         <span class="toggle-icon">{{ mostrarExplicacion ? '▼' : '►' }}</span>
-        <span>🔬 ¿Cómo se obtiene la SpO₂? (luz roja 660 nm e infrarroja 880 nm)</span>
+        <span><IconoUi name="flask" /> ¿Cómo se obtiene la SpO₂? (luz roja 660 nm e infrarroja 880 nm)</span>
       </button>
 
       <div v-if="mostrarExplicacion" class="biofotonica-body">

@@ -26,7 +26,7 @@ export async function descargarPdf({ nombre, bpm, intervaloMs, amplitud }) {
     y += lineas.length * (tam * 0.45) + 2
   }
 
-  texto('sensor_pulso - Informe de comparacion', 18, true)
+  texto('Sensor de Pulso - Informe de comparacion', 18, true)
   texto(`Generado: ${new Date().toLocaleString('es-CL')}`, 9, false, [100, 116, 139])
   y += 2
 
@@ -51,7 +51,7 @@ export async function descargarPdf({ nombre, bpm, intervaloMs, amplitud }) {
 
   texto('El ECG se muestra solo como referencia educativa: el sensor mide pulso por luz (PPG), no actividad electrica del corazon.', 9, false, [100, 116, 139])
   y += 2
-  texto('Aviso: sensor_pulso es una herramienta educativa y no un dispositivo medico. Los resultados no constituyen un diagnostico; ante dudas de salud consulte a un profesional.', 9, true, [180, 83, 9])
+  texto('Aviso: Sensor de Pulso es una herramienta educativa y no un dispositivo medico. Los resultados no constituyen un diagnostico; ante dudas de salud consulte a un profesional.', 9, true, [180, 83, 9])
 
   doc.save(`sensor_pulso_informe_${nombreSeguro(nombre)}_${marcaFecha()}.pdf`)
 }

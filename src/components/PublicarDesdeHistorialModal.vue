@@ -11,12 +11,18 @@
     >
       <div class="modal-header">
         <h2 id="pub-hist-titulo" class="modal-title" tabindex="-1" ref="tituloEl">Publicar medición</h2>
-        <button type="button" class="btn-close" aria-label="Cerrar" :disabled="trabajando" @click="intentarCerrar">✕</button>
+        <button type="button" class="btn-close" aria-label="Cerrar" :disabled="trabajando" @click="intentarCerrar"><IconoUi name="x" /></button>
       </div>
 
       <div class="modal-body">
         <div v-if="!resultado">
           <p class="pregunta" data-testid="pregunta-publicar-historial">¿Quieres publicarla para que otras personas la vean (siempre anonimizada)?</p>
+          <p class="cambio-clase" data-testid="publicar-historial-clasificacion">
+            <EtiquetaClaseDato clase="sensible_salud" compacta />
+            <span aria-hidden="true">&rarr;</span>
+            <EtiquetaClaseDato clase="publico" compacta />
+            <span>Al publicarla, deja de ser un dato sensible de salud y pasa a ser público, sin tu nombre.</span>
+          </p>
           <div class="vista-previa" data-testid="publicar-historial-vista-previa">
             <VistaPreviaAnonimizacion
               :registro="registroHistorial"
@@ -57,6 +63,7 @@ import { publicarMedicion } from '../services/medicionesService'
 import { useAuth } from '../composables/useAuth'
 import VistaPreviaAnonimizacion from './VistaPreviaAnonimizacion.vue'
 import ConfirmacionExplicitaTitular from './ConfirmacionExplicitaTitular.vue'
+import EtiquetaClaseDato from './EtiquetaClaseDato.vue'
 import { vistaPreviaPublica, mensajeErrorHistorial } from '../utils/terminarMedicion.js'
 
 // Confirmación explícita (RF91) para publicar desde el historial una medición ya guardada. Usa la misma función
@@ -148,6 +155,7 @@ onBeforeUnmount(() => { try { enfocadoAntes?.focus?.() } catch { /* el elemento 
 .btn-close { background: transparent; border: none; font-size: 1.2rem; color: #64748b; cursor: pointer; padding: 0.25rem 0.5rem; line-height: 1; }
 .modal-body { padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; }
 .pregunta { font-size: 1.05rem; font-weight: 600; margin: 0 0 0.75rem; }
+.cambio-clase { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 0.9rem; font-size: 0.85rem; color: var(--color-muted); }
 .nota { font-size: 0.85rem; color: #475569; margin: 0.5rem 0; line-height: 1.45; }
 .alerta { padding: 0.65rem 0.85rem; border-radius: 0.4rem; font-size: 0.88rem; line-height: 1.45; margin: 0.5rem 0; }
 .alerta-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }

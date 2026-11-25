@@ -83,7 +83,7 @@
         :tabindex="pasoActual >= paso.numero ? 0 : -1"
       >
         <div class="stepper-circulo">
-          <span v-if="pasoActual > paso.numero">✓</span>
+          <span v-if="pasoActual > paso.numero"><IconoUi name="check" /></span>
           <span v-else>{{ paso.numero }}</span>
         </div>
         <div class="stepper-etiquetas">
@@ -109,14 +109,40 @@
       <div v-if="consentimientoVigente" class="alert alert-success" style="margin: 1rem 0;">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
           <div>
-            <strong>✓ Consentimiento Vigente Registrado</strong>
+            <strong><IconoUi name="check" /> Consentimiento Vigente Registrado</strong>
             <div style="font-size: 0.85rem; color: #166534; margin-top: 2px;">
               Versión {{ consentimientoEstado.version }} autorizada el 
               <strong>{{ consentimientoEstado.fechaHoraTexto || 'recientemente' }}</strong>.
             </div>
           </div>
-          <span class="badge badge-success">Auditoría Inmutable </span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <span class="badge badge-success">Auditoría Inmutable </span>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-testid="btn-revocar-consentimiento-medicion"
+              @click="revocarConsentimientoDesdeMedicion"
+            >
+              Revocar mi consentimiento
+            </button>
+          </div>
         </div>
+      </div>
+
+      <div
+        v-else-if="consentimientoEstado.revocadoEn || avisoRevocacionMedicion"
+        class="alert alert-danger"
+        style="margin: 1rem 0;"
+        role="status"
+        data-testid="aviso-consentimiento-revocado-medicion"
+      >
+        <strong>Consentimiento revocado:</strong>
+        <p style="margin: 0.25rem 0 0; font-size: 0.88rem;">
+          {{
+            avisoRevocacionMedicion ||
+              'Retiraste tu consentimiento. Tus publicaciones en la galería y por enlace fueron retiradas, y no puedes medir ni publicar hasta otorgar un nuevo consentimiento.'
+          }}
+        </p>
       </div>
 
       <!-- Los 4 Pilares del Consentimiento (RF76) -->
@@ -141,7 +167,7 @@
           <div class="pilar-num">3</div>
           <div class="pilar-content">
             <h4>Responsable del Tratamiento</h4>
-            <p>Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios. Custodiado con cifrado TLS y políticas RLS en PostgreSQL.</p>
+            <p>Equipo del proyecto Sensor de Pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios. Custodiado con cifrado TLS y políticas RLS en PostgreSQL.</p>
           </div>
         </div>
 
@@ -177,7 +203,7 @@
           :disabled="!puedeAvanzarPaso1"
           @click="confirmarPaso1"
         >
-          <span>Aceptar y Pasar a Datos del Paciente</span> ➔
+          <span>Aceptar y Pasar a Datos del Paciente</span> <IconoUi name="arrow-right" />
         </button>
       </div>
     </section>
@@ -208,10 +234,10 @@
       <!-- Botones de Acción Paso 2 -->
       <div class="step-nav-actions">
         <button type="button" class="btn btn-secondary" @click="pasoActual = 1">
-          ⬅ Volver al Consentimiento
+          <IconoUi name="arrow-left" /> Volver al Consentimiento
         </button>
         <button type="button" class="btn btn-primary btn-lg" @click="confirmarPaso2">
-          <span>Guardar Ficha y Pasar al Reposo de 1 Minuto </span> ➔
+          <span>Guardar Ficha y Pasar al Reposo de 1 Minuto </span> <IconoUi name="arrow-right" />
         </button>
       </div>
     </section>
@@ -222,7 +248,7 @@
     <section v-else-if="pasoActual === 3" class="wizard-step-card card anim-fade" aria-labelledby="paso3-titulo">
       <div class="step-intro">
         <span class="step-badge">Paso 3 de 5 · Estabilización Hemodinámica</span>
-        <h2 id="paso3-titulo" class="step-heading">Período de Reposo Cardiovascular Basal (1 Minuto)</h2>
+        <h2 id="paso3-titulo" class="step-heading">Descansa un minuto</h2>
         <p class="step-desc">
           Según las directrices de la <strong>American Heart Association (AHA)</strong>, para registrar una frecuencia cardíaca basal fidedigna el participante debe descansar al menos 1 minuto en calma, evitando taquicardias reactivas por deambulación o nerviosismo.
         </p>
@@ -239,28 +265,25 @@
                 cx="70" 
                 cy="70" 
                 r="62" 
-                :stroke-dasharray="circunferenciaTimer"
-                :stroke-dashoffset="offsetTimer"
+                v-show="segundosRestantesReposo < SEGUNDOS_REPOSO_TOTAL"
+                pathLength="60"
+                stroke-dasharray="60"
+                :stroke-dashoffset="segundosRestantesReposo"
               />
             </svg>
             <div class="timer-center-text">
               <span class="timer-numeros">{{ tiempoFormateado }}</span>
-              <span class="timer-label">{{ reposoCompletado ? 'Completado' : reposoEnCurso ? 'En reposo...' : 'Listo' }}</span>
+              <span class="timer-label">{{ reposoCompletado ? 'Finalizado' : reposoEnCurso ? 'En reposo' : reposoPausado ? 'En pausa' : 'Listo' }}</span>
             </div>
           </div>
 
           <!-- Guía Visual de Respiración Rítmica -->
           <div class="respiracion-guia-centrada">
-            <div class="pulmon-pulso-icon" :class="{ 'anim-pulsar': reposoEnCurso }">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-              </svg>
-            </div>
             <div class="respiracion-texto-centrado">
-              <strong v-if="reposoCompletado" class="color-exito">Fisiología basal estabilizada (AHA)</strong>
+              <strong v-if="reposoCompletado" class="color-exito">Puedes continuar a la medición</strong>
               <strong v-else-if="reposoEnCurso" class="color-progreso">Inhala suavemente... Exhala despacio...</strong>
-              <strong v-else>Presiona iniciar para comenzar el reposo de 1 minuto</strong>
-              <p>Respirar rítmicamente activa el nervio vago y estabiliza el intervalo R-R antes de medir.</p>
+              <strong v-else-if="reposoPausado">Reanuda el temporizador cuando estés listo</strong>
+              <strong v-else>Cuando estés listo, inicia el temporizador</strong>
             </div>
           </div>
 
@@ -272,7 +295,7 @@
               class="btn btn-primary btn-lg"
               @click="iniciarReposo"
             >
-              Iniciar Reposo (60 s)
+              {{ reposoPausado ? 'Reanudar reposo' : 'Iniciar reposo' }}
             </button>
 
             <button 
@@ -682,7 +705,7 @@
             <code>firmware/esp32_wifi_prueba/esp32_wifi_prueba.ino</code>.
           </p>
           <div class="firmware-code-box">
-            <pre><code>// 1. Configurar WiFi y Token de Dispositivo (RF54)
+            <pre><code>// 1. Configurar WiFi y Token de Dispositivo
 #define WIFI_SSID "TU_RED_WIFI"
 #define WIFI_PASS "TU_PASSWORD"
 #define DISPOSITIVO_TOKEN "esp_demotoken_unach_2026_rf05"
@@ -719,10 +742,10 @@
       <!-- Botones de Acción Paso 4 -->
       <div class="step-nav-actions" style="margin-top: 1.5rem;">
         <button type="button" class="btn btn-secondary" @click="pasoActual = 3">
-          ⬅ Volver al Reposo (Paso 3)
+          <IconoUi name="arrow-left" /> Volver al Reposo (Paso 3)
         </button>
         <button type="button" class="btn btn-success btn-lg" @click="finalizarMedicionYVerResultados">
-          <span>Finalizar Medición y Ver Resultados (Paso 5)</span> ➔
+          <span>Finalizar Medición y Ver Resultados (Paso 5)</span> <IconoUi name="arrow-right" />
         </button>
       </div>
     </section>
@@ -753,9 +776,9 @@
             <span class="badge badge-primary">Ficha Validada</span>
           </div>
           <div class="res-pac-tags">
-            <span class="tag-item">Estrés: <strong>{{ pacienteActivo.nivelEstres }}</strong></span>
-            <span class="tag-item">Sueño: <strong>{{ pacienteActivo.sueno || 'No especificado' }}</strong></span>
-            <span class="tag-item">Cafeína: <strong>{{ pacienteActivo.cafeina || 'Ninguna' }}</strong></span>
+            <span class="tag-item">Estrés: <strong>{{ etiquetaEstresPaso5(pacienteActivo.nivelEstres) }}</strong></span>
+            <span class="tag-item">Sueño: <strong>{{ etiquetaSuenoPaso5(pacienteActivo.suenoHoras, pacienteActivo.sueno) }}</strong></span>
+            <span class="tag-item">Cafeína: <strong>{{ etiquetaCafeinaPaso5(pacienteActivo.cafeina) }}</strong></span>
             <span class="tag-item">Medicación: <strong>{{ pacienteActivo.medicacion || 'Ninguna' }}</strong></span>
             <span class="tag-item">Contexto: <strong>{{ pacienteActivo.actividadNombre || pacienteActivo.actividadPrevia || 'Reposo basal' }}</strong></span>
             <span v-if="sesionState.sesionActiva" class="tag-item" style="border-color: #bbf7d0; background: #f0fdf4;">
@@ -856,7 +879,7 @@
             <div class="porque-fuente">
               Fuente médica oficial: 
               <a :href="clasificacionRitmo.enlaceFuente" target="_blank" rel="noopener">
-                {{ clasificacionRitmo.fuenteOficial }} ↗
+                {{ clasificacionRitmo.fuenteOficial }} <IconoUi name="arrow-up-right" />
               </a>
             </div>
           </div>
@@ -963,12 +986,20 @@
 
           <div v-if="resultadoPublicacionPaso5" class="alert mt-3" :class="resultadoPublicacionPaso5.ok ? 'alert-success' : 'alert-warning'" role="status">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
-              <div>
+              <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                 <strong>{{ resultadoPublicacionPaso5.titulo }}</strong>
-                <span v-if="resultadoPublicacionPaso5.detalle"> {{ resultadoPublicacionPaso5.detalle }}</span>
+                <span v-if="resultadoPublicacionPaso5.detalle" style="font-size: 0.9rem; opacity: 0.92;">{{ resultadoPublicacionPaso5.detalle }}</span>
               </div>
-              <div v-if="resultadoPublicacionPaso5.ok && resultadoPublicacionPaso5.publicada" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <div v-if="resultadoPublicacionPaso5.ok" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <router-link
+                  to="/historial"
+                  class="btn btn-secondary btn-sm"
+                  data-testid="btn-ir-historial-paso5"
+                >
+                  Ver en Historial
+                </router-link>
                 <button
+                  v-if="resultadoPublicacionPaso5.publicada"
                   type="button"
                   class="btn btn-secondary btn-sm"
                   data-testid="btn-retirar-publicacion-paso5"
@@ -977,6 +1008,7 @@
                   Retirar Publicación Ahora
                 </button>
                 <router-link
+                  v-if="resultadoPublicacionPaso5.publicada"
                   to="/comparacion?modo=publicas"
                   class="btn btn-primary btn-sm"
                 >
@@ -1162,7 +1194,8 @@ import { sesionState } from '../services/sesionMedicionService'
 import { crearMonitorEstadisticasBpm } from '../services/bpmService'
 import { crearMonitorEstadisticasSpo2 } from '../services/spo2Service'
 import { consentimientoService, consentimientoEstado, formatearFechaHora, formatearFechaHoraCorta } from '../services/consentimientoService'
-import { pacienteService, estadoGuardadoFicha } from '../services/pacienteService'
+import { pacienteService, estadoGuardadoFicha, NIVELES_ESTRES, OPCIONES_SUENO, OPCIONES_CAFEINA } from '../services/pacienteService'
+import { normalizarActividadId, obtenerNombreActividad } from '../services/actividadesService'
 import { clasificarRitmo } from '../services/ritmoService'
 import { descargarInformeClinicoPdf } from '../services/informePdfService'
 import {
@@ -1204,6 +1237,19 @@ const quierePublicarPaso5 = ref(false)
 const confirmacionExplicitaPaso5 = ref(false)
 const tituloPublicacionPaso5 = ref('')
 const publicandoPaso5 = ref(false)
+
+function etiquetaEstresPaso5(id) {
+  return NIVELES_ESTRES.find((n) => n.id === id)?.label || id || 'No especificado'
+}
+
+function etiquetaSuenoPaso5(suenoHoras, suenoLegado) {
+  if (suenoHoras) return OPCIONES_SUENO.find((s) => s.id === suenoHoras)?.label || suenoHoras
+  return suenoLegado || 'No especificado'
+}
+
+function etiquetaCafeinaPaso5(id) {
+  return OPCIONES_CAFEINA.find((c) => c.id === id)?.label || id || 'Ninguna'
+}
 const resultadoPublicacionPaso5 = ref(null)
 const modalVistaPreviaPaso5Visible = ref(false)
 const ultimaPublicacionLocalIdPaso5 = ref(null)
@@ -1223,17 +1269,23 @@ const evalPublicacionPaso5 = computed(() => evaluarPublicacion({
   rol: isProfesor.value ? 'profesor' : 'usuario',
   permisos: { publicar_galeria: tienePermisoProfesor('publicar_galeria') },
   permisoConsultado: permisoConsultado.value,
-  consentimientoVigente: true,
+  consentimientoVigente: consentimientoVigente.value,
   fuente: 'sensor',
   pacienteConConsentimientoPropio: false
 }))
+
+const actividadIdDesdeFicha = computed(() => {
+  const p = pacienteActivo.value
+  return normalizarActividadId(p?.actividadId || p?.actividadPrevia || 1)
+})
 
 const registroVistaPreviaPaso5 = computed(() => armarRegistroTerminado({
   canal: canalSeleccionado.value || 1,
   paciente: {
     nombre: pacienteActivo.value?.nombre || currentUserName.value || '',
     edad: pacienteActivo.value?.edad || null,
-    actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo',
+    actividad: pacienteActivo.value?.actividadNombre || obtenerNombreActividad(actividadIdDesdeFicha.value),
+    actividadId: actividadIdDesdeFicha.value,
     declaracionId: pacienteActivo.value?.id || null
   },
   metricas: {
@@ -1289,7 +1341,8 @@ async function guardarYPublicarPaso5(conPublicacion) {
       paciente: {
         nombre: pacienteActivo.value?.nombre || '',
         edad: pacienteActivo.value?.edad || null,
-        actividad: pacienteActivo.value?.actividadNombre || pacienteActivo.value?.actividadPrevia || 'reposo',
+        actividad: pacienteActivo.value?.actividadNombre || obtenerNombreActividad(actividadIdDesdeFicha.value),
+        actividadId: actividadIdDesdeFicha.value,
         declaracionId: pacienteActivo.value?.id || null
       },
       metricas: {
@@ -1481,6 +1534,7 @@ function irAPaso(num) {
 // 2. PASO 1: CONSENTIMIENTO INFORMADO
 // ============================================================================
 const consentimientoAceptadoCheck = ref(false)
+const avisoRevocacionMedicion = ref('')
 
 const consentimientoVigente = computed(() => {
   return consentimientoEstado.value?.vigente === true
@@ -1490,8 +1544,17 @@ const puedeAvanzarPaso1 = computed(() => {
   return consentimientoVigente.value || consentimientoAceptadoCheck.value
 })
 
+async function revocarConsentimientoDesdeMedicion() {
+  const r = await consentimientoService.revocarConsentimiento()
+  consentimientoAceptadoCheck.value = false
+  if (r.ok) {
+    avisoRevocacionMedicion.value = r.mensaje
+  }
+}
+
 async function confirmarPaso1() {
   if (!consentimientoVigente.value && consentimientoAceptadoCheck.value) {
+    avisoRevocacionMedicion.value = ''
     await consentimientoService.aceptarConsentimiento({
       origen: 'medicion_asistente_rf13',
       modalidad: 'paso_a_paso'
@@ -1573,11 +1636,7 @@ const reposoEnCurso = ref(false)
 const reposoCompletado = ref(false)
 let timerReposoInterval = null
 
-const circunferenciaTimer = 2 * Math.PI * 54
-const offsetTimer = computed(() => {
-  const fraccion = (SEGUNDOS_REPOSO_TOTAL - segundosRestantesReposo.value) / SEGUNDOS_REPOSO_TOTAL
-  return circunferenciaTimer * (1 - fraccion)
-})
+const reposoPausado = ref(false)
 
 const tiempoFormateado = computed(() => {
   const m = Math.floor(segundosRestantesReposo.value / 60)
@@ -1586,13 +1645,14 @@ const tiempoFormateado = computed(() => {
 })
 
 function iniciarReposo() {
+  reposoPausado.value = false
   reposoEnCurso.value = true
   if (timerReposoInterval) clearInterval(timerReposoInterval)
 
+  const fin = Date.now() + segundosRestantesReposo.value * 1000
   timerReposoInterval = setInterval(() => {
-    if (segundosRestantesReposo.value > 0) {
-      segundosRestantesReposo.value--
-    } else {
+    segundosRestantesReposo.value = Math.max(0, Math.ceil((fin - Date.now()) / 1000))
+    if (segundosRestantesReposo.value === 0) {
       clearInterval(timerReposoInterval)
       timerReposoInterval = null
       reposoEnCurso.value = false
@@ -1602,6 +1662,7 @@ function iniciarReposo() {
 }
 
 function pausarReposo() {
+  reposoPausado.value = true
   reposoEnCurso.value = false
   if (timerReposoInterval) {
     clearInterval(timerReposoInterval)
@@ -1611,12 +1672,14 @@ function pausarReposo() {
 
 function reiniciarReposo() {
   pausarReposo()
+  reposoPausado.value = false
   segundosRestantesReposo.value = SEGUNDOS_REPOSO_TOTAL
   reposoCompletado.value = false
 }
 
 function omitirReposoLaboratorio() {
   pausarReposo()
+  reposoPausado.value = false
   segundosRestantesReposo.value = 0
   reposoCompletado.value = true
 }
@@ -2759,31 +2822,6 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-.pulmon-pulso-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  color: #0284c7;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 0.75rem auto;
-  transition: transform 0.4s ease, box-shadow 0.4s ease;
-}
-
-.pulmon-pulso-icon.anim-pulsar {
-  animation: pulsarRespira 4s infinite ease-in-out;
-  box-shadow: 0 0 0 12px rgba(2, 132, 199, 0.15);
-}
-
-@keyframes pulsarRespira {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.35); }
-  50% { transform: scale(1.22); box-shadow: 0 0 0 14px rgba(2, 132, 199, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
-}
-
 .respiracion-texto-centrado {
   text-align: center;
 }
@@ -3340,5 +3378,116 @@ onBeforeUnmount(() => {
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
   flex-wrap: wrap;
+}
+
+/* ========================================================================= */
+/* RNF05 · Ajuste visual de Medición según los mockups de referencia         */
+/* Solo colores, fondos, bordes y tipografía. No cambia textos ni funciones. */
+/* ========================================================================= */
+.medicion-view .view-header {
+  padding: 1.1rem 1.4rem;
+  border-radius: 1rem;
+  background: linear-gradient(120deg, #0b1d52 0%, #1e40af 60%, #2f5bd6 100%);
+  box-shadow: 0 10px 26px rgba(30, 64, 175, 0.22);
+}
+.medicion-view .view-title { color: #ffffff; margin-bottom: 0; letter-spacing: -0.015em; }
+.medicion-view .view-subtitle { color: #c7d6fa; }
+.medicion-view .header-modo-tag { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.3); color: #ffffff; }
+
+/* Stepper: pasos como píldoras con degradado en el activo */
+.stepper-nav { border-radius: 1rem; border-top: 3px solid var(--color-primary-medium); box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05); }
+.stepper-item { border-radius: 0.75rem; background: #ffffff; border: 2px solid var(--color-border); }
+.stepper-item.activo {
+  background: linear-gradient(135deg, #1e40af 0%, #2f5bd6 100%);
+  border-color: #1e40af;
+  box-shadow: 0 6px 16px rgba(30, 64, 175, 0.3);
+}
+.stepper-item.activo .stepper-nombre { color: #ffffff; }
+.stepper-item.activo .stepper-desc { color: #c7d6fa; }
+.stepper-item.activo .stepper-circulo { background: #ffffff; color: #1e40af; }
+.stepper-item.completado { background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-color: #86efac; }
+.stepper-item.completado .stepper-circulo { background: #16a34a; }
+.stepper-nombre { font-weight: 700; }
+
+/* Tarjetas de cada paso */
+.wizard-step-card {
+  border-radius: 1rem;
+  border: 1px solid var(--color-primary-medium);
+  border-top: 5px solid #1e40af;
+  background: linear-gradient(180deg, #f5f8ff 0%, #ffffff 160px);
+  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.08);
+}
+.step-badge { background: linear-gradient(135deg, #1e40af, #2f5bd6); color: #ffffff; border-radius: 99px; padding: 3px 12px; letter-spacing: 0.05em; }
+.step-heading { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.015em; }
+.step-desc { color: var(--color-text-soft); font-size: 0.95rem; }
+
+/* Paso 1: pilares de consentimiento con color propio */
+.pilar-card { border-radius: 0.875rem; border-top: 4px solid var(--tono, #2563eb); background: linear-gradient(180deg, var(--tono-suave, #dbeafe) 0%, #ffffff 70%); }
+.pilar-card:nth-child(1) { --tono: #2563eb; --tono-suave: #dbeafe; }
+.pilar-card:nth-child(2) { --tono: #7c3aed; --tono-suave: #ede9fe; }
+.pilar-card:nth-child(3) { --tono: #0f766e; --tono-suave: #ccfbf1; }
+.pilar-card:nth-child(4) { --tono: #e11d48; --tono-suave: #ffe4ea; }
+.pilar-card:nth-child(5) { --tono: #ea580c; --tono-suave: #ffedd5; }
+.pilar-num { background: var(--tono, #2563eb); }
+.pilar-content h4 { color: var(--tono, #1e3a8a); font-weight: 800; font-size: 0.92rem; }
+.pilar-content p { color: var(--color-text-soft); }
+.consentimiento-check-box { border-radius: 0.875rem; border: 2px solid #fcd34d; border-left: 6px solid #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); }
+.consentimiento-check-label { font-weight: 650; }
+.checkbox-custom { width: 22px; height: 22px; }
+
+/* Paso 3: reposo */
+.reposo-timer-card { border-radius: 1rem; border: 1px solid var(--color-primary-medium); background: linear-gradient(180deg, #eef3ff 0%, #ffffff 80%); box-shadow: 0 4px 16px rgba(30, 64, 175, 0.1); }
+.inst-item { border-radius: 0.875rem; }
+.inst-item:nth-child(3n+1) { background: #eff6ff; border: 1px solid #bfdbfe; }
+.inst-item:nth-child(3n+2) { background: #f5f3ff; border: 1px solid #ddd6fe; }
+.inst-item:nth-child(3n+3) { background: #f0fdfa; border: 1px solid #99f6e4; }
+.inst-item strong { font-weight: 800; }
+.timer-numeros { font-weight: 800; color: #1e40af; }
+
+/* Paso 4: banner del paciente y herramientas */
+.paciente-clinico-banner { border-radius: 1rem; border: 1px solid #a7f3d0; border-left: 6px solid #10b981; background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 70%); }
+.pac-nombre { font-weight: 800; }
+.pac-edad-chip { background: #e8eefc; color: #1e40af; border-radius: 99px; }
+.pac-tag-item { border-radius: 99px; background: #ffffff; border: 1px solid #c7d6fa; }
+.pac-tag-val { font-weight: 700; color: #1e40af; }
+.step-intro-medicion { border-radius: 1rem; border: 1px solid #86efac; border-left: 6px solid #16a34a; }
+.test-panel { border-radius: 1rem; }
+
+/* Paso 5: resultados */
+.resultado-paciente-card { border-radius: 0.875rem; background: linear-gradient(135deg, #eef3ff 0%, #ffffff 80%); border: 1px solid var(--color-primary-medium); border-left: 6px solid #1e40af; }
+.tag-item { background: #e8eefc; color: #1e40af; border-radius: 99px; font-weight: 650; padding: 2px 10px; }
+.valor-box { border-radius: 0.875rem; border-top: 4px solid #2563eb; background: linear-gradient(180deg, #eef3ff 0%, #ffffff 70%); box-shadow: 0 2px 8px rgba(30, 64, 175, 0.08); }
+.valores-consolidados-grid .valor-box:nth-child(4n+2) { border-top-color: #0284c7; background: linear-gradient(180deg, #e0f2fe 0%, #ffffff 70%); }
+.valores-consolidados-grid .valor-box:nth-child(4n+3) { border-top-color: #0d9488; background: linear-gradient(180deg, #ccfbf1 0%, #ffffff 70%); }
+.valores-consolidados-grid .valor-box:nth-child(4n+4) { border-top-color: #7c3aed; background: linear-gradient(180deg, #ede9fe 0%, #ffffff 70%); }
+.valor-titulo { font-weight: 800; letter-spacing: 0.05em; color: var(--color-text-soft); }
+.valor-num { font-size: 2.1rem; }
+.ritmo-diagnostico-card { border-radius: 1rem; border-width: 2px; box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06); }
+.ritmo-porque-box { border-radius: 0.75rem; border-color: var(--color-primary-medium); }
+.porque-titulo { font-weight: 800; }
+.auditoria-inmutable-card { border-radius: 0.875rem; }
+
+/* Botones de avance de paso */
+.step-nav-actions .btn-primary { background: linear-gradient(135deg, #1e40af, #2f5bd6); box-shadow: 0 4px 12px rgba(30, 64, 175, 0.28); }
+.step-nav-actions .btn-primary:disabled { box-shadow: none; }
+
+/* Componentes hijos dentro de Medición */
+.medicion-view :deep(.card-title) { font-weight: 800; color: #0f172a; }
+.medicion-view :deep(.card) { border-radius: 1rem; }
+
+/* RNF01 + RNF05: nada se sale de su recuadro en pantallas angostas */
+.pilares-grid { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.pilar-card, .pilar-content, .consentimiento-check-label > span { min-width: 0; }
+.pilar-content h4, .pilar-content p, .consentimiento-check-label > span,
+.step-heading, .step-desc, .step-badge { overflow-wrap: anywhere; word-break: normal; }
+.step-badge { display: inline-block; max-width: 100%; white-space: normal; }
+.stepper-etiquetas { min-width: 0; }
+.stepper-nombre, .stepper-desc { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .wizard-step-card { padding: 1rem; }
+  .step-heading { font-size: 1.25rem; }
+  .medicion-view .view-header { padding: 0.85rem 1rem; }
+  .medicion-view .view-title { font-size: 1.4rem; }
+  .consentimiento-check-box { padding: 0.85rem; }
 }
 </style>

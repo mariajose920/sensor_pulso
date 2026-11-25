@@ -1,6 +1,6 @@
 <template>
   <div class="forbidden-container card">
-    <div class="icon">🛑</div>
+    <div class="icon"><IconoUi name="stop" /></div>
     <h1 class="card-title">Acceso Restringido</h1>
     <p class="text-muted">
       No cuentas con los permisos necesarios para acceder a esta sección de la plataforma.

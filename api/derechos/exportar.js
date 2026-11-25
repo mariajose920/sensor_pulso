@@ -44,7 +44,7 @@ export async function armarExportacion(crudo, { env = process.env } = {}) {
   }
   return {
     generado_en: crudo?.generado_en,
-    aviso: 'Estos son tus datos en la plataforma sensor pulso (UNACH). Contiene datos de salud: guárdalo en un lugar seguro.',
+    aviso: 'Estos son tus datos en la plataforma Sensor de Pulso (UNACH). Contiene datos de salud: guárdalo en un lugar seguro.',
     perfil: soloCampos(crudo?.perfil, CAMPOS_PERFIL),
     consentimientos: sinIdentificadores(crudo?.consentimientos),
     declaraciones_de_salud: declaraciones,

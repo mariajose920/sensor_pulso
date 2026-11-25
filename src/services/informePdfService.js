@@ -65,12 +65,20 @@ const COLOR = {
 }
 
 const MM_POR_PT = 0.3528
-const altoLinea = (pt) => pt * MM_POR_PT * 1.3
+const altoLinea = (pt) => pt * MM_POR_PT * 1.18
 
 // La ficha guarda códigos («7_8», «muy_alto»); en el informe se muestran como texto para personas
 const TEXTO_SUENO = { menos_5: 'Menos de 5 horas', '5_6': '5 a 6 horas', '7_8': '7 a 8 horas', mas_8: 'Más de 8 horas' }
 const TEXTO_ESTRES = { bajo: 'Bajo', medio: 'Medio', alto: 'Alto', muy_alto: 'Muy alto' }
 const TEXTO_CAFEINA = { ninguna: 'Ninguna', baja: 'Baja', moderada: 'Moderada', alta: 'Alta' }
+const TEXTO_ACTIVIDAD = {
+  reposo: 'Reposo basal',
+  sentado: 'Sentado activo',
+  caminata: 'Caminata leve',
+  ejercicio_moderado: 'Ejercicio moderado',
+  ejercicio_intenso: 'Ejercicio intenso',
+  post_ejercicio: 'Recuperación post-ejercicio'
+}
 const legible = (tabla, v, porDefecto) => (v ? (tabla[v] || String(v)) : porDefecto)
 
 function valorONulo(v) {
@@ -95,10 +103,11 @@ export function descargarInformeClinicoPdf({ paciente, resultados, clasificacion
   registrarEventoAuditoria({
     accion: 'descarga',
     entidad: 'descargas',
-    entidadId: nombreArchivo,
+    entidadId: 'informe_pdf',
     entidadNombre: 'Informe Clínico PDF',
     detalle: { tipo: 'informe_pdf' },
-    resumen: `Archivo exportado: informe_pdf (${paciente?.nombre || 'Participante'} · ${resultados?.bpm || 74} BPM)`
+    // La auditoría no guarda el nombre del paciente (RF61): solo qué se descargó
+    resumen: 'Archivo exportado: informe_pdf'
   })
   return nombreArchivo
 }
@@ -112,8 +121,8 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
   const pageHeight = doc.internal.pageSize.getHeight() // 297 mm
   const margin = 18
   const contentWidth = pageWidth - margin * 2 // 174 mm
-  const limiteInferior = pageHeight - 24 // deja sitio al pie de página
-  let y = margin
+  const limiteInferior = pageHeight - 19 // deja sitio al pie de página
+  let y = 12
 
   // ---------------------------------------------------------------- utilidades de dibujo
   const color = (c) => doc.setTextColor(c[0], c[1], c[2])
@@ -153,14 +162,14 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
   }
 
   function seccion(numero, titulo, c = COLOR.titulo) {
-    asegurarEspacio(16)
-    fuente('bold', 12, c)
-    doc.text(textoSeguroPdf(`${numero}. ${titulo}`), margin, y + 12 * MM_POR_PT)
-    y += 6.5
+    asegurarEspacio(13)
+    fuente('bold', 11, c)
+    doc.text(textoSeguroPdf(`${numero}. ${titulo}`), margin, y + 11 * MM_POR_PT)
+    y += 5.2
     borde(COLOR.linea)
     doc.setLineWidth(0.3)
     doc.line(margin, y, margin + contentWidth, y)
-    y += 4
+    y += 2.8
   }
 
   /**
@@ -168,18 +177,18 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
    * @param {{fondo:number[], borde:number[]}} estilo
    * @param {Array<{texto:string, pt?:number, estilo?:string, c?:number[], despues?:number}>} bloques
    */
-  function recuadro({ fondo, borde: bordeColor }, bloques, padding = 4) {
+  function recuadro({ fondo, borde: bordeColor }, bloques, padding = 3) {
     const anchoTexto = contentWidth - padding * 2
     const medidos = bloques.map((b) => {
-      const pt = b.pt || 10
+      const pt = b.pt || 9.2
       const estilo = b.estilo || 'normal'
-      return { ...b, pt, estilo, ls: lineas(b.texto, pt, estilo, anchoTexto), despues: b.despues ?? 1.5 }
+      return { ...b, pt, estilo, ls: lineas(b.texto, pt, estilo, anchoTexto), despues: b.despues ?? 1 }
     })
-    const alto = padding * 2 + medidos.reduce((s, b) => s + b.ls.length * altoLinea(b.pt) + b.despues, 0) - 1.5
+    const alto = padding * 2 + medidos.reduce((s, b) => s + b.ls.length * altoLinea(b.pt) + b.despues, 0) - 1
     asegurarEspacio(alto)
     relleno(fondo)
     borde(bordeColor)
-    doc.setLineWidth(0.4)
+    doc.setLineWidth(0.35)
     doc.roundedRect(margin, y, contentWidth, alto, 2, 2, 'FD')
     let cy = y + padding
     medidos.forEach((b) => {
@@ -190,7 +199,7 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
       })
       cy += b.despues
     })
-    y += alto + 5
+    y += alto + 3.5
   }
 
   // ---------------------------------------------------------------- datos
@@ -200,7 +209,7 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
   const pSueno = legible(TEXTO_SUENO, paciente?.sueno || paciente?.suenoHoras, 'No declarado')
   const pCafeina = legible(TEXTO_CAFEINA, paciente?.cafeina, 'Ninguna')
   const pMedicacion = paciente?.medicacion || 'Ninguna'
-  const pActividad = paciente?.actividadNombre || paciente?.actividadPrevia || 'Reposo basal'
+  const pActividad = paciente?.actividadNombre || legible(TEXTO_ACTIVIDAD, paciente?.actividadPrevia, 'Reposo basal')
   const pCondicion = paciente?.condicionSalud || 'Ninguna conocida'
 
   const bpm = valorONulo(resultados?.bpm)
@@ -210,31 +219,30 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
 
   // ---------------------------------------------------------------- encabezado
   relleno(COLOR.titulo)
-  doc.rect(margin, y, contentWidth, 1.6, 'F')
-  y += 6
+  doc.rect(margin, y, contentWidth, 1.4, 'F')
+  y += 4
 
-  fuente('bold', 15, COLOR.titulo)
-  doc.text('UNIVERSIDAD ADVENTISTA DE CHILE', margin, y + 15 * MM_POR_PT)
-  y += 7
-  fuente('normal', 10, COLOR.suave)
-  doc.text('Facultad de Ingeniería y Negocios · sensor_pulso', margin, y + 10 * MM_POR_PT)
+  fuente('bold', 13.5, COLOR.titulo)
+  doc.text('UNIVERSIDAD ADVENTISTA DE CHILE', margin, y + 13.5 * MM_POR_PT)
+  y += 5.5
+  fuente('normal', 9, COLOR.suave)
+  doc.text('Facultad de Ingeniería y Negocios · Sensor de Pulso', margin, y + 9 * MM_POR_PT)
 
   const fechaStr = new Date().toLocaleDateString('es-CL', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
   })
-  doc.text(textoSeguroPdf(`Emitido el ${fechaStr}`), pageWidth - margin, y + 10 * MM_POR_PT, { align: 'right' })
-  y += 9
+  doc.text(textoSeguroPdf(`Emitido el ${fechaStr}`), pageWidth - margin, y + 9 * MM_POR_PT, { align: 'right' })
+  y += 6.5
 
-  fuente('bold', 14, COLOR.texto)
-  doc.text('Informe educativo de ritmo cardíaco y SpO2', margin, y + 14 * MM_POR_PT)
-  y += 7
+  fuente('bold', 12.5, COLOR.texto)
+  doc.text('Informe educativo de ritmo cardíaco y SpO2', margin, y + 12.5 * MM_POR_PT)
+  y += 5.5
   if (sesion && sesion.id) {
-    fuente('normal', 9.5, COLOR.suave)
-    doc.text(textoSeguroPdf(`Sesión #${String(sesion.id).substring(0, 8)} · Ronda ${sesion.ronda || 1}`), margin, y + 9.5 * MM_POR_PT)
-    y += 5
+    fuente('normal', 8.5, COLOR.suave)
+    doc.text(textoSeguroPdf(`Sesión #${String(sesion.id).substring(0, 8)} · Ronda ${sesion.ronda || 1}`), margin, y + 8.5 * MM_POR_PT)
+    y += 4
   }
-  y += 2
-  parrafo(AVISO_EDUCATIVO_CORTO, { pt: 9, estilo: 'italic', c: COLOR.suave, despues: 5 })
+  parrafo(AVISO_EDUCATIVO_CORTO, { pt: 8.5, estilo: 'italic', c: COLOR.suave, despues: 2.5 })
 
   // ---------------------------------------------------------------- 1. participante
   seccion(1, 'Datos del participante')
@@ -252,7 +260,7 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
   const anchoCelda = contentWidth / columnas
   const filas = []
   for (let i = 0; i < datos.length; i += columnas) filas.push(datos.slice(i, i + columnas))
-  const alturaFila = (fila) => 3 + Math.max(...fila.map(([, v]) => lineas(v, 10.5, 'bold', anchoCelda - 8).length)) * altoLinea(10.5) + altoLinea(8.5) + 2
+  const alturaFila = (fila) => 2 + Math.max(...fila.map(([, v]) => lineas(v, 9.5, 'bold', anchoCelda - 8).length)) * altoLinea(9.5) + altoLinea(7.5) + 1.5
   const altoTabla = filas.reduce((s, f) => s + alturaFila(f), 0)
   asegurarEspacio(altoTabla)
   relleno(COLOR.fondo)
@@ -265,24 +273,24 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
     if (idxFila > 0) doc.line(margin, fy, margin + contentWidth, fy)
     fila.forEach(([etiqueta, valor], idxCol) => {
       const cx = margin + idxCol * anchoCelda + 4
-      fuente('normal', 8.5, COLOR.suave)
-      doc.text(textoSeguroPdf(etiqueta), cx, fy + 3 + 8.5 * MM_POR_PT)
-      fuente('bold', 10.5, COLOR.texto)
-      const ls = lineas(valor, 10.5, 'bold', anchoCelda - 8)
-      ls.forEach((l, i) => doc.text(l, cx, fy + 3 + altoLinea(8.5) + 10.5 * MM_POR_PT + i * altoLinea(10.5)))
+      fuente('normal', 7.5, COLOR.suave)
+      doc.text(textoSeguroPdf(etiqueta), cx, fy + 2 + 7.5 * MM_POR_PT)
+      fuente('bold', 9.5, COLOR.texto)
+      const ls = lineas(valor, 9.5, 'bold', anchoCelda - 8)
+      ls.forEach((l, i) => doc.text(l, cx, fy + 2 + altoLinea(7.5) + 9.5 * MM_POR_PT + i * altoLinea(9.5)))
     })
     fy += h
   })
-  y += altoTabla + 6
+  y += altoTabla + 4
 
   // ---------------------------------------------------------------- 2. resultados
   seccion(2, 'Resultados de la medición')
   const gap = 4
   const anchoTarjeta = (contentWidth - gap * 3) / 4
-  const altoTarjeta = 25
+  const altoTarjeta = 21
   asegurarEspacio(altoTarjeta)
   const tarjetas = [
-    { titulo: 'Frecuencia cardíaca', valor: bpm ? String(Math.round(bpm)) : '-', unidad: bpm ? 'BPM' : '', sub: bpm ? 'Promedio en reposo' : 'Sin lectura', c: COLOR.titulo },
+    { titulo: 'Frecuencia cardíaca', valor: bpm ? String(Math.round(bpm)) : '-', unidad: bpm ? 'BPM' : '', sub: bpm ? `Promedio (${pActividad})` : 'Sin lectura', c: COLOR.titulo },
     { titulo: 'Saturación de oxígeno', valor: spo2 ? String(Math.round(spo2)) : '-', unidad: spo2 ? '%' : '', sub: spo2 ? 'SpO2 por absorción óptica' : 'Sin lectura válida', c: [2, 112, 168] },
     { titulo: 'Estabilidad (HRV)', valor: estabilidad ? String(estabilidad) : '-', unidad: '', sub: 'Variabilidad sinusal', c: [4, 120, 87] },
     { titulo: 'Índice de perfusión', valor: perfusion ? String(perfusion) : '-', unidad: perfusion ? '%' : '', sub: 'Pulsatilidad AC/DC', c: [109, 40, 217] }
@@ -293,45 +301,45 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
     borde(COLOR.linea)
     doc.setLineWidth(0.3)
     doc.roundedRect(x, y, anchoTarjeta, altoTarjeta, 2, 2, 'FD')
-    fuente('bold', 8, COLOR.suave)
-    const tl = lineas(t.titulo, 8, 'bold', anchoTarjeta - 4)
-    tl.forEach((l, k) => doc.text(l, x + anchoTarjeta / 2, y + 5 + k * 3.4, { align: 'center' }))
-    fuente('bold', 16, t.c)
+    fuente('bold', 7.5, COLOR.suave)
+    const tl = lineas(t.titulo, 7.5, 'bold', anchoTarjeta - 4)
+    tl.forEach((l, k) => doc.text(l, x + anchoTarjeta / 2, y + 4.2 + k * 3.1, { align: 'center' }))
+    fuente('bold', 14.5, t.c)
     const valor = t.unidad ? `${t.valor} ${t.unidad}` : t.valor
-    doc.text(textoSeguroPdf(valor), x + anchoTarjeta / 2, y + 15.5, { align: 'center', maxWidth: anchoTarjeta - 3 })
-    fuente('normal', 8, COLOR.suave)
-    const sl = lineas(t.sub, 8, 'normal', anchoTarjeta - 4)
-    sl.forEach((l, k) => doc.text(l, x + anchoTarjeta / 2, y + 21 + k * 3.2, { align: 'center' }))
+    doc.text(textoSeguroPdf(valor), x + anchoTarjeta / 2, y + 13.5, { align: 'center', maxWidth: anchoTarjeta - 3 })
+    fuente('normal', 7.2, COLOR.suave)
+    const sl = lineas(t.sub, 7.2, 'normal', anchoTarjeta - 4)
+    sl.forEach((l, k) => doc.text(l, x + anchoTarjeta / 2, y + 17.8 + k * 2.8, { align: 'center' }))
   })
-  y += altoTarjeta + 7
+  y += altoTarjeta + 4
 
   // ---------------------------------------------------------------- 3. ritmo
   seccion(3, 'Evaluación del ritmo cardíaco (criterios de la American Heart Association)', COLOR.ok)
   const nombreRitmo = clasificacion?.nombre || 'Ritmo normal (normocardia)'
   const rangoRitmo = clasificacion?.rangoBpm || '60 a 100 BPM en reposo'
   const bloquesRitmo = [
-    { texto: `${nombreRitmo} (${rangoRitmo})`, pt: 12.5, estilo: 'bold', c: COLOR.ok, despues: 3 },
-    { texto: 'Criterio cuantitativo', pt: 9, estilo: 'bold', c: COLOR.suave, despues: 0.5 },
+    { texto: `${nombreRitmo} (${rangoRitmo})`, pt: 11, estilo: 'bold', c: COLOR.ok, despues: 1.8 },
+    { texto: 'Criterio cuantitativo', pt: 8.2, estilo: 'bold', c: COLOR.suave, despues: 0.4 },
     {
       texto: clasificacion?.criterioNumerico || 'Frecuencia cardíaca dentro del rango fisiológico normal de 60 a 100 BPM en reposo.',
-      pt: 10, despues: 3
+      pt: 9.2, despues: 1.8
     },
-    { texto: 'Fundamento clínico y fisiológico', pt: 9, estilo: 'bold', c: COLOR.suave, despues: 0.5 },
+    { texto: 'Fundamento clínico y fisiológico', pt: 8.2, estilo: 'bold', c: COLOR.suave, despues: 0.4 },
     {
       texto: clasificacion?.explicacionPorque ||
         'La frecuencia registrada se encuentra dentro del rango normocárdico estándar. Los intervalos entre picos sistólicos detectados por fotopletismografía se mantienen regulares, lo que indica un balance fisiológico adecuado entre el sistema simpático y el parasimpático.',
-      pt: 10, despues: clasificacion?.correlacionFactores ? 3 : 2.5
+      pt: 9.2, despues: clasificacion?.correlacionFactores ? 1.8 : 1.5
     }
   ]
   if (clasificacion?.correlacionFactores) {
     bloquesRitmo.push(
-      { texto: 'Relación con los datos de la ficha', pt: 9, estilo: 'bold', c: COLOR.suave, despues: 0.5 },
-      { texto: clasificacion.correlacionFactores, pt: 10, despues: 2.5 }
+      { texto: 'Relación con los datos de la ficha', pt: 8.2, estilo: 'bold', c: COLOR.suave, despues: 0.4 },
+      { texto: clasificacion.correlacionFactores, pt: 9.2, despues: 1.5 }
     )
   }
   bloquesRitmo.push({
     texto: `Fuente: ${clasificacion?.fuenteOficial || 'American Heart Association (AHA), All About Heart Rate (heart.org)'}`,
-    pt: 8.5, estilo: 'italic', c: COLOR.suave, despues: 0
+    pt: 8, estilo: 'italic', c: COLOR.suave, despues: 0
   })
   recuadro({ fondo: COLOR.okFondo, borde: COLOR.okBorde }, bloquesRitmo)
 
@@ -362,25 +370,25 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
       spo2 ? (comp?.spo2?.diagnostico || '-') : 'No hay una lectura válida (sin dedo o señal insuficiente).'
     ]
   ]
-  const anchosCol = [38, 28, 32, contentWidth - 38 - 28 - 32]
+  const anchosCol = [38, 26, 30, contentWidth - 38 - 26 - 30]
   const alturasFilas = filasComp.map((f, i) => {
-    const pt = i === 0 ? 9 : 10
+    const pt = i === 0 ? 8.2 : 9.2
     const maxLineas = Math.max(...f.map((celda, k) => lineas(celda, pt, i === 0 ? 'bold' : 'normal', anchosCol[k] - 5).length))
-    return 4 + maxLineas * altoLinea(pt)
+    return 3 + maxLineas * altoLinea(pt)
   })
-  const altoEstado = 9
+  const altoEstado = 7.5
   const altoTablaComp = altoEstado + alturasFilas.reduce((s, h) => s + h, 0)
   asegurarEspacio(altoTablaComp + 2)
 
   // contexto + estado
   relleno(dentro ? COLOR.okFondo : COLOR.alertaFondo)
   borde(dentro ? COLOR.okBorde : COLOR.alertaBorde)
-  doc.setLineWidth(0.4)
+  doc.setLineWidth(0.35)
   doc.roundedRect(margin, y, contentWidth, altoTablaComp, 2, 2, 'FD')
-  fuente('bold', 10.5, dentro ? COLOR.ok : COLOR.alerta)
-  doc.text(textoSeguroPdf(`Estado: ${estadoTexto}`), margin + 4, y + 6)
-  fuente('normal', 9, COLOR.suave)
-  doc.text(textoSeguroPdf(`Contexto: ${pActividad}, ${pEdad}`), margin + contentWidth - 4, y + 6, { align: 'right', maxWidth: contentWidth / 2 - 6 })
+  fuente('bold', 9.5, dentro ? COLOR.ok : COLOR.alerta)
+  doc.text(textoSeguroPdf(`Estado: ${estadoTexto}`), margin + 4, y + 5.2)
+  fuente('normal', 8.5, COLOR.suave)
+  doc.text(textoSeguroPdf(`Contexto: ${pActividad}, ${pEdad}`), margin + contentWidth - 4, y + 5.2, { align: 'right', maxWidth: contentWidth / 2 - 6 })
 
   let ty = y + altoEstado
   filasComp.forEach((f, i) => {
@@ -389,20 +397,21 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
     doc.line(margin, ty, margin + contentWidth, ty)
     let cx = margin
     f.forEach((celda, k) => {
-      fuente(i === 0 ? 'bold' : 'normal', i === 0 ? 9 : 10, i === 0 ? COLOR.suave : COLOR.texto)
-      const ls = lineas(celda, i === 0 ? 9 : 10, i === 0 ? 'bold' : 'normal', anchosCol[k] - 5)
-      ls.forEach((l, n) => doc.text(l, cx + 4, ty + 3 + (i === 0 ? 9 : 10) * MM_POR_PT + n * altoLinea(i === 0 ? 9 : 10)))
+      const pt = i === 0 ? 8.2 : 9.2
+      fuente(i === 0 ? 'bold' : 'normal', pt, i === 0 ? COLOR.suave : COLOR.texto)
+      const ls = lineas(celda, pt, i === 0 ? 'bold' : 'normal', anchosCol[k] - 5)
+      ls.forEach((l, n) => doc.text(l, cx + 4, ty + 2.2 + pt * MM_POR_PT + n * altoLinea(pt)))
       cx += anchosCol[k]
     })
     ty += h
   })
-  y += altoTablaComp + 6
+  y += altoTablaComp + 4
 
   // ---------------------------------------------------------------- 5. aviso educativo
   seccion(5, 'Aviso importante', COLOR.aviso)
   recuadro({ fondo: COLOR.avisoFondo, borde: COLOR.avisoBorde }, [
-    { texto: AVISO_EDUCATIVO_TITULO, pt: 10.5, estilo: 'bold', c: COLOR.aviso, despues: 2 },
-    { texto: AVISO_EDUCATIVO_TEXTO, pt: 10, c: COLOR.aviso, despues: 0 }
+    { texto: AVISO_EDUCATIVO_TITULO, pt: 9.5, estilo: 'bold', c: COLOR.aviso, despues: 1 },
+    { texto: AVISO_EDUCATIVO_TEXTO, pt: 8.8, c: COLOR.aviso, despues: 0 }
   ])
 
   // ---------------------------------------------------------------- pie de página en todas las hojas
@@ -411,15 +420,15 @@ export function generarInformeClinicoPdf({ paciente, resultados, clasificacion, 
     doc.setPage(p)
     borde(COLOR.linea)
     doc.setLineWidth(0.3)
-    doc.line(margin, pageHeight - 18, pageWidth - margin, pageHeight - 18)
-    fuente('normal', 8.5, COLOR.suave)
+    doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15)
+    fuente('normal', 8, COLOR.suave)
     const pie = doc.splitTextToSize(
       textoSeguroPdf('Evaluación docente orientativa (criterios AHA) · Ley 19.628 · ' + AVISO_EDUCATIVO_CORTO),
       contentWidth - 30
     )
-    doc.text(pie, margin, pageHeight - 13.5)
-    doc.text('sensor_pulso · UNACH', pageWidth - margin, pageHeight - 13.5, { align: 'right' })
-    doc.text(`Página ${p} de ${total}`, pageWidth - margin, pageHeight - 9, { align: 'right' })
+    doc.text(pie, margin, pageHeight - 11)
+    doc.text('Sensor de Pulso · UNACH', pageWidth - margin, pageHeight - 11, { align: 'right' })
+    doc.text(`Página ${p} de ${total}`, pageWidth - margin, pageHeight - 7, { align: 'right' })
   }
 
   return doc

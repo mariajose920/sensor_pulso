@@ -7,7 +7,6 @@
           <h3 class="card-title" style="margin: 0;">
             Carga de Bioseñales Fisiológicas
           </h3>
-          <span class="badge badge-rf">RF27</span>
         </div>
         <p class="card-desc">
           Carga y analiza bioseñales externas por <strong>archivo CSV</strong>, <strong>simulación paramétrica</strong>, <strong>datasets públicos</strong> (PhysioNet, CapnoBase) o <strong>referencia clínica validada</strong>.
@@ -21,7 +20,7 @@
           :class="{ active: pestanaOrigen === 'csv' }"
           @click="pestanaOrigen = 'csv'"
         >
-          📄 Archivo CSV
+          <IconoUi name="file" /> Archivo CSV
         </button>
         <button
           type="button"
@@ -29,7 +28,7 @@
           :class="{ active: pestanaOrigen === 'simulada' }"
           @click="pestanaOrigen = 'simulada'"
         >
-          ⚡ Simulada
+          <IconoUi name="zap" /> Simulada
         </button>
         <button
           type="button"
@@ -37,7 +36,7 @@
           :class="{ active: pestanaOrigen === 'dataset' }"
           @click="pestanaOrigen = 'dataset'"
         >
-          🌐 Datasets Públicos
+          <IconoUi name="globe" /> Datasets Públicos
         </button>
         <button
           type="button"
@@ -45,7 +44,7 @@
           :class="{ active: pestanaOrigen === 'validada' }"
           @click="pestanaOrigen = 'validada'"
         >
-          🏅 Referencia Validada
+          <IconoUi name="award" /> Referencia Validada
         </button>
       </div>
     </div>
@@ -68,20 +67,20 @@
         />
 
         <div class="dropzone-content">
-          <span class="dropzone-icon">📥</span>
+          <span class="dropzone-icon"><IconoUi name="download" /></span>
           <p class="dropzone-title">
             Arrastra tu archivo <strong>.CSV</strong> aquí o haz clic para examinar
           </p>
           <span class="dropzone-hint">
-            Límites de seguridad (RF66): máximo 5 MB, hasta 50.000 filas, tipo estrictamente <code>.csv</code>. Se rechaza contenido binario o fórmulas (<code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>) antes de procesar.
+            Límites de seguridad: máximo 5 MB, hasta 50.000 filas, tipo estrictamente<code>.csv</code>. Se rechaza contenido binario o fórmulas (<code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>) antes de procesar.
           </span>
 
           <div style="display: flex; gap: 0.75rem; margin-top: 0.85rem; flex-wrap: wrap; justify-content: center;">
             <button type="button" class="btn btn-primary btn-sm" @click="abrirSelectorArchivos">
-              📁 Seleccionar archivo CSV
+              <IconoUi name="folder" /> Seleccionar archivo CSV
             </button>
             <button type="button" class="btn btn-secondary btn-sm" @click="descargarCsvEjemplo">
-              ⬇️ Descargar plantilla CSV de prueba
+              <IconoUi name="download" /> Descargar plantilla CSV de prueba
             </button>
           </div>
         </div>
@@ -89,15 +88,15 @@
 
       <!-- Alerta de error si falla la validación del CSV -->
       <div v-if="errorCsv" class="alert-box alert-error" style="margin-top: 0.75rem;">
-        ⚠️ {{ errorCsv }}
+        <IconoUi name="alert" /> {{ errorCsv }}
       </div>
 
       <!-- Alerta de Sanitización RF65 si hubo fórmulas neutralizadas o advertencias de seguridad -->
       <div v-if="senalCargada && (senalCargada.formulasNeutralizadas > 0 || senalCargada.advertencias?.length > 0)" class="alert-box alert-sanitizacion" style="margin-top: 0.75rem;">
         <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
-          <span style="font-size: 1.15rem; line-height: 1;">🛡️</span>
+          <span style="font-size: 1.15rem; line-height: 1;"><IconoUi name="shield" /></span>
           <div>
-            <strong>Blindaje RF65 (Sanitización Exitosa):</strong>
+            <strong>Blindaje (Sanitización Exitosa):</strong>
             <span v-if="senalCargada.formulasNeutralizadas > 0"> Se neutralizaron {{ senalCargada.formulasNeutralizadas }} celdas con fórmulas potencialmente peligrosas (CWE-1236 / Formula Injection).</span>
             <ul v-if="senalCargada.advertencias?.length > 0" style="margin: 0.35rem 0 0 1.2rem; padding: 0; font-size: 0.82rem;">
               <li v-for="(adv, idx) in senalCargada.advertencias" :key="idx">{{ adv }}</li>
@@ -155,7 +154,7 @@
 
       <div style="display: flex; justify-content: flex-end; margin-top: 0.75rem;">
         <button type="button" class="btn btn-primary btn-sm" @click="generarSenalSimulada">
-          ⚡ Generar Bioseñal Sintética
+          <IconoUi name="zap" /> Generar Bioseñal Sintética
         </button>
       </div>
     </div>
@@ -178,7 +177,7 @@
           <p class="dataset-desc">{{ ds.descripcion }}</p>
 
           <div class="dataset-footer">
-            <span class="dataset-licencia" :title="ds.licencia">📜 {{ ds.licencia.split('(')[0].trim() }}</span>
+            <span class="dataset-licencia" :title="ds.licencia"><IconoUi name="file" /> {{ ds.licencia.split('(')[0].trim() }}</span>
             <button type="button" class="btn btn-sm btn-primary" @click="cargarDataset(ds.id)">
               Cargar Bioseñal
             </button>
@@ -197,7 +196,7 @@
           :class="{ active: senalCargada?.id === val.id }"
         >
           <div class="validada-card-header">
-            <span class="validada-cert-badge">🏅 Aprobada Docente</span>
+            <span class="validada-cert-badge"><IconoUi name="award" /> Aprobada Docente</span>
             <span class="font-mono" style="font-size: 0.8rem; font-weight: 700; color: #0284c7;">
               {{ val.bpmReferencia }} BPM · {{ val.spo2Referencia }}% SpO₂
             </span>
@@ -206,7 +205,7 @@
           <h4 class="validada-name">{{ val.nombre }}</h4>
           <p class="validada-desc">{{ val.descripcion }}</p>
           <p v-if="val.explicacion" class="validada-explicacion">
-            💡 <em>{{ val.explicacion }}</em>
+            <IconoUi name="bulb" /> <em>{{ val.explicacion }}</em>
           </p>
 
           <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
@@ -262,9 +261,9 @@
             type="button"
             class="btn btn-primary btn-sm"
             @click="transferirAComparador"
-            title="Usar esta bioseñal en el comparador de mediciones (RF26/RF27)"
+            title="Usar esta bioseñal en el comparador de mediciones"
           >
-            📊 Comparar en esta Pantalla
+            <IconoUi name="chart" /> Comparar en esta Pantalla
           </button>
 
           <button
@@ -275,7 +274,7 @@
             @click="inyectarAMedicion"
             title="Inyectar muestras al osciloscopio en tiempo real de /medicion"
           >
-            🫀 Inyectar a Medición en Vivo
+            <IconoUi name="heart" /> Inyectar a Medición en Vivo
           </button>
 
           <button
@@ -284,7 +283,7 @@
             @click="exportarACsv"
             title="Descargar bioseñal procesada a archivo CSV"
           >
-            💾 Descargar CSV
+            <IconoUi name="save" /> Descargar CSV
           </button>
         </div>
       </div>
@@ -528,7 +527,7 @@ function transferirAComparador() {
   })
 
   // Mensaje visual discreto
-  alert(`✅ Señal "${nombre}" cargada en el comparador (${bpm} BPM).`)
+  alert(`Señal "${nombre}" cargada en el comparador (${bpm} BPM).`)
 }
 
 function inyectarAMedicion() {
@@ -542,7 +541,7 @@ function inyectarAMedicion() {
   esp32State.conectado = true
   esp32State.dispositivo = `Simulación RF27 (${senalCargada.value.nombre || 'Externa'})`
 
-  alert(`✅ Bioseñal inyectada al osciloscopio en vivo. Abre /medicion para verla fluir.`)
+  alert(`Bioseñal inyectada al osciloscopio en vivo. Abre /medicion para verla fluir.`)
 }
 
 function exportarACsv() {
@@ -552,7 +551,7 @@ function exportarACsv() {
   const hz = senalCargada.value.frecuenciaHz || 50
 
   const lineas = [
-    `# sensor_pulso · Exportación de Bioseñal (RF27)`,
+    `# Sensor de Pulso · Exportación de Bioseñal (RF27)`,
     `# Origen: ${senalCargada.value.origen}`,
     `# Frecuencia: ${hz} Hz`,
     'indice,tiempo_ms,ir,rojo'

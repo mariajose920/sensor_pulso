@@ -2,7 +2,7 @@
 //
 // La seguridad la da el RLS de la tabla `mediciones` (cada usuario ve y escribe solo lo suyo, RNF12)
 // y el trigger que exige un consentimiento vigente para medir con sensor (RF04, RF59).
-import { supabase } from './supabase'
+import { supabase } from './supabase.js'
 import {
   construirMedicion,
   clasificarErrorGuardado,
@@ -13,6 +13,7 @@ import { listarPendientes, agregarPendiente, quitarPendiente } from '../pwa/medi
 import { guardarMedicionVista, listarMedicionesVistas } from '../pwa/medicionesOffline.js'
 import { clasificarErrorPublicacion, mensajeErrorPublicacion, MENSAJES_TERMINAR } from '../utils/terminarMedicion.js'
 import { registrarEventoAuditoria } from './auditoriaService.js'
+import { consentimientoEstado } from './consentimientoService.js'
 
 export const TAMANO_PAGINA = 20
 
@@ -71,12 +72,26 @@ async function usuarioActualId() {
  * @returns {Promise<{ok: boolean, estado: 'guardada'|'pendiente'|'rechazada', motivo?: string, mensaje: string, id?: string}>}
  */
 export async function guardarMedicion(datos) {
-  const usuarioId = await usuarioActualId()
+  const usuarioId = (await usuarioActualId()) || datos?.usuarioId || null
   const idCliente = datos.idCliente || nuevoIdCliente()
   const armada = construirMedicion({ ...datos, usuarioId, idCliente })
 
   if (!armada.ok) {
     return { ok: false, estado: 'rechazada', motivo: armada.motivo, mensaje: armada.mensaje }
+  }
+
+  // Si el consentimiento fue revocado en la sesión activa, impedir guardar nuevas mediciones de sensor hasta nuevo consentimiento (RF90)
+  if (
+    armada.fila.fuente === 'sensor' &&
+    consentimientoEstado.value?.revocadoEn &&
+    consentimientoEstado.value?.vigente === false
+  ) {
+    return {
+      ok: false,
+      estado: 'rechazada',
+      motivo: 'consentimiento',
+      mensaje: MENSAJES_GUARDADO.consentimiento
+    }
   }
 
   try {
@@ -117,6 +132,9 @@ export async function publicarMedicion(medicionId, titulo = null, confirmarExpli
   if (!medicionId) return { ok: false, motivo: 'sin_id', mensaje: MENSAJES_TERMINAR.publicar_sin_id }
   if (confirmarExplicito !== true) {
     return { ok: false, motivo: 'falta_confirmacion', mensaje: MENSAJES_TERMINAR.publicar_falta_confirmacion }
+  }
+  if (consentimientoEstado.value?.revocadoEn && consentimientoEstado.value?.vigente === false) {
+    return { ok: false, motivo: 'consentimiento', mensaje: MENSAJES_TERMINAR.publicar_consentimiento }
   }
   try {
     const { data, error } = await supabase.rpc('publicar_medicion', {
@@ -219,6 +237,7 @@ export function registrarPublicacionAnonimaLocal({
 } = {}) {
   try {
     if (confirmacionExplicita !== true) return null
+    if (consentimientoEstado.value?.revocadoEn && consentimientoEstado.value?.vigente === false) return null
     if (typeof localStorage === 'undefined') return null
     const actual = leerPublicacionesAnonimasLocales()
     const ahoraIso = new Date().toISOString()
@@ -273,6 +292,20 @@ export function retirarPublicacionAnonimaLocal(id) {
     return { ok: true }
   } catch {
     return { ok: false }
+  }
+}
+
+/**
+ * Retira todas las publicaciones anónimas locales al revocar el consentimiento (RF90).
+ */
+export function limpiarPublicacionesAnonimasLocales() {
+  try {
+    if (typeof localStorage === 'undefined') return { ok: false, retiradas: 0 }
+    const actual = leerPublicacionesAnonimasLocales()
+    localStorage.removeItem(CLAVE_PUBLICACIONES_ANONIMAS_LOCALES)
+    return { ok: true, retiradas: actual.length }
+  } catch {
+    return { ok: false, retiradas: 0 }
   }
 }
 
@@ -387,7 +420,7 @@ export async function listarHistorial({ pagina = 0, fuente = null } = {}) {
     if (pagina === 0 && !fuente) {
       for (const m of items.slice(0, 10)) {
         await guardarMedicionVista({
-          id: m.id, fecha: m.inicio, actividad: m.actividad, bpm: m.bpm, spo2: m.spo2,
+          id: m.id, fecha: m.inicio, actividad: m.actividad, fuente: m.fuente, bpm: m.bpm, spo2: m.spo2,
           ritmo: m.ritmo, calidad: m.calidad, dentroDeRango: m.dentroDeRango
         })
       }
@@ -399,7 +432,7 @@ export async function listarHistorial({ pagina = 0, fuente = null } = {}) {
     }
     const vistas = await listarMedicionesVistas()
     const items = vistas.map((v) => ({
-      id: v.id, inicio: v.fecha, fuente: null, canal: null, actividad: v.actividad || null,
+      id: v.id, inicio: v.fecha, fuente: v.fuente || null, canal: null, actividad: v.actividad || null,
       bpm: v.bpm ?? null, spo2: v.spo2 ?? null, hrv: null, ritmo: v.ritmo || null,
       calidad: v.calidad || null, causaCalidad: null, dentroDeRango: v.dentroDeRango ?? null, duracionS: null
     }))

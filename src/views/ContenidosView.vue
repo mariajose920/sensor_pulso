@@ -1,7 +1,7 @@
 <template>
   <div class="contenidos-container">
     <div class="card">
-      <h1 class="card-title">📝 Contenidos y configuración</h1>
+      <h1 class="card-title"><IconoUi name="edit" /> Contenidos y configuración</h1>
       <p class="header-desc">
         Propón cambios a las lecciones y al método de sincronización. El administrador los revisa antes de que apliquen a toda la plataforma.
       </p>

@@ -4,7 +4,7 @@
     <div style="border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
       <div>
         <h3 class="card-title" style="margin-bottom: 0.25rem;">
-          Comparacion Detallada con Plantilla de Reposo y ECG Educativo (RF24)
+          Comparacion Detallada con Plantilla de Reposo y ECG Educativo
         </h3>
         <p style="font-size: 0.85rem; color: var(--color-muted); margin-bottom: 0;">
           Compara la medicion tomada (PPG) con el ECG de referencia y la plantilla estandar de reposo.
@@ -40,28 +40,7 @@
       </div>
     </div>
 
-    <!-- Barra de control: Capas visibles -->
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-size: 0.8rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
-      <span style="color: var(--color-muted); font-size: 0.8rem;">
-        Grafica ampliada con escala sincronizada
-      </span>
-
-      <!-- Toggles manuales de visibilidad de capas -->
-      <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
-          <input type="checkbox" v-model="showPatient">
-          <span style="color: var(--color-success); font-weight: 600;">Medicion Tomada</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
-          <input type="checkbox" v-model="showResting">
-          <span style="color: #0284c7; font-weight: 600;">Plantilla Reposo</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none;">
-          <input type="checkbox" v-model="showEcg">
-          <span style="color: #6366f1; font-weight: 600;">ECG Educativo</span>
-        </label>
-      </div>
-    </div>
+    <p style="color: var(--color-muted); font-size: 0.8rem; margin-bottom: 0.75rem;">Gráfica ampliada con escala sincronizada</p>
 
     <!-- 1. Grafico Didactico SVG con Medicion + Plantilla + ECG (Fijo en 380px ampliado) -->
     <div
@@ -217,7 +196,7 @@
             <th style="padding: 0.6rem;">Criterio</th>
             <th style="padding: 0.6rem; color: var(--color-success);">Medicion Tomada (Sensor)</th>
             <th style="padding: 0.6rem; color: #6366f1;">ECG Educativo (Electrico)</th>
-            <th style="padding: 0.6rem; color: #0284c7;">Plantilla Reposo PPG (RF24)</th>
+            <th style="padding: 0.6rem; color: #0284c7;">Plantilla Reposo PPG</th>
           </tr>
         </thead>
         <tbody style="border-bottom: 1px solid var(--color-border);">
@@ -253,7 +232,7 @@
             <dd>{{ f.ecg }}</dd>
           </div>
           <div>
-            <dt style="color: #0284c7;">Plantilla Reposo PPG (RF24)</dt>
+            <dt style="color: #0284c7;">Plantilla Reposo PPG</dt>
             <dd>{{ f.plantilla }}</dd>
           </div>
         </dl>
@@ -262,22 +241,22 @@
 
     <!-- 4. Bloques Explicativos Didacticos (RF24) -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 0.75rem; font-size: 0.8rem; color: var(--color-muted);">
-      <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
-        <b style="color: var(--color-text);">1. Por que se compara con el ECG?</b>
+      <div style="padding: 1rem; background: #eff6ff; border-radius: 0.75rem; border: 1px solid #bfdbfe; border-top: 4px solid #1e40af;">
+        <b style="color: #1e40af; font-size: 0.9rem;">1. Por que se compara con el ECG?</b>
         <p style="margin-top: 0.25rem;">
           El ECG es el estandar clinico de oro de la actividad cardiaca. Al compararlo con la medicion tomada por el MAX30102, los estudiantes pueden visualizar que cada latido se inicia con una senal electrica antes de que la onda de presion sanguinea llegue al dedo.
         </p>
       </div>
 
-      <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
-        <b style="color: var(--color-text);">2. Que es el Retardo PTT?</b>
+      <div style="padding: 1rem; background: #f5f3ff; border-radius: 0.75rem; border: 1px solid #ddd6fe; border-top: 4px solid #5b21b6;">
+        <b style="color: #5b21b6; font-size: 0.9rem;">2. Que es el Retardo PTT?</b>
         <p style="margin-top: 0.25rem;">
           El Tiempo de Transito del Pulso (PTT) es el intervalo entre la despolarizacion ventricular (onda R) y la cresta del pulso arterial en el dedo. Depende de la distancia anatomica y la elasticidad vascular (~180 a 220 ms).
         </p>
       </div>
 
-      <div style="padding: 0.75rem; background: var(--color-bg); border-radius: 0.5rem; border: 1px solid var(--color-border);">
-        <b style="color: var(--color-text);">3. Comparacion con la Plantilla de Reposo</b>
+      <div style="padding: 1rem; background: #f0fdfa; border-radius: 0.75rem; border: 1px solid #99f6e4; border-top: 4px solid #115e59;">
+        <b style="color: #115e59; font-size: 0.9rem;">3. Comparacion con la Plantilla de Reposo</b>
         <p style="margin-top: 0.25rem;">
           La plantilla de 72 BPM sirve para verificar de un vistazo si la medicion tomada esta acelerada (taquicardia), dentro del rango fisiologico de reposo (60-80 BPM) o reducida (bradicardia).
         </p>

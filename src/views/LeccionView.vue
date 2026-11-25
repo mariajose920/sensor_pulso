@@ -51,6 +51,7 @@
       <p class="aviso-educativo">{{ AVISO_EDUCATIVO }}</p>
     </article>
 
+    <RetoLeccion v-if="leccion.reto?.length" :key="leccion.slug" :slug="leccion.slug" :preguntas="leccion.reto" />
     <nav class="navegacion" aria-label="Lecciones">
       <router-link v-if="anterior" :to="'/aprendizaje/' + anterior.slug" class="btn btn-secondary">&larr; {{ anterior.titulo }}</router-link>
       <span v-else></span>
@@ -70,6 +71,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import EsquemaLeccion from '../components/EsquemaLeccion.vue'
 import Spo2MedidaLeccion from '../components/Spo2MedidaLeccion.vue'
+import RetoLeccion from '../components/RetoLeccion.vue'
 import { AVISO_EDUCATIVO, CATEGORIAS, LECCIONES as LECCIONES_BASE } from '../data/lecciones.js'
 import { obtenerLeccionesPlataforma } from '../services/panelAdminService'
 

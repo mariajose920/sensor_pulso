@@ -5,7 +5,8 @@
  * ambos digan lo mismo. Son datos puros (sin pantalla ni red) para poder probarlos con Node y
  * leerlos sin conexión (RNF03).
  *
- * Los plazos de conservación replican `politicas_retencion` (supabase/migrations/…0800_datos_iniciales.sql)
+ * Los plazos de conservación replican `politicas_retencion` (supabase/migrations/…0800_datos_iniciales.sql y
+ * …20261121000100_rf60_politica_retencion.sql)
  * y el consentimiento informado (consentimientoService.js). Si cambia uno, hay que cambiar los otros:
  * la prueba scripts/test-rf88-privacidad.mjs lo revisa.
  *
@@ -18,7 +19,7 @@ export const POLITICA_VIGENTE_DESDE = '2026-11-08'
 
 /** Responsable del tratamiento: el mismo que figura en el consentimiento informado. */
 export const RESPONSABLE =
-  'Equipo del proyecto sensor pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.'
+  'Equipo del proyecto Sensor de Pulso — Universidad Adventista de Chile (UNACH), Facultad de Ingeniería y Negocios.'
 
 /**
  * Canal de contacto. Se configura con VITE_CONTACTO_PRIVACIDAD (correo institucional que atiende
@@ -33,7 +34,7 @@ export function canalContacto(correo = '') {
     tipo: 'equipo',
     valor: '',
     texto:
-      'Dirígete al equipo del proyecto sensor pulso, en la Facultad de Ingeniería y Negocios de la UNACH, ' +
+      'Dirígete al equipo del proyecto Sensor de Pulso, en la Facultad de Ingeniería y Negocios de la UNACH, ' +
       'indicando el derecho que quieres ejercer.'
   }
 }
@@ -78,8 +79,13 @@ export const SECCIONES = [
     titulo: '5. Cuánto tiempo los conservamos',
     lista: [
       'Mediciones (lecturas de la señal): hasta 12 meses; después se borran automáticamente.',
+      'Señal completa de cada medición y alertas fuera de rango: hasta 12 meses; después se borran automáticamente.',
+      'Resumen de cada medición: hasta 24 meses; después se anonimiza, es decir, se desvincula de tu cuenta y queda solo para estadísticas. Las comparaciones guardadas se borran a los 24 meses.',
+      'Lo que publiques en la galería (siempre anonimizado) se conserva mientras no lo retires.',
       'Ficha declarada de salud: hasta 12 meses; después se borra automáticamente.',
       'Intentos de inicio de sesión: 90 días.',
+      'Bloqueos temporales de cuenta: 30 días después de que vencen.',
+      'Invitaciones a aulas: 6 meses.',
       'Contadores técnicos de peticiones: 2 días.',
       'Registro de auditoría: se conserva para poder demostrar qué pasó ante un incidente; no contiene tus mediciones.',
       'Puedes pedir la eliminación antes de esos plazos (derecho de supresión).'
@@ -92,8 +98,10 @@ export const SECCIONES = [
       'Supabase aloja la base de datos y la autenticación, en la región us-east-1 (Estados Unidos), es decir, fuera de Chile.',
       'Vercel sirve la aplicación web.',
       'Resend envía los correos de confirmación de la cuenta.',
+      'Google verifica tu identidad cuando inicias sesión con tu cuenta institucional.',
       'Google (Gmail) envía, desde la cuenta de la plataforma, las invitaciones a las aulas: el correo institucional del estudiante, el nombre del aula y del profesor.',
-      'Son encargados que tratan los datos por cuenta de la universidad y solo para operar la plataforma. Al estar fuera de Chile, se trata de una transferencia internacional de datos.'
+      'Son encargados que tratan los datos por cuenta de la universidad y solo para operar la plataforma. Al estar fuera de Chile, se trata de una transferencia internacional de datos.',
+      'Más abajo, en «Dónde se alojan tus datos y con qué base legal», se explica la base legal y qué puedes hacer.'
     ]
   },
   {

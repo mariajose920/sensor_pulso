@@ -15,14 +15,14 @@
           @click="rechazar"
           aria-label="Cerrar modal"
         >
-          ✕
+          <IconoUi name="x" />
         </button>
       </div>
 
       <!-- Cuerpo del Documento -->
       <div class="modal-body">
         <div class="alerta-medica">
-          <strong>Aviso importante:</strong> La plataforma <em>sensor pulso</em> y los dispositivos asociados son herramientas didácticas y pedagógicas de la Universidad Adventista de Chile (UNACH). <strong>No son un dispositivo médico certificado ni entregan diagnósticos clínicos.</strong>
+          <strong>Aviso importante:</strong> La plataforma <em>Sensor de Pulso</em> y los dispositivos asociados son herramientas didácticas y pedagógicas de la Universidad Adventista de Chile (UNACH). <strong>No son un dispositivo médico certificado ni entregan diagnósticos clínicos.</strong>
         </div>
 
         <div class="secciones-consentimiento">
@@ -50,7 +50,7 @@
               <li>Frecuencia Cardíaca (BPM)</li>
               <li>Saturación de Oxígeno (% SpO₂)</li>
               <li>Variabilidad R-R (HRV / pulso)</li>
-              <li>Factores RF03 (estrés, sueño, cafeína, medicación)</li>
+              <li>Factores (estrés, sueño, cafeína, medicación)</li>
             </ul>
             <small class="seccion-hint">
               Los factores declarados en la Ficha del Paciente se asocian de forma confidencial a la curva fotopletismográfica capturada.
@@ -84,7 +84,7 @@
           <!-- 5. Registro Inmutable de Auditoría (RF59) -->
           <div class="seccion-item auditoria-box">
             <div class="pilar-header">
-              <span class="pilar-badge badge-pilar5">Auditoría RF59</span>
+              <span class="pilar-badge badge-pilar5">Auditoría</span>
               <h3 class="seccion-titulo" style="color: #1e40af;">Registro Inmutable de Versión, Fecha y Hora</h3>
             </div>
             <p class="seccion-texto">
@@ -92,6 +92,9 @@
             </p>
           </div>
         </div>
+
+        <!-- Alojamiento fuera de Chile (aviso aparte del texto versionado del consentimiento) -->
+        <AvisoAlojamiento compacto />
 
         <!-- Declaración Expresa -->
         <div class="declaracion-caja">
@@ -105,7 +108,7 @@
               class="checkbox-input"
             />
             <span class="checkbox-text">
-              He leído detenidamente, comprendo y otorgo mi consentimiento expreso, previo, informado y específico para los 4 aspectos señalados (RF76).
+              He leído detenidamente, comprendo y otorgo mi consentimiento expreso, previo, informado y específico para los 4 aspectos señalados.
             </span>
           </label>
         </div>
@@ -134,6 +137,7 @@
 </template>
 
 <script setup>
+import AvisoAlojamiento from './AvisoAlojamiento.vue'
 import { ref, watch, onMounted } from 'vue'
 import {
   consentimientoService,

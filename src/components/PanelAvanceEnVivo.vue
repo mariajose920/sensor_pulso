@@ -8,18 +8,27 @@
             <span class="live-pulsing-dot"></span>
             {{ conectadoRealtime ? 'EN VIVO' : 'CONECTANDO' }}
           </span>
+          <span
+            v-if="latenciaMs !== null"
+            class="badge badge-latencia"
+            :class="claseLatencia"
+            data-testid="pill-latencia-rnf04"
+            :title="'Latencia en tiempo real: ' + latenciaMs + ' ms'"
+          >
+            <IconoUi name="zap" /> {{ latenciaMs }} ms
+          </span>
           <span v-if="datosAvance?.modo === 'en_vivo'" class="badge badge-modo-vivo">
-            ⏱️ Modo En Vivo
+            <IconoUi name="clock" /> Modo En Vivo
           </span>
           <span class="badge" :class="badgeEstadoClass">
             {{ estadoTexto }}
           </span>
         </div>
         <h2 class="live-panel-title">
-          ⚡ Monitoreo de Avance en Tiempo Real
+          <IconoUi name="zap" /> Monitoreo de Avance en Tiempo Real
         </h2>
         <p class="live-panel-sub">
-          Visualiza las respuestas emitidas y los estudiantes conectados sin recargar la página (RF113).
+          Visualiza las respuestas emitidas y los estudiantes conectados sin recargar la página.
         </p>
       </div>
 
@@ -33,7 +42,7 @@
           @click="ejecutarControl('iniciar')"
           data-testid="btn-iniciar-evaluacion-en-vivo"
         >
-          ▶ Iniciar Evaluación en Vivo
+          <IconoUi name="play" /> Iniciar Evaluación en Vivo
         </button>
 
         <button
@@ -44,7 +53,7 @@
           @click="ejecutarControl('cerrar')"
           data-testid="btn-cerrar-evaluacion-en-vivo"
         >
-          ⏹ Cerrar Evaluación en Vivo
+          <IconoUi name="stop" /> Cerrar Evaluación en Vivo
         </button>
 
         <button
@@ -54,7 +63,7 @@
           @click="forzarActualizacion"
           title="Actualizar métricas manualmente"
         >
-          🔄 {{ cargando ? 'Actualizando…' : 'Refrescar' }}
+          <IconoUi name="refresh" /> {{ cargando ? 'Actualizando…' : 'Refrescar' }}
         </button>
 
         <button
@@ -64,7 +73,7 @@
           @click="$emit('cerrar')"
           title="Cerrar panel en vivo"
         >
-          ✕
+          <IconoUi name="x" />
         </button>
       </div>
     </div>
@@ -82,9 +91,9 @@
           <span class="kpi-total">/ {{ datosAvance?.total_asignados || 0 }} asignados</span>
         </div>
         <div class="kpi-footer-detail">
-          <span>🟡 {{ datosAvance?.en_progreso || 0 }} respondiendo</span>
+          <span><IconoUi name="dot-yellow" /> {{ datosAvance?.en_progreso || 0 }} respondiendo</span>
           <span class="kpi-sep">•</span>
-          <span>✅ {{ datosAvance?.finalizados || 0 }} entregaron</span>
+          <span><IconoUi name="check-circle" /> {{ datosAvance?.finalizados || 0 }} entregaron</span>
         </div>
       </div>
 
@@ -92,7 +101,7 @@
       <div class="live-kpi-card kpi-respuestas" data-testid="kpi-respuestas">
         <div class="kpi-top">
           <span class="kpi-title">Contador de Respuestas</span>
-          <span class="kpi-icon">📝</span>
+          <span class="kpi-icon"><IconoUi name="edit" /></span>
         </div>
         <div class="kpi-main-val">
           <span class="kpi-number" data-testid="contador-respuestas">{{ datosAvance?.total_respuestas || 0 }}</span>
@@ -107,7 +116,7 @@
       <div class="live-kpi-card kpi-avance" data-testid="kpi-avance-global">
         <div class="kpi-top">
           <span class="kpi-title">Avance Global del Aula</span>
-          <span class="kpi-icon">📊</span>
+          <span class="kpi-icon"><IconoUi name="chart" /></span>
         </div>
         <div class="kpi-main-val">
           <span class="kpi-number" data-testid="porcentaje-avance">{{ datosAvance?.porcentaje_avance_global || 0 }}%</span>
@@ -124,7 +133,7 @@
       <div class="live-kpi-card kpi-tiempo">
         <div class="kpi-top">
           <span class="kpi-title">Tiempo y Sincronización</span>
-          <span class="kpi-icon">⏱️</span>
+          <span class="kpi-icon"><IconoUi name="clock" /></span>
         </div>
         <div class="kpi-main-val">
           <span class="kpi-tiempo-val">{{ textoTiempoRestante }}</span>
@@ -134,7 +143,19 @@
         </div>
       </div>
     </div>
-
+    <div v-if="datosAvance" class="card">
+      <label for="rf43-curso">Ver avance de</label>
+      <select id="rf43-curso" v-model="cursoSeleccionadoId" class="form-select">
+        <option value="">Toda el aula</option>
+        <option v-for="curso in cursos" :key="curso.id" :value="curso.id">
+          {{ curso.nombre }}
+        </option>
+      </select>
+      <p>
+        {{ totalFinalizadosFiltro }} de {{ listaEstudiantes.length }} asignados entregaron.
+        {{ totalPendientes }} pendientes.
+      </p>
+    </div>
     <!-- Filtros de lista de estudiantes -->
     <div class="live-toolbar">
       <div class="filter-pills">
@@ -152,7 +173,7 @@
           :class="{ active: filtroEstado === 'conectados' }"
           @click="filtroEstado = 'conectados'"
         >
-          🟢 Conectados ({{ totalConectadosFiltro }})
+          <IconoUi name="dot-green" /> Conectados ({{ totalConectadosFiltro }})
         </button>
         <button
           type="button"
@@ -160,7 +181,7 @@
           :class="{ active: filtroEstado === 'en_progreso' }"
           @click="filtroEstado = 'en_progreso'"
         >
-          🟡 En Progreso ({{ totalEnProgresoFiltro }})
+          <IconoUi name="dot-yellow" /> En Progreso ({{ totalEnProgresoFiltro }})
         </button>
         <button
           type="button"
@@ -168,7 +189,7 @@
           :class="{ active: filtroEstado === 'finalizados' }"
           @click="filtroEstado = 'finalizados'"
         >
-          ✅ Entregados ({{ totalFinalizadosFiltro }})
+          <IconoUi name="check-circle" /> Entregados ({{ totalFinalizadosFiltro }})
         </button>
       </div>
 
@@ -213,7 +234,7 @@
                 </div>
                 <div class="student-name-group">
                   <strong class="student-name">{{ est.nombre }}</strong>
-                  <span class="student-email">{{ est.correo }}</span>
+                  <span class="student-email"><DatoEnmascarado :valor="est.correo" tipo="correo" /></span>
                 </div>
               </div>
             </td>
@@ -234,9 +255,9 @@
             <td>
               <span class="badge-estado-alumno" :class="'estado-' + est.estado">
                 {{ {
-                  no_iniciado: '⚪ Sin Iniciar',
-                  en_progreso: '🟡 Rindiendo',
-                  finalizado: '✅ Entregado'
+                  no_iniciado: 'Sin Iniciar',
+                  en_progreso: 'Rindiendo',
+                  finalizado: 'Entregado'
                 }[est.estado] || est.estado }}
               </span>
             </td>
@@ -244,7 +265,7 @@
             <!-- Contador de Respuestas Guardadas (RF113) -->
             <td>
               <span class="respuestas-chip" data-testid="respuestas-estudiante">
-                📝 {{ est.respuestas_guardadas || 0 }} / {{ est.total_preguntas || datosAvance?.total_preguntas || 0 }}
+                <IconoUi name="edit" /> {{ est.respuestas_guardadas || 0 }} / {{ est.total_preguntas || datosAvance?.total_preguntas || 0 }}
               </span>
             </td>
 
@@ -276,7 +297,7 @@
 
     <!-- FEED DE ACTIVIDAD EN TIEMPO REAL -->
     <div v-if="feedEventos.length > 0" class="live-activity-feed">
-      <h4 class="feed-title">📡 Registro de Actividad en Vivo:</h4>
+      <h4 class="feed-title"><IconoUi name="radio" /> Registro de Actividad en Vivo:</h4>
       <ul class="feed-list">
         <li v-for="(ev, idx) in feedEventos.slice(0, 5)" :key="idx" class="feed-item">
           <span class="feed-time">{{ ev.hora }}</span>
@@ -289,6 +310,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import DatoEnmascarado from './DatoEnmascarado.vue'
 import { obtenerAvanceEnVivo, suscribirAvanceEnVivo } from '../services/panelEnVivoService.js'
 import { controlarEvaluacionEnVivo } from '../services/evaluacionesService.js'
 
@@ -308,19 +330,32 @@ const props = defineProps({
   esProfesorOAdmin: {
     type: Boolean,
     default: true
+  },
+  cursos: {
+    type: Array,
+    default: () => []
   }
 })
 
 const emit = defineEmits(['cerrar', 'actualizado'])
 
 const datosAvance = ref(null)
+const latenciaMs = ref(null)
 const cargando = ref(false)
 const controlando = ref(false)
 const conectadoRealtime = ref(false)
 const ultimoEventoEn = ref(new Date())
 const filtroEstado = ref('todos')
+const cursoSeleccionadoId = ref('')
 const busqueda = ref('')
 const feedEventos = ref([])
+
+const claseLatencia = computed(() => {
+  if (latenciaMs.value === null) return 'badge-secondary'
+  if (latenciaMs.value <= 500) return 'badge-latencia-optima'
+  if (latenciaMs.value <= 1000) return 'badge-latencia-aceptable'
+  return 'badge-latencia-alta'
+})
 
 let suscripcionRealtime = null
 let temporizadorReloj = null
@@ -379,9 +414,21 @@ const textoTiempoRestante = computed(() => {
   return 'Ventana de fechas'
 })
 
+const cursoSeleccionado = computed(() =>
+  props.cursos.find(curso => curso.id === cursoSeleccionadoId.value)
+)
+
 const listaEstudiantes = computed(() => {
-  return Array.isArray(datosAvance.value?.estudiantes) ? datosAvance.value.estudiantes : []
+  const estudiantes = datosAvance.value?.estudiantes || []
+  if (!cursoSeleccionado.value) return estudiantes
+
+  const integrantes = new Set(cursoSeleccionado.value.estudiantes_ids || [])
+  return estudiantes.filter(estudiante => integrantes.has(estudiante.usuario_id))
 })
+
+const totalPendientes = computed(() =>
+  listaEstudiantes.value.filter(estudiante => estudiante.estado !== 'finalizado').length
+)
 
 const totalConectadosFiltro = computed(() => {
   return listaEstudiantes.value.filter(e => e.conectado).length
@@ -425,6 +472,10 @@ const procesarActualizacionEnVivo = (nuevoEstado) => {
   datosAvance.value = nuevoEstado
   ultimoEventoEn.value = new Date()
   conectadoRealtime.value = true
+
+  if (typeof nuevoEstado._latenciaMs === 'number') {
+    latenciaMs.value = nuevoEstado._latenciaMs
+  }
 
   // Registrar en feed de eventos si cambió el contador de respuestas o conexiones
   if (previo) {
@@ -552,6 +603,35 @@ watch(() => props.evaluacionId, (nuevoId) => {
 .live-indicator-pill.live-active {
   background: #dcfce7;
   color: #15803d;
+}
+
+.badge-latencia {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+.badge-latencia-optima {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-latencia-aceptable {
+  background: #fefce8;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+
+.badge-latencia-alta {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
 }
 
 .live-pulsing-dot {
